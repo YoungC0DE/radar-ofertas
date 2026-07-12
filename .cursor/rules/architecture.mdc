@@ -1,0 +1,33 @@
+---
+description: Padrão arquitetural — estrutura por domínio
+alwaysApply: true
+---
+
+# Arquitetura
+
+Estrutura simples organizada por domínio. Evitar camadas extras e arquivos pequenos desnecessários.
+
+```
+src/
+├── app.ts              → entry: collector
+├── worker.ts           → entry: envio WhatsApp
+├── ml-login.ts         → entry: login afiliado ML
+├── config/env.ts       → variáveis de ambiente
+├── whatsapp/           → Baileys (conexão + envio)
+├── mercado-livre/      → scraping híbrido + sessão afiliado
+├── offers/             → tipos, persistência, regras de negócio
+├── jobs/               → workers BullMQ (collector, sender)
+├── queue/              → filas Redis/BullMQ
+├── database/           → Prisma client
+└── utils/              → logger e helpers
+```
+
+## Regras
+
+- Um domínio = uma pasta com responsabilidade clara.
+- Regras de negócio de ofertas ficam em `offers/`, nunca em `whatsapp/` ou `mercado-livre/`.
+- Acesso ao banco apenas via `offers/repository.ts`.
+- Processos pesados passam por `queue/` + `jobs/`.
+- Novas features: adicionar ao domínio correto, não criar camada nova.
+- Mercado Livre: scraping híbrido (HTTP primeiro, Playwright fallback). Proibido depender da API oficial.
+- Sessão de afiliado persistida em `ML_AUTH_PATH` — mesmo padrão de `WHATSAPP_AUTH_PATH`.

@@ -1,0 +1,17 @@
+---
+description: Regras para jobs e filas BullMQ
+globs: src/jobs/**,src/queue/**
+alwaysApply: false
+---
+
+# Jobs
+
+- Processos assíncronos em `jobs/` (collector, sender).
+- Configuração de filas em `queue/`.
+- Collector consulta Mercado Livre via scraping híbrido (`mercado-livre/`); sender publica — nunca enviar direto após coleta.
+- Jobs idempotentes: verificar estado antes de agir.
+
+## Filas
+
+- `offer-collector` — repeatable, processo `app.ts`.
+- `offer-sender` — standard, processo `worker.ts`.

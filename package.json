@@ -1,0 +1,38 @@
+{
+  "name": "radar-ofertas",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch --env-file=.env src/app.ts",
+    "worker": "tsx watch --env-file=.env src/worker.ts",
+    "start": "node --env-file=.env build/app.js",
+    "start:worker": "node --env-file=.env build/worker.js",
+    "migrate": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "prisma:generate": "prisma generate",
+    "ml:login": "tsx --env-file=.env src/ml-login.ts",
+    "wa:channel": "tsx --env-file=.env src/wa-channel.ts",
+    "wa:login": "tsx --env-file=.env src/wa-login.ts",
+    "e2e:test": "tsx --env-file=.env src/run-e2e-test.ts",
+    "test": "tsx --test src/**/*.test.ts",
+    "postinstall": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@types/node": "^25.8.0",
+    "prisma": "^6.19.0",
+    "tsx": "^4.22.1",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@prisma/client": "^6.19.0",
+    "baileys": "github:alesdi/Baileys#fix/newsletter-media-upload-path",
+    "bullmq": "^5.66.4",
+    "cheerio": "^1.1.2",
+    "pino": "^10.3.1",
+    "playwright": "^1.52.0",
+    "qrcode-terminal": "^0.12.0",
+    "zod": "^4.4.3"
+  }
+}

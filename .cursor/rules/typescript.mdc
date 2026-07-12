@@ -1,0 +1,14 @@
+---
+description: Convenções TypeScript do projeto
+globs: **/*.ts
+alwaysApply: false
+---
+
+# TypeScript
+
+- Tipagem forte; evitar `any`.
+- Tipos de ofertas em `offers/types.ts` (`RawOffer` mapeado do scraping ML).
+- `async/await` sempre.
+- `import type` para tipos (`verbatimModuleSyntax`).
+- ENV validado com Zod em `config/env.ts`.
+- Preferir funções exportadas a classes quando não há estado.

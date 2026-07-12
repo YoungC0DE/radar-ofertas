@@ -1,0 +1,8 @@
+node_modules
+build
+.git
+.env
+auth_info_baileys
+data
+*.md
+.cursor

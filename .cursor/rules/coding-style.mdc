@@ -1,0 +1,25 @@
+---
+description: Padrões de código, nomes e imports
+alwaysApply: true
+---
+
+# Coding Style
+
+## Nomes
+
+- Arquivos: `kebab-case` ou `camelCase` consistente por pasta (ex: `offer-collector.job.ts`).
+- Classes: `PascalCase` (ex: `OfferRepository`).
+- Funções/variáveis: `camelCase`.
+- Constantes de fila: `SCREAMING_SNAKE_CASE`.
+
+## Imports
+
+- Extensão `.js` nos imports relativos (NodeNext).
+- Ordem: node builtins → pacotes externos → internos → types.
+- Barrel exports apenas quando simplificam (evitar re-export excessivo).
+
+## Organização
+
+- Funções pequenas e focadas.
+- Sem comentários óbvios; comentar apenas lógica de negócio não trivial.
+- Logger centralizado em `utils/logger.ts` (pino).

@@ -1,0 +1,26 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Offer {
+  id             String    @id @default(cuid())
+  mercadoLivreId String    @unique @map("mercado_livre_id")
+  title          String
+  price          Decimal   @db.Decimal(12, 2)
+  oldPrice       Decimal?  @map("old_price") @db.Decimal(12, 2)
+  discount       Int?
+  image          String?
+  affiliateLink  String?   @map("affiliate_link")
+  rating         Float?
+  soldQuantity   Int?      @map("sold_quantity")
+  score          Int       @default(0)
+  sentAt         DateTime? @map("sent_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@map("offers")
+}

@@ -1,0 +1,68 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-radar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-radar_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-radar_ofertas}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-radar} -d ${POSTGRES_DB:-radar_ofertas}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    command: ["npx", "tsx", "watch", "src/app.ts"]
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-radar}:${POSTGRES_PASSWORD:-radar_secret}@postgres:5432/${POSTGRES_DB:-radar_ofertas}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command: ["npx", "tsx", "watch", "src/worker.ts"]
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-radar}:${POSTGRES_PASSWORD:-radar_secret}@postgres:5432/${POSTGRES_DB:-radar_ofertas}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+
+volumes:
+  postgres_data:
+  redis_data:

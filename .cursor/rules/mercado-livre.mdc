@@ -1,0 +1,28 @@
+---
+description: Regras do domínio Mercado Livre — scraping híbrido e sessão afiliado
+globs: src/mercado-livre/**,src/ml-login.ts
+alwaysApply: false
+---
+
+# Mercado Livre
+
+## Estratégia híbrida
+
+- **Coleta:** `http-scraper.ts` primeiro; `browser-scraper.ts` só se `ML_USE_BROWSER_FALLBACK=true` e HTTP falhar.
+- **Afiliado:** `affiliate-link.ts` tenta HTTP com cookies → Playwright → fallback `matt_tool`.
+- **Sessão:** `session.ts` persiste em `ML_AUTH_PATH`. Login manual via `npm run ml:login`.
+- **Parser:** `parser.ts` centraliza extração HTML/JSON — não duplicar lógica de parse.
+
+## Proibições
+
+- Não usar API oficial (`api.mercadolibre.com`) para coleta ou links.
+- Não colocar regra de score/filtro em `mercado-livre/` — isso fica em `offers/`.
+- Não abrir Playwright em todo ciclo de coleta — apenas fallback.
+
+## Novos arquivos
+
+Preferir adicionar ao domínio existente (`parser.ts`, `affiliate-link.ts`) em vez de criar camadas novas.
+
+## ENV
+
+Variáveis em `config/env.ts`: `ML_AUTH_PATH`, `ML_CATEGORIES`, `ML_SEARCH_LIMIT`, `ML_USE_BROWSER_FALLBACK`, `ML_BROWSER_HEADLESS`, `AFFILIATE_CONFIG`.

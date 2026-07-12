@@ -1,0 +1,250 @@
+import * as cheerio from 'cheerio';
+import type { ScrapedItem } from './types.js';
+
+const EMBEDDED_JSON_PATTERNS = [
+  /__PRELOADED_STATE__\s*=\s*(\{[\s\S]*?\})\s*;/,
+  /window\.__NORDIC_CONFIG__\s*=\s*(\{[\s\S]*?\})\s*;/,
+  /"results"\s*:\s*(\[[\s\S]*?\])\s*,\s*"paging"/,
+];
+
+function parsePrice(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const normalized = raw.replace(/[^\d,]/g, '').replace(',', '.');
+  const value = Number.parseFloat(normalized);
+  return Number.isFinite(value) ? value : null;
+}
+
+function parseAriaLabelPrice(label: string | undefined): number | null {
+  if (!label) return null;
+
+  const withCents = label.match(/([\d.]+)\s*reais?\s*com\s*(\d+)\s*centavos/i);
+  if (withCents?.[1] && withCents[2]) {
+    const reais = parsePrice(withCents[1]);
+    const cents = Number.parseInt(withCents[2], 10);
+    if (reais !== null && Number.isFinite(cents)) return reais + cents / 100;
+  }
+
+  const simple = label.match(/([\d.]+)\s*reais?/i);
+  if (simple?.[1]) return parsePrice(simple[1]);
+
+  return null;
+}
+
+function parseMoneyFromContainer(container: cheerio.Cheerio<cheerio.AnyNode>): number | null {
+  const amountEl = container.find('[data-andes-money-amount="true"]').first();
+  const fromAria = parseAriaLabelPrice(amountEl.attr('aria-label'));
+  if (fromAria !== null) return fromAria;
+
+  const fraction = container.find('.andes-money-amount__fraction').first().text().trim();
+  const cents = container.find('.andes-money-amount__cents').first().text().trim();
+  const base = parsePrice(fraction);
+  if (base === null) return null;
+
+  if (cents) {
+    const parsedCents = Number.parseInt(cents, 10);
+    if (Number.isFinite(parsedCents)) return base + parsedCents / 100;
+  }
+
+  return base;
+}
+
+function parseSoldQuantity(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const normalized = raw.toLowerCase().replace(/\./g, '');
+  const match = normalized.match(/([\d,]+)\s*(mil|k)?/);
+  if (!match?.[1]) return null;
+
+  const base = Number.parseInt(match[1].replace(',', ''), 10);
+  if (!Number.isFinite(base)) return null;
+
+  const multiplier = match[2] ? 1000 : 1;
+  return base * multiplier;
+}
+
+function parseRating(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const match = raw.match(/(\d+[,.]\d+|\d+)/);
+  if (!match?.[1]) return null;
+  const value = Number.parseFloat(match[1].replace(',', '.'));
+  return Number.isFinite(value) && value <= 5 ? value : null;
+}
+
+function normalizePermalink(href: string): string {
+  if (href.startsWith('http')) return href.split('#')[0] ?? href;
+  return `https://www.mercadolivre.com.br${href.startsWith('/') ? '' : '/'}${href}`.split('#')[0] ?? href;
+}
+
+function extractIdFromPermalink(permalink: string): string | null {
+  const match = permalink.match(/(MLB-?\d+)/i);
+  return match ? match[1].replace('-', '') : null;
+}
+
+function mapJsonItem(raw: Record<string, unknown>): ScrapedItem | null {
+  const id = typeof raw.id === 'string' ? raw.id : null;
+  const title = typeof raw.title === 'string' ? raw.title : null;
+  const price = typeof raw.price === 'number' ? raw.price : parsePrice(String(raw.price ?? ''));
+  const permalink =
+    typeof raw.permalink === 'string'
+      ? raw.permalink
+      : typeof raw.url === 'string'
+        ? raw.url
+        : null;
+
+  if (!id || !title || price === null || !permalink) return null;
+
+  const originalPrice =
+    typeof raw.original_price === 'number'
+      ? raw.original_price
+      : typeof raw.original_price === 'string'
+        ? parsePrice(raw.original_price)
+        : null;
+
+  const thumbnail =
+    typeof raw.thumbnail === 'string'
+      ? raw.thumbnail
+      : typeof raw.picture === 'string'
+        ? raw.picture
+        : null;
+
+  const reviews = raw.reviews as { rating_average?: number } | undefined;
+  const rating =
+    typeof reviews?.rating_average === 'number'
+      ? reviews.rating_average
+      : typeof raw.rating === 'number'
+        ? raw.rating
+        : null;
+
+  const soldQuantity =
+    typeof raw.sold_quantity === 'number'
+      ? raw.sold_quantity
+      : typeof raw.sold_quantity === 'string'
+        ? Number.parseInt(raw.sold_quantity, 10)
+        : null;
+
+  return {
+    id,
+    title,
+    price,
+    originalPrice,
+    thumbnail,
+    permalink: normalizePermalink(permalink),
+    soldQuantity: Number.isFinite(soldQuantity) ? soldQuantity : null,
+    rating,
+  };
+}
+
+function extractItemsFromJsonBlob(blob: string): ScrapedItem[] {
+  const items: ScrapedItem[] = [];
+
+  try {
+    const parsed = JSON.parse(blob) as unknown;
+    collectItemsFromUnknown(parsed, items);
+  } catch {
+    // JSON parcial ou inválido — ignorar
+  }
+
+  return items;
+}
+
+function collectItemsFromUnknown(node: unknown, items: ScrapedItem[]): void {
+  if (!node || typeof node !== 'object') return;
+
+  if (Array.isArray(node)) {
+    for (const entry of node) collectItemsFromUnknown(entry, items);
+    return;
+  }
+
+  const record = node as Record<string, unknown>;
+
+  if (Array.isArray(record.results)) {
+    for (const result of record.results) {
+      if (result && typeof result === 'object') {
+        const mapped = mapJsonItem(result as Record<string, unknown>);
+        if (mapped) items.push(mapped);
+      }
+    }
+  }
+
+  for (const value of Object.values(record)) {
+    if (value && typeof value === 'object') collectItemsFromUnknown(value, items);
+  }
+}
+
+function parseWithCheerio(html: string): ScrapedItem[] {
+  const $ = cheerio.load(html);
+  const items: ScrapedItem[] = [];
+
+  $('.ui-search-layout__item, .poly-card').each((_, element) => {
+    const card = $(element);
+    const titleEl = card
+      .find('h2, .poly-card__title, .poly-component__title, .ui-search-item__title')
+      .first();
+    const linkEl = card.find('a[href*="mercadolivre"]').first();
+    const currentPriceEl = card.find('.poly-price__current').first();
+    const oldPriceEl = card.find('s.andes-money-amount, .poly-price__labels s, .poly-price__original').first();
+    const imageEl = card.find('img').first();
+    const soldEl = card
+      .find(
+        '.ui-search-item__group__element--sold-quantity, .poly-component__sold-quantity, .poly-attributes__sold-quantity',
+      )
+      .first();
+    const ratingEl = card
+      .find('.ui-search-reviews__rating-number, .poly-reviews__rating, .poly-component__review-compacted')
+      .first();
+
+    const href = linkEl.attr('href');
+    const price = currentPriceEl.length
+      ? parseMoneyFromContainer(currentPriceEl)
+      : parseMoneyFromContainer(card.find('.andes-money-amount').first());
+    const title =
+      titleEl.text().trim() ||
+      linkEl.attr('aria-label')?.trim() ||
+      imageEl.attr('alt')?.trim() ||
+      '';
+    if (!title || !href || price === null) return;
+
+    const permalink = normalizePermalink(href);
+    const id = extractIdFromPermalink(permalink) ?? permalink;
+    const originalPrice = oldPriceEl.length
+      ? parseMoneyFromContainer(oldPriceEl)
+      : null;
+    const thumbnail = imageEl.attr('src') ?? imageEl.attr('data-src') ?? null;
+    const soldText = soldEl.text().trim() || card.text();
+    const soldQuantity = parseSoldQuantity(soldText);
+    const rating = parseRating(ratingEl.text().trim() || card.find('[aria-label*="estrela"]').attr('aria-label'));
+
+    items.push({
+      id,
+      title,
+      price,
+      originalPrice,
+      thumbnail,
+      permalink,
+      soldQuantity,
+      rating,
+    });
+  });
+
+  return items;
+}
+
+export function parseListingHtml(html: string, limit: number): ScrapedItem[] {
+  const found: ScrapedItem[] = [];
+
+  for (const pattern of EMBEDDED_JSON_PATTERNS) {
+    const match = html.match(pattern);
+    if (!match?.[1]) continue;
+    found.push(...extractItemsFromJsonBlob(match[1]));
+  }
+
+  if (found.length === 0) {
+    found.push(...parseWithCheerio(html));
+  }
+
+  const unique = new Map<string, ScrapedItem>();
+  for (const item of found) {
+    if (!unique.has(item.id)) unique.set(item.id, item);
+  }
+
+  return [...unique.values()].slice(0, limit);
+}

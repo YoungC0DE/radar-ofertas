@@ -1,0 +1,16 @@
+---
+description: Regras de banco de dados com Prisma
+globs: prisma/**,src/database/**,src/offers/repository.ts
+alwaysApply: false
+---
+
+# Database
+
+- Prisma ORM; acesso via `offers/repository.ts`.
+- `mercado_livre_id` unique para duplicidade.
+- Migrations versionadas em `prisma/migrations/`.
+
+```bash
+npm run migrate        # dev
+npm run migrate:deploy # produção
+```

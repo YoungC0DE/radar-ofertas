@@ -1,0 +1,12 @@
+---
+description: Regras de integração WhatsApp com Baileys
+globs: src/whatsapp/**
+alwaysApply: false
+---
+
+# WhatsApp
+
+- Tudo em `whatsapp/index.ts` — conexão, eventos e envio.
+- Zero regra de negócio; formatação fica em `offers/service.ts`.
+- Sessão em `WHATSAPP_AUTH_PATH`; canal em `WHATSAPP_CHANNEL_ID`.
+- Apenas `worker.ts` instancia conexão.
