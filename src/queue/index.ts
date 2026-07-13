@@ -19,15 +19,28 @@ const connection = {
   maxRetriesPerRequest: null as null,
 };
 
+export function isRedisEnabled(): boolean {
+  return env.REDIS_ENABLED;
+}
+
+function assertRedisEnabled(feature: string): void {
+  if (!env.REDIS_ENABLED) {
+    throw new Error(`Redis desabilitado (REDIS_ENABLED=false) — necessário para ${feature}`);
+  }
+}
+
 export function getCollectorQueue(): Queue<CollectorJobData> {
+  assertRedisEnabled('filas de coleta');
   return new Queue<CollectorJobData>(QUEUE_NAMES.OFFER_COLLECTOR, { connection });
 }
 
 export function getSenderQueue(): Queue<SenderJobData> {
+  assertRedisEnabled('filas de envio');
   return new Queue<SenderJobData>(QUEUE_NAMES.OFFER_SENDER, { connection });
 }
 
 export async function scheduleCollectorJob(): Promise<void> {
+  assertRedisEnabled('agendamento do collector');
   const queue = getCollectorQueue();
   const intervalMs = env.QUEUE_CONFIG.collectorIntervalMinutes * 60 * 1000;
 
@@ -44,6 +57,7 @@ export async function scheduleCollectorJob(): Promise<void> {
 }
 
 export async function enqueueOfferSend(offerId: string): Promise<void> {
+  assertRedisEnabled('enfileiramento de envio');
   await getSenderQueue().add(
     'send',
     { offerId },

@@ -73,6 +73,12 @@ const envSchema = z.object({
         return z.NEVER;
       }
     }),
+  REDIS_ENABLED: z
+    .string()
+    .default('true')
+    .transform((val) => val === 'true' || val === '1'),
+  MANAGER_PORT: z.coerce.number().int().positive().default(3000),
+  MANAGER_TOKEN: z.string().optional(),
 });
 
 const envParse = envSchema.safeParse(process.env);

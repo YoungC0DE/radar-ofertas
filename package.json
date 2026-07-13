@@ -4,7 +4,12 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "check": "tsx --env-file=.env src/scripts/preflight.ts",
+    "setup": "tsx --env-file=.env src/scripts/preflight.ts --guide",
+    "up": "tsx --env-file=.env src/scripts/up.ts",
+    "predev": "tsx --env-file=.env src/scripts/preflight.ts --profile=collector",
     "dev": "tsx watch --env-file=.env src/app.ts",
+    "preworker": "tsx --env-file=.env src/scripts/preflight.ts --profile=worker",
     "worker": "tsx watch --env-file=.env src/worker.ts",
     "start": "node --env-file=.env build/app.js",
     "start:worker": "node --env-file=.env build/worker.js",
@@ -14,6 +19,9 @@
     "ml:login": "tsx --env-file=.env src/ml-login.ts",
     "wa:channel": "tsx --env-file=.env src/wa-channel.ts",
     "wa:login": "tsx --env-file=.env src/wa-login.ts",
+    "premanager": "tsx --env-file=.env src/scripts/preflight.ts --profile=manager",
+    "manager": "tsx watch --env-file=.env manager/server.ts",
+    "start:manager": "tsx --env-file=.env manager/server.ts",
     "e2e:test": "tsx --env-file=.env src/run-e2e-test.ts",
     "test": "tsx --test src/**/*.test.ts",
     "postinstall": "playwright install chromium"
