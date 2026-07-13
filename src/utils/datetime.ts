@@ -53,3 +53,57 @@ export function formatInTimezone(value: Date, timeZone: string): string {
     timeStyle: 'medium',
   }).format(value);
 }
+
+export interface OperatingHours {
+  startHour: number;
+  endHour: number;
+}
+
+export function getZonedTimeOfDay(
+  timeZone: string,
+  instant: Date = new Date(),
+): { hour: number; minute: number; second: number } {
+  const parts = getZonedParts(timeZone, instant);
+  return {
+    hour: partValue(parts, 'hour'),
+    minute: partValue(parts, 'minute'),
+    second: partValue(parts, 'second'),
+  };
+}
+
+function minutesSinceMidnight(hour: number, minute: number, second: number): number {
+  return hour * 60 + minute + second / 60;
+}
+
+function endMinutes(endHour: number): number {
+  return endHour === 0 ? 24 * 60 : endHour * 60;
+}
+
+export function isWithinOperatingHours(
+  timeZone: string,
+  hours: OperatingHours,
+  instant: Date = new Date(),
+): boolean {
+  const { hour, minute, second } = getZonedTimeOfDay(timeZone, instant);
+  const current = minutesSinceMidnight(hour, minute, second);
+  const start = hours.startHour * 60;
+  const end = endMinutes(hours.endHour);
+  return current >= start && current < end;
+}
+
+export function msUntilOperatingWindow(
+  timeZone: string,
+  hours: OperatingHours,
+  instant: Date = new Date(),
+): number {
+  if (isWithinOperatingHours(timeZone, hours, instant)) return 0;
+
+  const { hour, minute, second } = getZonedTimeOfDay(timeZone, instant);
+  const current = minutesSinceMidnight(hour, minute, second);
+  const start = hours.startHour * 60;
+
+  const minutesToWait =
+    current < start ? start - current : 24 * 60 - current + start;
+
+  return Math.max(60_000, Math.ceil(minutesToWait * 60 * 1000));
+}

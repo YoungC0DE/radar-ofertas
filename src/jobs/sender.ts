@@ -1,16 +1,42 @@
-import { Worker } from 'bullmq';
+import { DelayedError, Worker } from 'bullmq';
 import type { WASocket } from 'baileys';
 import { env } from '../config/env.js';
 import { formatOfferMessage } from '../offers/service.js';
 import { findOfferById, markOfferSent } from '../offers/repository.js';
 import { getQueueConnection, QUEUE_NAMES, type SenderJobData } from '../queue/index.js';
+import { isWithinOperatingHours, msUntilOperatingWindow } from '../utils/datetime.js';
 import { logger } from '../utils/logger.js';
 import { sendOffer } from '../whatsapp/index.js';
+
+function getOperatingHours() {
+  return {
+    startHour: env.QUEUE_CONFIG.operatingHoursStart,
+    endHour: env.QUEUE_CONFIG.operatingHoursEnd,
+  };
+}
 
 export function startSenderWorker(sock: WASocket): Worker<SenderJobData> {
   const worker = new Worker<SenderJobData>(
     QUEUE_NAMES.OFFER_SENDER,
     async (job) => {
+      const operatingHours = getOperatingHours();
+
+      if (!isWithinOperatingHours(env.APP_TIMEZONE, operatingHours)) {
+        const delayMs = msUntilOperatingWindow(env.APP_TIMEZONE, operatingHours);
+        logger.info(
+          {
+            jobId: job.id,
+            offerId: job.data.offerId,
+            delayMs,
+            timezone: env.APP_TIMEZONE,
+            operatingHours,
+          },
+          'Outside operating hours — delaying WhatsApp send',
+        );
+        await job.moveToDelayed(Date.now() + delayMs);
+        throw new DelayedError();
+      }
+
       const { offerId } = job.data;
 
       const offer = await findOfferById(offerId);
