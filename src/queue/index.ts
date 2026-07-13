@@ -1,5 +1,5 @@
 import { Queue } from 'bullmq';
-import { getRuntimeQueueConfig } from '../config/queue-config-store.js';
+import { getCollectorIntervalMinutes } from '../config/queue-config-store.js';
 import { env } from '../config/env.js';
 
 export const QUEUE_NAMES = {
@@ -13,6 +13,7 @@ export interface CollectorJobData {
 
 export interface SenderJobData {
   offerId: string;
+  force?: boolean;
 }
 
 const connection = {
@@ -43,8 +44,7 @@ export function getSenderQueue(): Queue<SenderJobData> {
 export async function scheduleCollectorJob(): Promise<void> {
   assertRedisEnabled('agendamento do collector');
   const queue = getCollectorQueue();
-  const config = getRuntimeQueueConfig();
-  const intervalMs = config.collectorIntervalMinutes * 60 * 1000;
+  const intervalMs = getCollectorIntervalMinutes() * 60 * 1000;
 
   await queue.add(
     'collect',

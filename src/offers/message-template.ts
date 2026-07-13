@@ -1,8 +1,5 @@
-import fs from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-
 import { getBrandName } from '../config/brand-config.js';
+import { prisma } from '../database/client.js';
 import type { OfferRecord } from './types.js';
 
 export const MESSAGE_PLACEHOLDERS = [
@@ -41,6 +38,14 @@ export const DEFAULT_MESSAGE_TEMPLATE = `🔥 OFERTA IMPERDÍVEL! - 🏪 {{store
 
 🛒 Compre aqui:
 {{product_link}}`;
+
+const KEYS = {
+  template: 'messageTemplate',
+  placeholders: 'messageTemplatePlaceholders',
+} as const;
+
+let templateCache: string | null = null;
+let placeholderCache: PlaceholderVisibility | null = null;
 
 function formatCurrency(value: number): string {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -153,13 +158,7 @@ export function formatOfferMessageFromTemplate(
   return renderMessageTemplate(template, buildTemplateValues(offer), visibility);
 }
 
-function templatePath(): string {
-  return path.resolve(process.env.MESSAGE_TEMPLATE_PATH ?? './data/message-template.txt');
-}
-
-function templateConfigPath(): string {
-  return path.resolve('./data/message-template-config.json');
-}
+// --- Placeholder Visibility ---
 
 function mergePlaceholderVisibility(
   override: Partial<PlaceholderVisibility> | undefined,
@@ -177,33 +176,30 @@ function mergePlaceholderVisibility(
 }
 
 export function loadPlaceholderVisibilitySync(): PlaceholderVisibility {
-  try {
-    const raw = readFileSync(templateConfigPath(), 'utf8');
-    const parsed = JSON.parse(raw) as { placeholders?: Partial<PlaceholderVisibility> };
-    return mergePlaceholderVisibility(parsed.placeholders);
-  } catch {
-    return { ...DEFAULT_PLACEHOLDER_VISIBILITY };
-  }
+  return placeholderCache ?? { ...DEFAULT_PLACEHOLDER_VISIBILITY };
 }
 
 export async function loadPlaceholderVisibility(): Promise<PlaceholderVisibility> {
+  if (placeholderCache) return placeholderCache;
   try {
-    const raw = await fs.readFile(templateConfigPath(), 'utf8');
-    const parsed = JSON.parse(raw) as { placeholders?: Partial<PlaceholderVisibility> };
-    return mergePlaceholderVisibility(parsed.placeholders);
-  } catch {
-    return { ...DEFAULT_PLACEHOLDER_VISIBILITY };
-  }
+    const row = await prisma.setting.findUnique({ where: { key: KEYS.placeholders } });
+    if (row) {
+      const parsed = JSON.parse(row.value) as Partial<PlaceholderVisibility>;
+      placeholderCache = mergePlaceholderVisibility(parsed);
+      return placeholderCache;
+    }
+  } catch { /* fallback */ }
+  return { ...DEFAULT_PLACEHOLDER_VISIBILITY };
 }
 
 export async function savePlaceholderVisibility(visibility: PlaceholderVisibility): Promise<void> {
-  const filePath = templateConfigPath();
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(
-    filePath,
-    `${JSON.stringify({ placeholders: visibility }, null, 2)}\n`,
-    'utf8',
-  );
+  const json = JSON.stringify(visibility);
+  await prisma.setting.upsert({
+    where: { key: KEYS.placeholders },
+    update: { value: json },
+    create: { key: KEYS.placeholders, value: json },
+  });
+  placeholderCache = visibility;
 }
 
 export function parsePlaceholderVisibilityFromForm(form: Record<string, string>): PlaceholderVisibility {
@@ -217,17 +213,21 @@ export function parsePlaceholderVisibilityFromForm(form: Record<string, string>)
   return visibility;
 }
 
+// --- Message Template ---
+
 export async function loadMessageTemplate(): Promise<string> {
+  if (templateCache) return templateCache;
   try {
-    const content = await fs.readFile(templatePath(), 'utf8');
-    const trimmed = content.trim();
-    return trimmed || DEFAULT_MESSAGE_TEMPLATE;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return DEFAULT_MESSAGE_TEMPLATE;
+    const row = await prisma.setting.findUnique({ where: { key: KEYS.template } });
+    if (row) {
+      const trimmed = row.value.trim();
+      if (trimmed) {
+        templateCache = trimmed;
+        return trimmed;
+      }
     }
-    throw error;
-  }
+  } catch { /* fallback */ }
+  return DEFAULT_MESSAGE_TEMPLATE;
 }
 
 export async function saveMessageTemplate(template: string): Promise<void> {
@@ -236,9 +236,16 @@ export async function saveMessageTemplate(template: string): Promise<void> {
     throw new Error('O template não pode ficar vazio');
   }
 
-  const filePath = templatePath();
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, `${trimmed}\n`, 'utf8');
+  await prisma.setting.upsert({
+    where: { key: KEYS.template },
+    update: { value: trimmed },
+    create: { key: KEYS.template, value: trimmed },
+  });
+  templateCache = trimmed;
+}
+
+export async function hydrateTemplateCache(): Promise<void> {
+  await Promise.all([loadMessageTemplate(), loadPlaceholderVisibility()]);
 }
 
 export function sampleTemplateValues(): MessageTemplateValues {

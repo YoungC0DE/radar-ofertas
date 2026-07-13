@@ -1,5 +1,7 @@
+import { env } from '../config/env.js';
+import { getSearchLimit } from '../config/queue-config-store.js';
 import { calculateOfferScore, getRuntimeScoreConfig } from '../config/score-config.js';
-import { buildAffiliateLink } from '../mercado-livre/index.js';
+import { buildAffiliateLink, iterateScrapedPages } from '../mercado-livre/index.js';
 import { enqueueOfferSend, getSenderQueue, isRedisEnabled } from '../queue/index.js';
 import { logger } from '../utils/logger.js';
 import { formatOfferMessageFromTemplate, loadMessageTemplate, loadPlaceholderVisibility } from './message-template.js';
@@ -9,6 +11,7 @@ import {
   findOfferById,
   findPendingOfferIds,
   offerExists,
+  sentOfferExistsByTitleAndPrice,
 } from './repository.js';
 import type { OfferRecord, RawOffer, ScoredOffer } from './types.js';
 
@@ -42,6 +45,11 @@ export async function processOffer(rawOffer: RawOffer): Promise<string | null> {
     return null;
   }
 
+  if (await sentOfferExistsByTitleAndPrice(scored.title, scored.price)) {
+    logger.debug({ title: scored.title, price: scored.price }, 'Duplicate sent offer (same title+price)');
+    return null;
+  }
+
   const offer = await createOffer({
     mercadoLivreId: scored.mercadoLivreId,
     title: scored.title,
@@ -68,6 +76,26 @@ export async function processOffers(rawOffers: RawOffer[]): Promise<number> {
     if (await processOffer(raw)) enqueued++;
   }
   return enqueued;
+}
+
+export async function collectNewOffers(): Promise<{ total: number; enqueued: number }> {
+  const target = getSearchLimit();
+  let total = 0;
+  let enqueued = 0;
+
+  for (const category of env.ML_CATEGORIES) {
+    for await (const page of iterateScrapedPages(category)) {
+      for (const offer of page) {
+        total++;
+        const id = await processOffer(offer);
+        if (id) enqueued++;
+      }
+      if (enqueued >= target) break;
+    }
+    if (enqueued >= target) break;
+  }
+
+  return { total, enqueued };
 }
 
 export async function removeAllPendingOffers(): Promise<number> {
@@ -114,10 +142,6 @@ export async function sendOfferNow(offerId: string): Promise<void> {
     const existing = await queue.getJob(jobId);
     if (existing) {
       const state = await existing.getState();
-      if (state === 'delayed') {
-        await existing.promote();
-        return;
-      }
       if (state === 'active') {
         return;
       }
@@ -126,9 +150,10 @@ export async function sendOfferNow(offerId: string): Promise<void> {
 
     await queue.add(
       'send',
-      { offerId },
+      { offerId, force: true },
       {
         jobId,
+        priority: 1,
         removeOnComplete: true,
         removeOnFail: 100,
       },

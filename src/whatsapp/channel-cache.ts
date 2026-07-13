@@ -1,6 +1,5 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import { env } from '../config/env.js';
+import { prisma } from '../database/client.js';
 
 export interface WhatsAppChannelCache {
   channelId: string;
@@ -9,9 +8,8 @@ export interface WhatsAppChannelCache {
   updatedAt: string;
 }
 
-function cachePath(): string {
-  return path.resolve('./data/whatsapp-channel.json');
-}
+const SETTING_KEY = 'whatsappChannelCache';
+let channelCache: WhatsAppChannelCache | null = null;
 
 export function normalizeInviteLink(input: string): string {
   const trimmed = input.trim();
@@ -27,14 +25,22 @@ export function normalizeInviteLink(input: string): string {
   return `https://whatsapp.com/channel/${trimmed}`;
 }
 
+async function writeCache(payload: WhatsAppChannelCache): Promise<void> {
+  const json = JSON.stringify(payload);
+  await prisma.setting.upsert({
+    where: { key: SETTING_KEY },
+    update: { value: json },
+    create: { key: SETTING_KEY, value: json },
+  });
+  channelCache = payload;
+}
+
 export async function saveWhatsAppChannelCache(
   channelId: string,
   channelName: string,
   inviteLink?: string | null,
 ): Promise<void> {
   const existing = await loadWhatsAppChannelCache();
-  const filePath = cachePath();
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
 
   const payload: WhatsAppChannelCache = {
     channelId,
@@ -46,7 +52,7 @@ export async function saveWhatsAppChannelCache(
     updatedAt: new Date().toISOString(),
   };
 
-  await fs.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+  await writeCache(payload);
 }
 
 export async function saveWhatsAppChannelInviteLink(inviteLink: string): Promise<void> {
@@ -70,16 +76,19 @@ export async function saveWhatsAppChannelInviteLink(inviteLink: string): Promise
 }
 
 export async function loadWhatsAppChannelCache(): Promise<WhatsAppChannelCache | null> {
+  if (channelCache) return channelCache;
   try {
-    const raw = await fs.readFile(cachePath(), 'utf8');
-    const parsed = JSON.parse(raw) as WhatsAppChannelCache;
+    const row = await prisma.setting.findUnique({ where: { key: SETTING_KEY } });
+    if (!row) return null;
+    const parsed = JSON.parse(row.value) as WhatsAppChannelCache;
     if (!parsed.channelId || !parsed.channelName) return null;
-    return {
+    channelCache = {
       channelId: parsed.channelId,
       channelName: parsed.channelName,
       inviteLink: parsed.inviteLink ?? null,
       updatedAt: parsed.updatedAt,
     };
+    return channelCache;
   } catch {
     return null;
   }

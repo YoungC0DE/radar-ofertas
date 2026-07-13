@@ -1,3 +1,4 @@
+import { saveSearchLimit } from '../../src/config/queue-config-store.js';
 import { loadOfferDetail, loadOffersPage, parsePage, parseSentFilter } from '../models/offers-model.js';
 import { formatOfferMessageFromTemplate, loadMessageTemplate, loadPlaceholderVisibility, renderMessageTemplate, buildTemplateValues } from '../../src/offers/message-template.js';
 import { removeAllPendingOffers, sendOfferNow } from '../../src/offers/service.js';
@@ -26,6 +27,19 @@ export async function handleDeleteAllPending(): Promise<{ count: number } | { er
     const message = error instanceof Error ? error.message : 'Falha ao remover ofertas pendentes';
     return { error: message };
   }
+}
+
+export async function handleSearchLimitSave(limitRaw: string): Promise<string> {
+  const limit = Number.parseInt(limitRaw, 10);
+  try {
+    await saveSearchLimit(limit);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Falha ao salvar limite de busca';
+    const data = await loadOffersPage('all', 1);
+    return renderOffersPage(data, null, message);
+  }
+  const data = await loadOffersPage('all', 1);
+  return renderOffersPage(data, null, null);
 }
 
 export async function handleSendOfferNow(id: string): Promise<{ ok: true } | { error: string }> {

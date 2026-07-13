@@ -1,6 +1,12 @@
 import { DelayedError, Worker } from 'bullmq';
 import type { WASocket } from 'baileys';
 import { env } from '../config/env.js';
+import {
+  getOperatingHoursStart,
+  getOperatingHoursEnd,
+  getSenderDelayMinutesCached,
+  hydrateQueueConfigCache,
+} from '../config/queue-config-store.js';
 import { formatOfferMessage } from '../offers/service.js';
 import { findOfferById, markOfferSent } from '../offers/repository.js';
 import { getQueueConnection, QUEUE_NAMES, type SenderJobData } from '../queue/index.js';
@@ -10,8 +16,8 @@ import { sendOffer } from '../whatsapp/index.js';
 
 function getOperatingHours() {
   return {
-    startHour: env.QUEUE_CONFIG.operatingHoursStart,
-    endHour: env.QUEUE_CONFIG.operatingHoursEnd,
+    startHour: getOperatingHoursStart(),
+    endHour: getOperatingHoursEnd(),
   };
 }
 
@@ -19,9 +25,11 @@ export function startSenderWorker(sock: WASocket): Worker<SenderJobData> {
   const worker = new Worker<SenderJobData>(
     QUEUE_NAMES.OFFER_SENDER,
     async (job) => {
+      await hydrateQueueConfigCache();
       const operatingHours = getOperatingHours();
+      const force = job.data.force === true;
 
-      if (!isWithinOperatingHours(env.APP_TIMEZONE, operatingHours)) {
+      if (!force && !isWithinOperatingHours(env.APP_TIMEZONE, operatingHours)) {
         const delayMs = msUntilOperatingWindow(env.APP_TIMEZONE, operatingHours);
         logger.info(
           {
@@ -54,11 +62,13 @@ export function startSenderWorker(sock: WASocket): Worker<SenderJobData> {
       await sendOffer(sock, env.WHATSAPP_CHANNEL_ID, offer.image, caption);
       await markOfferSent(offerId);
 
-      logger.info({ offerId, title: offer.title }, 'Offer published');
+      logger.info({ offerId, title: offer.title, force }, 'Offer published');
 
-      const senderDelayMs = env.QUEUE_CONFIG.senderDelayMinutes * 60 * 1000;
-      if (senderDelayMs > 0) {
-        await new Promise((r) => setTimeout(r, senderDelayMs));
+      if (!force) {
+        const delayMs = getSenderDelayMinutesCached() * 60 * 1000;
+        if (delayMs > 0) {
+          await new Promise((r) => setTimeout(r, delayMs));
+        }
       }
     },
     {

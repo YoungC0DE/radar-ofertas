@@ -1,6 +1,9 @@
-import { getRuntimeQueueConfigAsync } from '../../src/config/queue-config-store.js';
+import {
+  getOperatingHoursStart,
+  getOperatingHoursEnd,
+  hydrateQueueConfigCache,
+} from '../../src/config/queue-config-store.js';
 import { env } from '../../src/config/env.js';
-import { validateCategoryConfig } from '../../src/mercado-livre/category-url.js';
 import {
   findOffers,
   findLastSentAt,
@@ -32,7 +35,6 @@ export interface DashboardData {
   withinOperatingHours: boolean;
   timezone: string;
   operatingHours: { start: number; end: number };
-  categories: ReturnType<typeof validateCategoryConfig>[];
   lastSentAt: Date | null;
   sendNowMessage?: string;
   sendNowError?: string;
@@ -46,10 +48,10 @@ export async function loadDashboardData(options: {
   collectMessage?: string;
   collectError?: string;
 } = {}): Promise<DashboardData> {
-  const queueConfig = await getRuntimeQueueConfigAsync();
+  await hydrateQueueConfigCache();
   const operatingHours = {
-    start: queueConfig.operatingHoursStart,
-    end: queueConfig.operatingHoursEnd,
+    start: getOperatingHoursStart(),
+    end: getOperatingHoursEnd(),
   };
 
   const offersResult = await withDatabase(
@@ -96,8 +98,6 @@ export async function loadDashboardData(options: {
     getWhatsAppSessionStatus(),
   ]);
 
-  const categories = env.ML_CATEGORIES.map((category) => validateCategoryConfig(category));
-
   return {
     database: offersResult.database,
     stats: offersResult.data.stats,
@@ -111,7 +111,6 @@ export async function loadDashboardData(options: {
     }),
     timezone: env.APP_TIMEZONE,
     operatingHours,
-    categories,
     lastSentAt: offersResult.data.lastSentAt,
     sendNowMessage: options.sendNowMessage,
     sendNowError: options.sendNowError,

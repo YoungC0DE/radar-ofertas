@@ -28,6 +28,16 @@ function maskUrl(url: string): string {
   return url.replace(/\/\/([^:@/]+):([^@/]+)@/, '//$1:***@');
 }
 
+function databaseFixHint(message: string): string {
+  if (message.includes('database system is starting up')) {
+    return 'O PostgreSQL remoto ainda está iniciando ou em recovery. Aguarde 1–2 min e rode npm run check de novo. Se persistir, verifique o serviço/container no servidor.';
+  }
+  if (message.includes('does not support TLS') || message.includes('TLS handshake')) {
+    return 'Adicione ?sslmode=disable na DATABASE_URL (servidor sem SSL).';
+  }
+  return 'Confira DATABASE_URL e rode: npm run migrate:deploy';
+}
+
 async function checkDatabase(): Promise<PreflightItem> {
   try {
     await prisma.$queryRaw`SELECT 1`;
@@ -38,7 +48,7 @@ async function checkDatabase(): Promise<PreflightItem> {
       ok: false,
       label: 'PostgreSQL',
       detail: message,
-      fix: 'Confira DATABASE_URL e rode: npm run migrate:deploy',
+      fix: databaseFixHint(message),
     };
   }
 }

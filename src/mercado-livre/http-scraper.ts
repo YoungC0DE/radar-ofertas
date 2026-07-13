@@ -1,4 +1,5 @@
 import { env } from '../config/env.js';
+import { getSearchLimit } from '../config/queue-config-store.js';
 import { isRetryableHttpStatus, retryDelayMs, sleep } from '../utils/retry.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -160,21 +161,22 @@ async function fetchCategoryListingViaHttp(
   baseUrl: string,
   category: string,
 ): Promise<ScrapedItem[]> {
-  const offsets = listingOffsetsForLimit(env.ML_SEARCH_LIMIT);
+  const limit = getSearchLimit();
+  const offsets = listingOffsetsForLimit(limit);
   const unique = new Map<string, ScrapedItem>();
 
   for (const offset of offsets) {
     const url = buildPaginatedListingUrl(baseUrl, offset);
-    const items = await fetchListingPage(url, env.ML_SEARCH_LIMIT);
+    const items = await fetchListingPage(url, limit);
 
     mergeUniqueItems(unique, items);
 
-    if (unique.size >= env.ML_SEARCH_LIMIT || items.length < ML_ITEMS_PER_PAGE) {
+    if (unique.size >= limit || items.length < ML_ITEMS_PER_PAGE) {
       break;
     }
   }
 
-  const result = [...unique.values()].slice(0, env.ML_SEARCH_LIMIT);
+  const result = [...unique.values()].slice(0, limit);
   if (result.length === 0) {
     throw new Error(`No products parsed from ${baseUrl}`);
   }
@@ -190,14 +192,15 @@ async function fetchOffersListingViaHttp(
   baseUrl: string,
   category: string,
 ): Promise<ScrapedItem[]> {
+  const limit = getSearchLimit();
   const unique = new Map<string, ScrapedItem>();
-  const maxPages = maxOffersPagesForLimit(env.ML_SEARCH_LIMIT);
+  const maxPages = maxOffersPagesForLimit(limit);
   let stalePages = 0;
   let pagesFetched = 0;
 
   for (let page = 0; page < maxPages; page++) {
     const url = buildOffersPaginatedUrl(baseUrl, page);
-    const items = await fetchListingPage(url, env.ML_SEARCH_LIMIT);
+    const items = await fetchListingPage(url, limit);
     pagesFetched++;
 
     if (items.length === 0) break;
@@ -210,10 +213,10 @@ async function fetchOffersListingViaHttp(
       stalePages = 0;
     }
 
-    if (unique.size >= env.ML_SEARCH_LIMIT) break;
+    if (unique.size >= limit) break;
   }
 
-  const result = [...unique.values()].slice(0, env.ML_SEARCH_LIMIT);
+  const result = [...unique.values()].slice(0, limit);
   if (result.length === 0) {
     throw new Error(`No products parsed from ${baseUrl}`);
   }
@@ -230,6 +233,16 @@ async function fetchOffersListingViaHttp(
     'Offers page scraped',
   );
   return result;
+}
+
+export async function fetchSingleOffersPage(baseUrl: string, page: number): Promise<ScrapedItem[]> {
+  const url = buildOffersPaginatedUrl(baseUrl, page);
+  return fetchListingPage(url, Number.MAX_SAFE_INTEGER);
+}
+
+export async function fetchSingleCategoryPage(baseUrl: string, offset: number): Promise<ScrapedItem[]> {
+  const url = offset > 0 ? buildPaginatedListingUrl(baseUrl, offset) : baseUrl;
+  return fetchListingPage(url, Number.MAX_SAFE_INTEGER);
 }
 
 export async function fetchCategoryViaHttp(category: string): Promise<ScrapedItem[]> {

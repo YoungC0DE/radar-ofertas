@@ -1,68 +1,130 @@
-import fs from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { env, type QueueConfig } from './env.js';
+import { env } from './env.js';
+import { prisma } from '../database/client.js';
 
-export interface QueueConfigOverrides {
-  collectorIntervalMinutes?: number;
-  senderDelayMs?: number;
-  operatingHoursStart?: number;
-  operatingHoursEnd?: number;
+const KEYS = {
+  senderDelay: 'senderDelayMinutes',
+  collectorInterval: 'collectorIntervalMinutes',
+  opHoursStart: 'operatingHoursStart',
+  opHoursEnd: 'operatingHoursEnd',
+  searchLimit: 'searchLimit',
+} as const;
+
+interface QueueConfigCache {
+  senderDelayMinutes: number | null;
+  collectorIntervalMinutes: number | null;
+  operatingHoursStart: number | null;
+  operatingHoursEnd: number | null;
+  searchLimit: number | null;
 }
 
-function storePath(): string {
-  return path.resolve('./data/queue-config.json');
+const cache: QueueConfigCache = {
+  senderDelayMinutes: null,
+  collectorIntervalMinutes: null,
+  operatingHoursStart: null,
+  operatingHoursEnd: null,
+  searchLimit: null,
+};
+
+async function loadIntSetting(key: string): Promise<number | null> {
+  const row = await prisma.setting.findUnique({ where: { key } });
+  if (!row) return null;
+  const parsed = Number.parseInt(row.value, 10);
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
-async function loadOverrides(): Promise<QueueConfigOverrides> {
-  try {
-    const raw = await fs.readFile(storePath(), 'utf8');
-    return JSON.parse(raw) as QueueConfigOverrides;
-  } catch {
-    return {};
+async function saveIntSetting(key: string, value: number): Promise<void> {
+  await prisma.setting.upsert({
+    where: { key },
+    update: { value: String(value) },
+    create: { key, value: String(value) },
+  });
+}
+
+export async function hydrateQueueConfigCache(): Promise<void> {
+  const rows = await prisma.setting.findMany({
+    where: { key: { in: Object.values(KEYS) } },
+  });
+
+  for (const row of rows) {
+    const val = Number.parseInt(row.value, 10);
+    if (Number.isNaN(val)) continue;
+
+    if (row.key === KEYS.senderDelay) cache.senderDelayMinutes = val;
+    if (row.key === KEYS.collectorInterval) cache.collectorIntervalMinutes = val;
+    if (row.key === KEYS.opHoursStart) cache.operatingHoursStart = val;
+    if (row.key === KEYS.opHoursEnd) cache.operatingHoursEnd = val;
+    if (row.key === KEYS.searchLimit) cache.searchLimit = val;
   }
 }
 
-export function getRuntimeQueueConfig(): QueueConfig {
-  try {
-    const raw = readFileSync(storePath(), 'utf8');
-    const overrides = JSON.parse(raw) as QueueConfigOverrides;
-    return { ...env.QUEUE_CONFIG, ...overrides };
-  } catch {
-    return env.QUEUE_CONFIG;
+// --- Sender Delay ---
+
+export async function getSenderDelayMinutesFromDb(): Promise<number> {
+  if (cache.senderDelayMinutes != null) return cache.senderDelayMinutes;
+  const val = await loadIntSetting(KEYS.senderDelay);
+  if (val != null && val >= 0) {
+    cache.senderDelayMinutes = val;
+    return val;
   }
+  return env.QUEUE_CONFIG.senderDelayMinutes;
 }
 
-export async function getRuntimeQueueConfigAsync(): Promise<QueueConfig> {
-  const overrides = await loadOverrides();
-  return { ...env.QUEUE_CONFIG, ...overrides };
+export function getSenderDelayMinutesCached(): number {
+  return cache.senderDelayMinutes ?? env.QUEUE_CONFIG.senderDelayMinutes;
 }
 
-export function getSenderDelayMs(config: QueueConfig = getRuntimeQueueConfig()): number {
-  if (config.senderDelayMs != null) {
-    return config.senderDelayMs;
+export async function saveSenderDelayMinutes(minutes: number): Promise<void> {
+  if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) {
+    throw new Error('Informe um intervalo entre 0 e 1440 minutos');
   }
-  return config.senderDelayMinutes * 60 * 1000;
+  await saveIntSetting(KEYS.senderDelay, minutes);
+  cache.senderDelayMinutes = minutes;
+}
+
+// --- Collector Interval ---
+
+export function getCollectorIntervalMinutes(): number {
+  return cache.collectorIntervalMinutes ?? env.QUEUE_CONFIG.collectorIntervalMinutes;
 }
 
 export async function saveCollectorIntervalMinutes(minutes: number): Promise<void> {
   if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) {
     throw new Error('Informe um intervalo entre 1 e 1440 minutos');
   }
-
-  const overrides = await loadOverrides();
-  overrides.collectorIntervalMinutes = minutes;
-
-  const filePath = storePath();
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, `${JSON.stringify(overrides, null, 2)}\n`, 'utf8');
+  await saveIntSetting(KEYS.collectorInterval, minutes);
+  cache.collectorIntervalMinutes = minutes;
 }
+
+// --- Operating Hours ---
+
+export function getOperatingHoursStart(): number {
+  return cache.operatingHoursStart ?? env.QUEUE_CONFIG.operatingHoursStart;
+}
+
+export function getOperatingHoursEnd(): number {
+  return cache.operatingHoursEnd ?? env.QUEUE_CONFIG.operatingHoursEnd;
+}
+
+// --- Search Limit ---
+
+export function getSearchLimit(): number {
+  return cache.searchLimit ?? env.ML_SEARCH_LIMIT;
+}
+
+export async function saveSearchLimit(limit: number): Promise<void> {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+    throw new Error('Informe um limite entre 1 e 500');
+  }
+  await saveIntSetting(KEYS.searchLimit, limit);
+  cache.searchLimit = limit;
+}
+
+// --- Operating Hours ---
 
 export async function saveOperatingHours(startHour: number, endHour: number): Promise<void> {
   if (!Number.isInteger(startHour) || startHour < 0 || startHour > 23) {
     throw new Error('Início deve ser uma hora entre 00:00 e 23:00');
   }
-
   if (!Number.isInteger(endHour) || endHour < 0 || endHour > 24) {
     throw new Error('Fim deve ser uma hora entre 01:00 e 24:00');
   }
@@ -73,11 +135,8 @@ export async function saveOperatingHours(startHour: number, endHour: number): Pr
     throw new Error('Início deve ser anterior ao fim');
   }
 
-  const overrides = await loadOverrides();
-  overrides.operatingHoursStart = startHour;
-  overrides.operatingHoursEnd = storedEnd;
-
-  const filePath = storePath();
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, `${JSON.stringify(overrides, null, 2)}\n`, 'utf8');
+  await saveIntSetting(KEYS.opHoursStart, startHour);
+  await saveIntSetting(KEYS.opHoursEnd, storedEnd);
+  cache.operatingHoursStart = startHour;
+  cache.operatingHoursEnd = storedEnd;
 }

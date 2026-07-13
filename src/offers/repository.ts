@@ -28,6 +28,17 @@ export async function offerExists(mercadoLivreId: string): Promise<boolean> {
   return count > 0;
 }
 
+export async function sentOfferExistsByTitleAndPrice(title: string, price: number): Promise<boolean> {
+  const count = await prisma.offer.count({
+    where: {
+      title,
+      price,
+      sentAt: { not: null },
+    },
+  });
+  return count > 0;
+}
+
 export async function createOffer(input: CreateOfferInput): Promise<OfferRecord> {
   const offer = await prisma.offer.create({
     data: {

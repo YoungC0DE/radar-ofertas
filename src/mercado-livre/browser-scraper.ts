@@ -1,5 +1,6 @@
 import { chromium, type BrowserContextOptions } from 'playwright';
 import { env } from '../config/env.js';
+import { getSearchLimit } from '../config/queue-config-store.js';
 import { logger } from '../utils/logger.js';
 import {
   buildCategoryListingUrl,
@@ -33,8 +34,9 @@ async function scrapeOffersPages(
   goto: (url: string) => Promise<string>,
   baseUrl: string,
 ): Promise<{ items: ScrapedItem[]; pagesFetched: number }> {
+  const limit = getSearchLimit();
   const unique = new Map<string, ScrapedItem>();
-  const maxPages = maxOffersPagesForLimit(env.ML_SEARCH_LIMIT);
+  const maxPages = maxOffersPagesForLimit(limit);
   let stalePages = 0;
   let pagesFetched = 0;
 
@@ -47,7 +49,7 @@ async function scrapeOffersPages(
       throw new Error(`Browser blocked by anti-bot for ${url}`);
     }
 
-    const items = parseListingHtml(html, env.ML_SEARCH_LIMIT);
+    const items = parseListingHtml(html, limit);
     if (items.length === 0) break;
 
     const added = mergeUniqueItems(unique, items);
@@ -58,11 +60,11 @@ async function scrapeOffersPages(
       stalePages = 0;
     }
 
-    if (unique.size >= env.ML_SEARCH_LIMIT) break;
+    if (unique.size >= limit) break;
   }
 
   return {
-    items: [...unique.values()].slice(0, env.ML_SEARCH_LIMIT),
+    items: [...unique.values()].slice(0, limit),
     pagesFetched,
   };
 }
@@ -118,7 +120,7 @@ export async function fetchCategoryViaBrowser(category: string): Promise<Scraped
       throw new Error(`Browser blocked by anti-bot for ${url}`);
     }
 
-    const items = parseListingHtml(html, env.ML_SEARCH_LIMIT);
+    const items = parseListingHtml(html, getSearchLimit());
 
     if (items.length === 0) {
       throw new Error(`Browser scrape returned no products for ${url}`);

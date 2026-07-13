@@ -1,4 +1,13 @@
-import { getRuntimeQueueConfigAsync, saveCollectorIntervalMinutes, saveOperatingHours } from '../../src/config/queue-config-store.js';
+import {
+  getCollectorIntervalMinutes,
+  getOperatingHoursStart,
+  getOperatingHoursEnd,
+  getSenderDelayMinutesFromDb,
+  hydrateQueueConfigCache,
+  saveCollectorIntervalMinutes,
+  saveOperatingHours,
+  saveSenderDelayMinutes,
+} from '../../src/config/queue-config-store.js';
 import {
   describeScoreRules,
   getRuntimeScoreConfigAsync,
@@ -7,6 +16,7 @@ import {
   type ScoreConfig,
 } from '../../src/config/score-config.js';
 import { env } from '../../src/config/env.js';
+import { validateCategoryConfig, type CategoryValidation } from '../../src/mercado-livre/category-url.js';
 import { isWithinOperatingHours } from '../../src/utils/datetime.js';
 import { isRedisEnabled, rescheduleCollectorJob } from '../../src/queue/index.js';
 import {
@@ -18,11 +28,12 @@ import {
   getBrandInitial,
   getBrandLogoHref,
   getBrandSettings,
+  hydrateBrandCache,
   saveBrandSettings,
 } from './brand-model.js';
 import { isPlaceholderChannelId } from '../../src/whatsapp/index.js';
 
-export type SettingsSaveType = 'channel' | 'interval' | 'brand' | 'score' | 'hours' | null;
+export type SettingsSaveType = 'channel' | 'interval' | 'brand' | 'score' | 'hours' | 'senderDelay' | null;
 
 export interface SettingsData {
   timezone: string;
@@ -33,6 +44,7 @@ export interface SettingsData {
   scoreConfig: ScoreConfig;
   scoreRulesSummary: string[];
   collectorIntervalMinutes: number;
+  senderDelayMinutes: number;
   channelId: string;
   channelName: string | null;
   channelInviteLink: string;
@@ -40,6 +52,7 @@ export interface SettingsData {
   brandSubtitle: string;
   brandLogoHref: string | null;
   brandInitial: string;
+  categories: CategoryValidation[];
   saved: SettingsSaveType;
   error: string | null;
 }
@@ -53,11 +66,12 @@ export async function loadSettingsData(
   saved: SettingsSaveType = null,
   error: string | null = null,
 ): Promise<SettingsData> {
-  const queueConfig = await getRuntimeQueueConfigAsync();
+  await Promise.all([hydrateQueueConfigCache(), hydrateBrandCache()]);
   const scoreConfig = await getRuntimeScoreConfigAsync();
+  const senderDelayMinutes = await getSenderDelayMinutesFromDb();
   const operatingHours = {
-    start: queueConfig.operatingHoursStart,
-    end: queueConfig.operatingHoursEnd,
+    start: getOperatingHoursStart(),
+    end: getOperatingHoursEnd(),
   };
 
   const channelId = env.WHATSAPP_CHANNEL_ID;
@@ -82,7 +96,8 @@ export async function loadSettingsData(
     minScore: scoreConfig.minScore,
     scoreConfig,
     scoreRulesSummary: describeScoreRules(scoreConfig),
-    collectorIntervalMinutes: queueConfig.collectorIntervalMinutes,
+    collectorIntervalMinutes: getCollectorIntervalMinutes(),
+    senderDelayMinutes,
     channelId,
     channelName,
     channelInviteLink,
@@ -90,6 +105,7 @@ export async function loadSettingsData(
     brandSubtitle: brand.subtitle,
     brandLogoHref: getBrandLogoHref(brand),
     brandInitial: getBrandInitial(brand.name),
+    categories: env.ML_CATEGORIES.map((category) => validateCategoryConfig(category)),
     saved,
     error,
   };
@@ -118,6 +134,18 @@ export async function saveSendIntervalMinutes(
     return { ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Falha ao salvar intervalo de envio';
+    return { ok: false, error: message };
+  }
+}
+
+export async function saveSenderDelay(
+  minutes: number,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await saveSenderDelayMinutes(minutes);
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Falha ao salvar tempo de envio';
     return { ok: false, error: message };
   }
 }

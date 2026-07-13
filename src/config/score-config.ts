@@ -1,8 +1,5 @@
-import fs from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-
 import { env } from './env.js';
+import { prisma } from '../database/client.js';
 
 export interface ScoreTier {
   enabled: boolean;
@@ -76,9 +73,8 @@ export const DEFAULT_SCORE_CONFIG: ScoreConfig = {
   },
 };
 
-function storePath(): string {
-  return path.resolve('./data/score-config.json');
-}
+const SETTING_KEY = 'scoreConfig';
+let scoreCache: ScoreConfig | null = null;
 
 function mergeTier(defaultTier: ScoreTier, override?: Partial<ScoreTier>): ScoreTier {
   return {
@@ -110,30 +106,31 @@ function mergeScoreConfig(override: Partial<ScoreConfig>): ScoreConfig {
   };
 }
 
-function loadOverrideSync(): Partial<ScoreConfig> {
+async function loadFromDb(): Promise<Partial<ScoreConfig>> {
   try {
-    const raw = readFileSync(storePath(), 'utf8');
-    return JSON.parse(raw) as Partial<ScoreConfig>;
-  } catch {
-    return {};
-  }
-}
-
-async function loadOverrideAsync(): Promise<Partial<ScoreConfig>> {
-  try {
-    const raw = await fs.readFile(storePath(), 'utf8');
-    return JSON.parse(raw) as Partial<ScoreConfig>;
+    const row = await prisma.setting.findUnique({ where: { key: SETTING_KEY } });
+    if (!row) return {};
+    return JSON.parse(row.value) as Partial<ScoreConfig>;
   } catch {
     return {};
   }
 }
 
 export function getRuntimeScoreConfig(): ScoreConfig {
-  return mergeScoreConfig(loadOverrideSync());
+  if (scoreCache) return scoreCache;
+  return { ...DEFAULT_SCORE_CONFIG, minScore: defaultMinScore() };
 }
 
 export async function getRuntimeScoreConfigAsync(): Promise<ScoreConfig> {
-  return mergeScoreConfig(await loadOverrideAsync());
+  if (scoreCache) return scoreCache;
+  const override = await loadFromDb();
+  scoreCache = mergeScoreConfig(override);
+  return scoreCache;
+}
+
+export async function hydrateScoreConfigCache(): Promise<void> {
+  const override = await loadFromDb();
+  scoreCache = mergeScoreConfig(override);
 }
 
 function parseBool(value: string | undefined): boolean {
@@ -212,9 +209,13 @@ export function parseScoreConfigFromForm(form: Record<string, string>): ScoreCon
 }
 
 export async function saveScoreConfig(config: ScoreConfig): Promise<void> {
-  const filePath = storePath();
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  const json = JSON.stringify(config);
+  await prisma.setting.upsert({
+    where: { key: SETTING_KEY },
+    update: { value: json },
+    create: { key: SETTING_KEY, value: json },
+  });
+  scoreCache = config;
 }
 
 export function calculateOfferScore(

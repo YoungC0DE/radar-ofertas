@@ -65,11 +65,59 @@ export function renderOffersPage(
         </form>`
       : '';
 
+  const searchLimitForm = `
+    <form method="post" action="/manager/offers/search-limit" class="inline-form" id="search-limit-form">
+      <label for="search-limit-input" class="inline-label">Buscar até</label>
+      <input
+        type="number"
+        id="search-limit-input"
+        name="searchLimit"
+        value="${data.searchLimit}"
+        min="1"
+        max="500"
+        step="1"
+        class="inline-input"
+      >
+      <span class="inline-label">ofertas</span>
+      <button type="submit" class="btn btn-sm">Salvar</button>
+    </form>`;
+
   const body = `
+    <style>
+      .section-actions {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      .inline-form {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .inline-label {
+        font-size: 0.875rem;
+        color: var(--text-muted);
+        white-space: nowrap;
+      }
+      .inline-input {
+        width: 72px;
+        padding: 6px 8px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--text);
+        font-size: 0.875rem;
+        text-align: center;
+      }
+    </style>
     <section>
       <div class="section-header">
         <h2>Ofertas</h2>
-        ${deletePendingForm}
+        <div class="section-actions">
+          ${searchLimitForm}
+          ${deletePendingForm}
+        </div>
       </div>
       ${clearedAlert}
       ${

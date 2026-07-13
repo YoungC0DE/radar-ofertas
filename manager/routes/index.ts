@@ -8,10 +8,10 @@ import { logger } from '../../src/utils/logger.js';
 
 import { handleCollectOffers, showDashboard } from '../controllers/dashboard-controller.js';
 
-import { showOfferDetail, showOffersList, handleDeleteAllPending, handleSendOfferNow } from '../controllers/offers-controller.js';
+import { showOfferDetail, showOffersList, handleDeleteAllPending, handleSendOfferNow, handleSearchLimitSave } from '../controllers/offers-controller.js';
 
 import { handleTemplateSave, showTemplatePage } from '../controllers/template-controller.js';
-import { handleChannelLinkSave, handleBrandSave, handleOperatingHoursSave, handleScoreSave, handleSendIntervalSave, showSettingsPage } from '../controllers/settings-controller.js';
+import { handleChannelLinkSave, handleBrandSave, handleOperatingHoursSave, handleScoreSave, handleSendIntervalSave, handleSenderDelaySave, showSettingsPage } from '../controllers/settings-controller.js';
 
 
 
@@ -165,6 +165,13 @@ export async function handleManagerRequest(
       return;
     }
 
+    if (path === '/manager/settings/sender-delay' && method === 'POST') {
+      const body = await readFormBody(req);
+      const form = parseFormUrlEncoded(body);
+      sendHtml(res, 200, await handleSenderDelaySave(form.senderDelayMinutes ?? ''));
+      return;
+    }
+
     if (path === '/manager/settings/brand' && method === 'POST') {
       const body = await readFormBody(req);
       const form = parseFormUrlEncoded(body);
@@ -190,6 +197,13 @@ export async function handleManagerRequest(
       const body = await readFormBody(req);
       const form = parseFormUrlEncoded(body);
       sendHtml(res, 200, await handleChannelLinkSave(form.inviteLink ?? ''));
+      return;
+    }
+
+    if (path === '/manager/offers/search-limit' && method === 'POST') {
+      const body = await readFormBody(req);
+      const form = parseFormUrlEncoded(body);
+      sendHtml(res, 200, await handleSearchLimitSave(form.searchLimit ?? ''));
       return;
     }
 
@@ -254,7 +268,7 @@ export async function handleManagerRequest(
         res,
         200,
         await showDashboard({
-          sendNowMessage: url.searchParams.get('sentNow') === '1' ? 'Envio enfileirado com prioridade.' : undefined,
+          sendNowMessage: url.searchParams.get('sentNow') === '1' ? 'Envio imediato enfileirado — deve publicar em instantes.' : undefined,
           sendNowError: url.searchParams.get('sendError') ?? undefined,
           collectMessage: url.searchParams.get('collectQueued') === '1' ? 'Busca de novos anúncios enfileirada.' : undefined,
           collectError: url.searchParams.get('collectError') ?? undefined,

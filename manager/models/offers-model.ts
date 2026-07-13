@@ -1,3 +1,4 @@
+import { getSearchLimit } from '../../src/config/queue-config-store.js';
 import { countOffers, findOfferById, findOffers, getOfferStats, type OfferSentFilter } from '../../src/offers/repository.js';
 import type { OfferRecord } from '../../src/offers/types.js';
 import { estimatePendingSendTimes } from '../../src/queue/sender-schedule.js';
@@ -15,6 +16,7 @@ export interface OffersPageData {
   total: number;
   totalPages: number;
   pendingCount: number;
+  searchLimit: number;
 }
 
 export function parseSentFilter(value: string | null): OfferSentFilter {
@@ -57,6 +59,7 @@ export async function loadOffersPage(filter: OfferSentFilter, page: number): Pro
     total: result.data.total,
     totalPages: result.data.totalPages,
     pendingCount: result.data.pendingCount,
+    searchLimit: getSearchLimit(),
   };
 }
 

@@ -1,7 +1,18 @@
-import { getRuntimeQueueConfig, getSenderDelayMs } from '../config/queue-config-store.js';
+import {
+  getOperatingHoursStart,
+  getOperatingHoursEnd,
+  getSenderDelayMinutesCached,
+} from '../config/queue-config-store.js';
 import { env } from '../config/env.js';
 import { isWithinOperatingHours, msUntilOperatingWindow } from '../utils/datetime.js';
 import { getSenderQueue, isRedisEnabled } from './index.js';
+
+function getOperatingHours() {
+  return {
+    startHour: getOperatingHoursStart(),
+    endHour: getOperatingHoursEnd(),
+  };
+}
 
 function nextOperatingCursor(timezone: string, instantMs: number): number {
   const instant = new Date(instantMs);
@@ -11,21 +22,12 @@ function nextOperatingCursor(timezone: string, instantMs: number): number {
   return instantMs + msUntilOperatingWindow(timezone, getOperatingHours(), instant);
 }
 
-function getOperatingHours() {
-  const config = getRuntimeQueueConfig();
-  return {
-    startHour: config.operatingHoursStart,
-    endHour: config.operatingHoursEnd,
-  };
-}
-
 export async function estimatePendingSendTimes(offerIds: string[]): Promise<Map<string, Date>> {
   const result = new Map<string, Date>();
   if (offerIds.length === 0) return result;
 
-  const config = getRuntimeQueueConfig();
   const timezone = env.APP_TIMEZONE;
-  const senderDelayMs = getSenderDelayMs(config);
+  const senderDelayMs = getSenderDelayMinutesCached() * 60 * 1000;
   let cursor = nextOperatingCursor(timezone, Date.now());
 
   if (!isRedisEnabled()) {

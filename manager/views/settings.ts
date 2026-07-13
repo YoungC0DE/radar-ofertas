@@ -63,6 +63,31 @@ function renderOperatingHoursSection(data: SettingsData, statusBadge: string): s
   return configRow('Janela operacional', value, 'Horário em que o bot coleta e envia ofertas');
 }
 
+function renderMlCategoriesSection(data: SettingsData): string {
+  const rows = data.categories.length === 0
+    ? '<tr><td colspan="3">Nenhuma categoria configurada.</td></tr>'
+    : data.categories
+        .map(
+          (category) =>
+            `<tr>
+              <td>${escapeHtml(category.category)}</td>
+              <td>${category.valid ? '<span class="badge ok">OK</span>' : '<span class="badge err">Inválida</span>'}</td>
+              <td>${escapeHtml(category.reason ?? category.listingKind)}</td>
+            </tr>`,
+        )
+        .join('');
+
+  return `
+    <div class="config-categories">
+      <h3 class="subsection-title">Categorias ML</h3>
+      <p class="meta">Fontes de busca definidas em <code>ML_CATEGORIES</code> no <code>.env</code>.</p>
+      <table>
+        <thead><tr><th>Categoria / URL</th><th>Status</th><th>Info</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
 function renderBrandSection(data: SettingsData): string {
   const logoMark = data.brandLogoHref
     ? `<img src="${escapeHtml(data.brandLogoHref)}" alt="">`
@@ -206,8 +231,10 @@ export function renderSettingsPage(data: SettingsData): string {
           ? '<p class="alert ok">Identidade visual atualizada com sucesso.</p>'
           : data.saved === 'score'
             ? '<p class="alert ok">Regras de pontuação atualizadas com sucesso.</p>'
-            : data.saved === 'hours'
+              : data.saved === 'hours'
               ? '<p class="alert ok">Janela operacional atualizada com sucesso.</p>'
+              : data.saved === 'senderDelay'
+              ? '<p class="alert ok">Tempo entre envios atualizado com sucesso.</p>'
               : data.error
             ? `<p class="alert err">${escapeHtml(data.error)}</p>`
             : '';
@@ -410,6 +437,12 @@ export function renderSettingsPage(data: SettingsData): string {
           padding-left: 26px;
         }
       }
+      .config-categories {
+        margin-top: 24px;
+      }
+      .config-categories .subsection-title {
+        margin-top: 0;
+      }
     </style>
     ${alert}
     <section>
@@ -422,12 +455,18 @@ export function renderSettingsPage(data: SettingsData): string {
         ${renderOperatingHoursSection(data, statusBadge)}
         ${renderScoreSection(data)}
         ${configRow(
-          'Intervalo de envio',
-          renderEditableValue('intervalo de envio', `${data.collectorIntervalMinutes} min`, 'edit-send-interval'),
-          'Frequência de busca e publicação de novas ofertas',
+          'Intervalo de coleta',
+          renderEditableValue('intervalo de coleta', `${data.collectorIntervalMinutes} min`, 'edit-send-interval'),
+          'Frequência de busca de novas ofertas',
+        )}
+        ${configRow(
+          'Tempo entre envios',
+          renderEditableValue('tempo entre envios', `${data.senderDelayMinutes} min`, 'edit-sender-delay'),
+          'Intervalo entre cada mensagem enviada no WhatsApp',
         )}
         ${renderChannelSection(data)}
       </div>
+      ${renderMlCategoriesSection(data)}
     </section>
 
     <div id="channel-link-modal" class="modal-overlay hidden" aria-hidden="true">
@@ -507,6 +546,35 @@ export function renderSettingsPage(data: SettingsData): string {
           </div>
           <div class="modal-actions">
             <button type="button" class="btn modal-cancel" data-modal="send-interval-modal">Cancelar</button>
+            <button type="submit" class="btn primary">Salvar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="sender-delay-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="sender-delay-modal-title">
+        <div class="modal-header">
+          <h3 id="sender-delay-modal-title">Editar tempo entre envios</h3>
+        </div>
+        <form method="post" action="/manager/settings/sender-delay">
+          <div class="modal-body">
+            <label for="modal-sender-delay-minutes" class="modal-label">Intervalo (minutos)</label>
+            <input
+              type="number"
+              id="modal-sender-delay-minutes"
+              name="senderDelayMinutes"
+              value="${data.senderDelayMinutes}"
+              min="0"
+              max="1440"
+              step="1"
+              required
+              class="modal-input"
+            >
+            <p class="modal-help">Tempo de espera entre cada oferta enviada no WhatsApp (0 a 1440 min). Use 0 para envio imediato.</p>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn modal-cancel" data-modal="sender-delay-modal">Cancelar</button>
             <button type="submit" class="btn primary">Salvar</button>
           </div>
         </form>
@@ -605,6 +673,7 @@ export function renderSettingsPage(data: SettingsData): string {
       const channelModal = document.getElementById('channel-link-modal');
       const operatingHoursModal = document.getElementById('operating-hours-modal');
       const intervalModal = document.getElementById('send-interval-modal');
+      const senderDelayModal = document.getElementById('sender-delay-modal');
       const scoreModal = document.getElementById('score-modal');
       const brandModal = document.getElementById('brand-modal');
       const modalInviteInput = document.getElementById('modal-invite-link');
@@ -649,6 +718,10 @@ export function renderSettingsPage(data: SettingsData): string {
 
       document.getElementById('edit-send-interval')?.addEventListener('click', () => {
         openModal(intervalModal);
+      });
+
+      document.getElementById('edit-sender-delay')?.addEventListener('click', () => {
+        openModal(senderDelayModal);
       });
 
       document.getElementById('edit-score')?.addEventListener('click', () => {
@@ -710,7 +783,7 @@ export function renderSettingsPage(data: SettingsData): string {
         });
       });
 
-      [channelModal, operatingHoursModal, intervalModal, scoreModal, brandModal].forEach((modal) => {
+      [channelModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, brandModal].forEach((modal) => {
         modal?.addEventListener('click', (e) => {
           if (e.target === modal) closeModal(modal);
         });
@@ -718,7 +791,7 @@ export function renderSettingsPage(data: SettingsData): string {
 
       document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
-        [channelModal, operatingHoursModal, intervalModal, scoreModal, brandModal].forEach((modal) => {
+        [channelModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, brandModal].forEach((modal) => {
           if (!modal.classList.contains('hidden')) closeModal(modal);
         });
       });

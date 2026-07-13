@@ -71,13 +71,6 @@ export function renderDashboard(data: DashboardData): string {
     )
     .join('');
 
-  const categoryRows = data.categories
-    .map(
-      (c) =>
-        `<tr><td>${escapeHtml(c.category)}</td><td>${c.valid ? '<span class="badge ok">OK</span>' : '<span class="badge err">Inválida</span>'}</td><td>${escapeHtml(c.reason ?? c.listingKind)}</td></tr>`,
-    )
-    .join('');
-
   const sendNowAlert = data.sendNowMessage
     ? `<p class="alert ok">${escapeHtml(data.sendNowMessage)}</p>`
     : data.sendNowError
@@ -146,14 +139,6 @@ export function renderDashboard(data: DashboardData): string {
       </table>`
           : `<p class="meta"><span class="badge warn">Filas indisponíveis</span> — ${escapeHtml(data.queues.error ?? 'Redis offline')}</p>`
       }
-    </section>
-
-    <section>
-      <h2>Categorias ML</h2>
-      <table>
-        <thead><tr><th>Categoria / URL</th><th>Status</th><th>Info</th></tr></thead>
-        <tbody>${categoryRows}</tbody>
-      </table>
     </section>
 
     <section>
