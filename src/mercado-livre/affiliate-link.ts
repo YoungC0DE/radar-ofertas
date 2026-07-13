@@ -89,10 +89,10 @@ function buildCreateLinkBodies(permalink: string, tag: string): Record<string, u
   ];
 }
 
-async function enforceLinkRateLimit(): Promise<void> {
+async function enforceLinkRateLimit(minDelayMs = AFFILIATE_LINK_DELAY_MS): Promise<void> {
   const elapsed = Date.now() - lastLinkGeneratedAt;
-  if (elapsed < AFFILIATE_LINK_DELAY_MS) {
-    await sleep(AFFILIATE_LINK_DELAY_MS - elapsed);
+  if (elapsed < minDelayMs) {
+    await sleep(minDelayMs - elapsed);
   }
   lastLinkGeneratedAt = Date.now();
 }
@@ -237,6 +237,7 @@ async function createLinkViaBrowser(permalink: string): Promise<AffiliateLinkRes
 export async function generateAffiliateLink(
   permalink: string,
   mercadoLivreId?: string,
+  minDelayMs?: number,
 ): Promise<string> {
   if (mercadoLivreId) {
     const cached = linkCache.get(mercadoLivreId);
@@ -246,7 +247,7 @@ export async function generateAffiliateLink(
     }
   }
 
-  await enforceLinkRateLimit();
+  await enforceLinkRateLimit(minDelayMs);
 
   const httpResult = await createLinkViaHttp(permalink);
   if (httpResult) {

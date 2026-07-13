@@ -80,7 +80,6 @@ function renderMlCategoriesSection(data: SettingsData): string {
   return `
     <div class="config-categories">
       <h3 class="subsection-title">Categorias ML</h3>
-      <p class="meta">Fontes de busca definidas em <code>ML_CATEGORIES</code> no <code>.env</code>.</p>
       <table>
         <thead><tr><th>Categoria / URL</th><th>Status</th><th>Info</th></tr></thead>
         <tbody>${rows}</tbody>

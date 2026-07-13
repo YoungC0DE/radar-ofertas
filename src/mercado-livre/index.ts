@@ -51,8 +51,9 @@ async function scrapeCategory(category: string): Promise<ScrapedItem[]> {
 export async function buildAffiliateLink(
   permalink: string,
   mercadoLivreId?: string,
+  minDelayMs?: number,
 ): Promise<string> {
-  return generateAffiliateLink(permalink, mercadoLivreId);
+  return generateAffiliateLink(permalink, mercadoLivreId, minDelayMs);
 }
 
 const MAX_SCRAPE_PAGES = 50;

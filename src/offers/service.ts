@@ -1,11 +1,17 @@
 import { env } from '../config/env.js';
-import { getSearchLimit } from '../config/queue-config-store.js';
+import {
+  getAffiliateLinkBacklogDelayMinutesCached,
+  getAffiliateLinkBacklogThresholdCached,
+  getAffiliateLinkDelayMsCached,
+  getSearchLimit,
+} from '../config/queue-config-store.js';
 import { calculateOfferScore, getRuntimeScoreConfig } from '../config/score-config.js';
 import { buildAffiliateLink, iterateScrapedPages } from '../mercado-livre/index.js';
 import { enqueueOfferSend, getSenderQueue, isRedisEnabled } from '../queue/index.js';
 import { logger } from '../utils/logger.js';
 import { formatOfferMessageFromTemplate, loadMessageTemplate, loadPlaceholderVisibility } from './message-template.js';
 import {
+  countOffers,
   createOffer,
   deletePendingOffers,
   findOfferById,
@@ -15,11 +21,23 @@ import {
 } from './repository.js';
 import type { OfferRecord, RawOffer, ScoredOffer } from './types.js';
 
+async function resolveAffiliateLinkDelayMs(): Promise<number> {
+  const pending = await countOffers('pending');
+  const threshold = getAffiliateLinkBacklogThresholdCached();
+  if (pending >= threshold) {
+    const delayMs = getAffiliateLinkBacklogDelayMinutesCached() * 60 * 1000;
+    logger.info({ pending, threshold, delayMs }, 'Pending backlog — slowing affiliate link calls');
+    return delayMs;
+  }
+  return getAffiliateLinkDelayMsCached();
+}
+
 async function scoreOffer(offer: RawOffer): Promise<ScoredOffer> {
+  const linkDelayMs = await resolveAffiliateLinkDelayMs();
   return {
     ...offer,
     score: calculateOfferScore(offer),
-    affiliateLink: await buildAffiliateLink(offer.permalink, offer.mercadoLivreId),
+    affiliateLink: await buildAffiliateLink(offer.permalink, offer.mercadoLivreId, linkDelayMs),
   };
 }
 

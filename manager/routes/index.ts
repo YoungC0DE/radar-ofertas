@@ -3,15 +3,17 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { env } from '../../src/config/env.js';
 
 import { prisma } from '../../src/database/client.js';
+import { closeLogStore } from '../../src/utils/log-store.js';
 
 import { logger } from '../../src/utils/logger.js';
 
 import { handleCollectOffers, showDashboard } from '../controllers/dashboard-controller.js';
 
-import { showOfferDetail, showOffersList, handleDeleteAllPending, handleSendOfferNow, handleSearchLimitSave } from '../controllers/offers-controller.js';
+import { showOfferDetail, showOffersList, handleDeleteAllPending, handleAffiliateDelaySave, handleSendOfferNow, handleSearchLimitSave } from '../controllers/offers-controller.js';
 
 import { handleTemplateSave, showTemplatePage } from '../controllers/template-controller.js';
 import { handleChannelLinkSave, handleBrandSave, handleOperatingHoursSave, handleScoreSave, handleSendIntervalSave, handleSenderDelaySave, showSettingsPage } from '../controllers/settings-controller.js';
+import { getLogsJson, showLogsPage } from '../controllers/logs-controller.js';
 
 
 
@@ -32,6 +34,11 @@ function sendRedirect(res: ServerResponse, location: string): void {
 
 function sendText(res: ServerResponse, status: number, body: string): void {
   res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8' });
+  res.end(body);
+}
+
+function sendJson(res: ServerResponse, status: number, body: string): void {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(body);
 }
 
@@ -158,6 +165,16 @@ export async function handleManagerRequest(
       return;
     }
 
+    if (path === '/manager/logs' && method === 'GET') {
+      sendHtml(res, 200, await showLogsPage(url.searchParams));
+      return;
+    }
+
+    if (path === '/manager/api/logs' && method === 'GET') {
+      sendJson(res, 200, await getLogsJson(url.searchParams));
+      return;
+    }
+
     if (path === '/manager/settings/send-interval' && method === 'POST') {
       const body = await readFormBody(req);
       const form = parseFormUrlEncoded(body);
@@ -204,6 +221,21 @@ export async function handleManagerRequest(
       const body = await readFormBody(req);
       const form = parseFormUrlEncoded(body);
       sendHtml(res, 200, await handleSearchLimitSave(form.searchLimit ?? ''));
+      return;
+    }
+
+    if (path === '/manager/offers/affiliate-delay' && method === 'POST') {
+      const body = await readFormBody(req);
+      const form = parseFormUrlEncoded(body);
+      sendHtml(
+        res,
+        200,
+        await handleAffiliateDelaySave(
+          form.affiliateDelayMs ?? '',
+          form.affiliateBacklogDelayMinutes ?? '',
+          form.affiliateBacklogThreshold ?? '',
+        ),
+      );
       return;
     }
 
@@ -330,8 +362,7 @@ export async function handleManagerRequest(
 
 
 export async function shutdownManager(): Promise<void> {
-
+  await closeLogStore();
   await prisma.$disconnect();
-
 }
 

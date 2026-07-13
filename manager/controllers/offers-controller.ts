@@ -1,4 +1,4 @@
-import { saveSearchLimit } from '../../src/config/queue-config-store.js';
+import { saveAffiliateLinkDelaySettings, saveSearchLimit } from '../../src/config/queue-config-store.js';
 import { loadOfferDetail, loadOffersPage, parsePage, parseSentFilter } from '../models/offers-model.js';
 import { formatOfferMessageFromTemplate, loadMessageTemplate, loadPlaceholderVisibility, renderMessageTemplate, buildTemplateValues } from '../../src/offers/message-template.js';
 import { removeAllPendingOffers, sendOfferNow } from '../../src/offers/service.js';
@@ -40,6 +40,27 @@ export async function handleSearchLimitSave(limitRaw: string): Promise<string> {
   }
   const data = await loadOffersPage('all', 1);
   return renderOffersPage(data, null, null);
+}
+
+export async function handleAffiliateDelaySave(
+  delayMsRaw: string,
+  backlogDelayMinutesRaw: string,
+  backlogThresholdRaw: string,
+): Promise<string> {
+  const delayMs = Number.parseInt(delayMsRaw, 10);
+  const backlogDelayMinutes = Number.parseInt(backlogDelayMinutesRaw, 10);
+  const backlogThreshold = Number.parseInt(backlogThresholdRaw, 10);
+
+  try {
+    await saveAffiliateLinkDelaySettings(delayMs, backlogDelayMinutes, backlogThreshold);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Falha ao salvar delay de coleta';
+    const data = await loadOffersPage('all', 1);
+    return renderOffersPage(data, null, message);
+  }
+
+  const data = await loadOffersPage('all', 1);
+  return renderOffersPage(data, null, null, true);
 }
 
 export async function handleSendOfferNow(id: string): Promise<{ ok: true } | { error: string }> {

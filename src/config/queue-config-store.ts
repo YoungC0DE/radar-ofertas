@@ -7,6 +7,9 @@ const KEYS = {
   opHoursStart: 'operatingHoursStart',
   opHoursEnd: 'operatingHoursEnd',
   searchLimit: 'searchLimit',
+  affiliateLinkDelayMs: 'affiliateLinkDelayMs',
+  affiliateLinkBacklogDelayMinutes: 'affiliateLinkBacklogDelayMinutes',
+  affiliateLinkBacklogThreshold: 'affiliateLinkBacklogThreshold',
 } as const;
 
 interface QueueConfigCache {
@@ -15,6 +18,9 @@ interface QueueConfigCache {
   operatingHoursStart: number | null;
   operatingHoursEnd: number | null;
   searchLimit: number | null;
+  affiliateLinkDelayMs: number | null;
+  affiliateLinkBacklogDelayMinutes: number | null;
+  affiliateLinkBacklogThreshold: number | null;
 }
 
 const cache: QueueConfigCache = {
@@ -23,6 +29,9 @@ const cache: QueueConfigCache = {
   operatingHoursStart: null,
   operatingHoursEnd: null,
   searchLimit: null,
+  affiliateLinkDelayMs: null,
+  affiliateLinkBacklogDelayMinutes: null,
+  affiliateLinkBacklogThreshold: null,
 };
 
 async function loadIntSetting(key: string): Promise<number | null> {
@@ -54,6 +63,9 @@ export async function hydrateQueueConfigCache(): Promise<void> {
     if (row.key === KEYS.opHoursStart) cache.operatingHoursStart = val;
     if (row.key === KEYS.opHoursEnd) cache.operatingHoursEnd = val;
     if (row.key === KEYS.searchLimit) cache.searchLimit = val;
+    if (row.key === KEYS.affiliateLinkDelayMs) cache.affiliateLinkDelayMs = val;
+    if (row.key === KEYS.affiliateLinkBacklogDelayMinutes) cache.affiliateLinkBacklogDelayMinutes = val;
+    if (row.key === KEYS.affiliateLinkBacklogThreshold) cache.affiliateLinkBacklogThreshold = val;
   }
 }
 
@@ -117,6 +129,76 @@ export async function saveSearchLimit(limit: number): Promise<void> {
   }
   await saveIntSetting(KEYS.searchLimit, limit);
   cache.searchLimit = limit;
+}
+
+// --- Affiliate link delay ---
+
+export async function getAffiliateLinkDelayMsFromDb(): Promise<number> {
+  if (cache.affiliateLinkDelayMs != null) return cache.affiliateLinkDelayMs;
+  const val = await loadIntSetting(KEYS.affiliateLinkDelayMs);
+  if (val != null && val >= 0) {
+    cache.affiliateLinkDelayMs = val;
+    return val;
+  }
+  return env.QUEUE_CONFIG.affiliateLinkDelayMs;
+}
+
+export function getAffiliateLinkDelayMsCached(): number {
+  return cache.affiliateLinkDelayMs ?? env.QUEUE_CONFIG.affiliateLinkDelayMs;
+}
+
+export async function getAffiliateLinkBacklogDelayMinutesFromDb(): Promise<number> {
+  if (cache.affiliateLinkBacklogDelayMinutes != null) return cache.affiliateLinkBacklogDelayMinutes;
+  const val = await loadIntSetting(KEYS.affiliateLinkBacklogDelayMinutes);
+  if (val != null && val >= 1) {
+    cache.affiliateLinkBacklogDelayMinutes = val;
+    return val;
+  }
+  return env.QUEUE_CONFIG.affiliateLinkBacklogDelayMinutes;
+}
+
+export function getAffiliateLinkBacklogDelayMinutesCached(): number {
+  return cache.affiliateLinkBacklogDelayMinutes ?? env.QUEUE_CONFIG.affiliateLinkBacklogDelayMinutes;
+}
+
+export async function getAffiliateLinkBacklogThresholdFromDb(): Promise<number> {
+  if (cache.affiliateLinkBacklogThreshold != null) return cache.affiliateLinkBacklogThreshold;
+  const val = await loadIntSetting(KEYS.affiliateLinkBacklogThreshold);
+  if (val != null && val >= 1) {
+    cache.affiliateLinkBacklogThreshold = val;
+    return val;
+  }
+  return env.QUEUE_CONFIG.affiliateLinkBacklogThreshold;
+}
+
+export function getAffiliateLinkBacklogThresholdCached(): number {
+  return cache.affiliateLinkBacklogThreshold ?? env.QUEUE_CONFIG.affiliateLinkBacklogThreshold;
+}
+
+export async function saveAffiliateLinkDelaySettings(
+  delayMs: number,
+  backlogDelayMinutes: number,
+  backlogThreshold: number,
+): Promise<void> {
+  if (!Number.isInteger(delayMs) || delayMs < 0 || delayMs > 60_000) {
+    throw new Error('Informe um delay normal entre 0 e 60000 ms');
+  }
+  if (!Number.isInteger(backlogDelayMinutes) || backlogDelayMinutes < 1 || backlogDelayMinutes > 60) {
+    throw new Error('Informe um delay de backlog entre 1 e 60 minutos');
+  }
+  if (!Number.isInteger(backlogThreshold) || backlogThreshold < 1 || backlogThreshold > 100) {
+    throw new Error('Informe um limite de pendentes entre 1 e 100');
+  }
+
+  await Promise.all([
+    saveIntSetting(KEYS.affiliateLinkDelayMs, delayMs),
+    saveIntSetting(KEYS.affiliateLinkBacklogDelayMinutes, backlogDelayMinutes),
+    saveIntSetting(KEYS.affiliateLinkBacklogThreshold, backlogThreshold),
+  ]);
+
+  cache.affiliateLinkDelayMs = delayMs;
+  cache.affiliateLinkBacklogDelayMinutes = backlogDelayMinutes;
+  cache.affiliateLinkBacklogThreshold = backlogThreshold;
 }
 
 // --- Operating Hours ---

@@ -1,10 +1,22 @@
-import { getSearchLimit } from '../../src/config/queue-config-store.js';
+import {
+  getAffiliateLinkBacklogDelayMinutesFromDb,
+  getAffiliateLinkBacklogThresholdFromDb,
+  getAffiliateLinkDelayMsFromDb,
+  getSearchLimit,
+  hydrateQueueConfigCache,
+} from '../../src/config/queue-config-store.js';
 import { countOffers, findOfferById, findOffers, getOfferStats, type OfferSentFilter } from '../../src/offers/repository.js';
 import type { OfferRecord } from '../../src/offers/types.js';
 import { estimatePendingSendTimes } from '../../src/queue/sender-schedule.js';
 import { type DatabaseSnapshot, withDatabase } from './db-model.js';
 
 const PAGE_SIZE = 50;
+
+export interface AffiliateLinkDelaySettings {
+  delayMs: number;
+  backlogDelayMinutes: number;
+  backlogThreshold: number;
+}
 
 export interface OffersPageData {
   database: DatabaseSnapshot;
@@ -17,6 +29,7 @@ export interface OffersPageData {
   totalPages: number;
   pendingCount: number;
   searchLimit: number;
+  affiliateDelay: AffiliateLinkDelaySettings;
 }
 
 export function parseSentFilter(value: string | null): OfferSentFilter {
@@ -27,6 +40,16 @@ export function parseSentFilter(value: string | null): OfferSentFilter {
 export function parsePage(value: string | null): number {
   const page = Number.parseInt(value ?? '1', 10);
   return Number.isFinite(page) && page > 0 ? page : 1;
+}
+
+export async function loadAffiliateLinkDelaySettings(): Promise<AffiliateLinkDelaySettings> {
+  await hydrateQueueConfigCache();
+  const [delayMs, backlogDelayMinutes, backlogThreshold] = await Promise.all([
+    getAffiliateLinkDelayMsFromDb(),
+    getAffiliateLinkBacklogDelayMinutesFromDb(),
+    getAffiliateLinkBacklogThresholdFromDb(),
+  ]);
+  return { delayMs, backlogDelayMinutes, backlogThreshold };
 }
 
 export async function loadOffersPage(filter: OfferSentFilter, page: number): Promise<OffersPageData> {
@@ -44,6 +67,7 @@ export async function loadOffersPage(filter: OfferSentFilter, page: number): Pro
   );
 
   let scheduleByOfferId = new Map<string, Date>();
+  const affiliateDelay = await loadAffiliateLinkDelaySettings();
   if (result.database.available && result.data.pendingCount > 0) {
     const pendingOffers = await findOffers({ sent: 'pending', limit: result.data.pendingCount });
     scheduleByOfferId = await estimatePendingSendTimes(pendingOffers.map((offer) => offer.id));
@@ -60,6 +84,7 @@ export async function loadOffersPage(filter: OfferSentFilter, page: number): Pro
     totalPages: result.data.totalPages,
     pendingCount: result.data.pendingCount,
     searchLimit: getSearchLimit(),
+    affiliateDelay,
   };
 }
 
