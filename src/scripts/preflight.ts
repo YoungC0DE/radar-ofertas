@@ -1,0 +1,280 @@
+import { env } from '../config/env.js';
+import { prisma } from '../database/client.js';
+import { validateCategoryConfig } from '../mercado-livre/category-url.js';
+import { hasValidSession, loadSessionMeta, loadStorageState } from '../mercado-livre/session.js';
+import { getCollectorQueue, isRedisEnabled } from '../queue/index.js';
+import {
+  hasWhatsAppCredentials,
+  isNewsletterChannelId,
+  isPlaceholderChannelId,
+} from '../whatsapp/index.js';
+import { formatIsoInTimezone } from '../utils/datetime.js';
+
+export type PreflightProfile = 'all' | 'collector' | 'worker' | 'manager';
+
+export interface PreflightItem {
+  ok: boolean;
+  label: string;
+  detail: string;
+  fix?: string;
+}
+
+export interface PreflightResult {
+  ok: boolean;
+  items: PreflightItem[];
+}
+
+function maskUrl(url: string): string {
+  return url.replace(/\/\/([^:@/]+):([^@/]+)@/, '//$1:***@');
+}
+
+async function checkDatabase(): Promise<PreflightItem> {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return { ok: true, label: 'PostgreSQL', detail: maskUrl(env.DATABASE_URL) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      label: 'PostgreSQL',
+      detail: message,
+      fix: 'Confira DATABASE_URL e rode: npm run migrate:deploy',
+    };
+  }
+}
+
+async function checkRedis(): Promise<PreflightItem> {
+  if (!isRedisEnabled()) {
+    return {
+      ok: false,
+      label: 'Redis',
+      detail: 'REDIS_ENABLED=false — collector e worker precisam do Redis',
+      fix: 'Defina REDIS_ENABLED=true e REDIS_URL no .env',
+    };
+  }
+
+  const queue = getCollectorQueue();
+  try {
+    await queue.getJobCounts('waiting');
+    return { ok: true, label: 'Redis', detail: maskUrl(env.REDIS_URL) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      label: 'Redis',
+      detail: message,
+      fix: 'Confira REDIS_URL no .env',
+    };
+  } finally {
+    await queue.close();
+  }
+}
+
+async function checkMercadoLivre(): Promise<PreflightItem> {
+  const state = await loadStorageState();
+  const meta = await loadSessionMeta();
+
+  if (!state || !hasValidSession(state)) {
+    return {
+      ok: false,
+      label: 'Mercado Livre (afiliado)',
+      detail: meta.lastError ?? 'Sem sessão válida',
+      fix: 'npm run ml:login',
+    };
+  }
+
+  return {
+    ok: true,
+    label: 'Mercado Livre (afiliado)',
+    detail: meta.lastLoginAt
+      ? `Login em ${formatIsoInTimezone(meta.lastLoginAt, env.APP_TIMEZONE)}`
+      : 'Sessão OK',
+  };
+}
+
+async function checkAffiliateTag(): Promise<PreflightItem> {
+  const tag = env.AFFILIATE_CONFIG.tag;
+  if (!tag) {
+    return {
+      ok: false,
+      label: 'Tag afiliado',
+      detail: 'AFFILIATE_CONFIG.tag vazio',
+      fix: 'Defina AFFILIATE_CONFIG={"tag":"sua-tag"} no .env',
+    };
+  }
+  return { ok: true, label: 'Tag afiliado', detail: tag };
+}
+
+async function checkWhatsAppAuth(): Promise<PreflightItem> {
+  if (!(await hasWhatsAppCredentials())) {
+    return {
+      ok: false,
+      label: 'WhatsApp',
+      detail: 'Sem credenciais salvas',
+      fix: 'npm run wa:login',
+    };
+  }
+
+  return {
+    ok: true,
+    label: 'WhatsApp',
+    detail: `Auth em ${env.WHATSAPP_AUTH_PATH}`,
+  };
+}
+
+async function checkWhatsAppChannel(): Promise<PreflightItem> {
+  const channelId = env.WHATSAPP_CHANNEL_ID;
+
+  if (!channelId) {
+    return {
+      ok: false,
+      label: 'Canal WhatsApp',
+      detail: 'WHATSAPP_CHANNEL_ID vazio',
+      fix: 'npm run wa:channel -- "https://whatsapp.com/channel/SEU_CODIGO"',
+    };
+  }
+
+  if (!isNewsletterChannelId(channelId)) {
+    return {
+      ok: false,
+      label: 'Canal WhatsApp',
+      detail: 'ID deve terminar com @newsletter',
+      fix: 'npm run wa:channel -- "https://whatsapp.com/channel/SEU_CODIGO"',
+    };
+  }
+
+  if (isPlaceholderChannelId(channelId)) {
+    return {
+      ok: false,
+      label: 'Canal WhatsApp',
+      detail: 'ID parece placeholder',
+      fix: 'npm run wa:channel -- "https://whatsapp.com/channel/SEU_CODIGO"',
+    };
+  }
+
+  return { ok: true, label: 'Canal WhatsApp', detail: channelId };
+}
+
+async function checkCategories(): Promise<PreflightItem> {
+  const invalid = env.ML_CATEGORIES
+    .map((category) => validateCategoryConfig(category))
+    .filter((c) => !c.valid);
+
+  if (invalid.length > 0) {
+    return {
+      ok: false,
+      label: 'Categorias ML',
+      detail: `${invalid.length} inválida(s): ${invalid.map((c) => c.category).join(', ')}`,
+      fix: 'Ajuste ML_CATEGORIES no .env',
+    };
+  }
+
+  return {
+    ok: true,
+    label: 'Categorias ML',
+    detail: `${env.ML_CATEGORIES.length} configurada(s)`,
+  };
+}
+
+async function runChecks(profile: PreflightProfile): Promise<PreflightItem[]> {
+  const items: PreflightItem[] = [];
+
+  items.push(await checkDatabase());
+
+  if (profile === 'all' || profile === 'collector' || profile === 'worker') {
+    items.push(await checkRedis());
+  }
+
+  if (profile === 'all' || profile === 'collector' || profile === 'manager') {
+    items.push(await checkCategories());
+  }
+
+  if (profile === 'all' || profile === 'collector') {
+    items.push(await checkMercadoLivre());
+    items.push(await checkAffiliateTag());
+  }
+
+  if (profile === 'all' || profile === 'worker') {
+    items.push(await checkWhatsAppAuth());
+    items.push(await checkWhatsAppChannel());
+  }
+
+  return items;
+}
+
+export function printPreflight(items: PreflightItem[]): void {
+  console.log('\n╔══════════════════════════════════════╗');
+  console.log('║     Radar Ofertas — Verificação      ║');
+  console.log('╚══════════════════════════════════════╝\n');
+
+  for (const item of items) {
+    const icon = item.ok ? '✓' : '✗';
+    console.log(`${icon} ${item.label}`);
+    console.log(`  ${item.detail}`);
+    if (!item.ok && item.fix) {
+      console.log(`  → ${item.fix}`);
+    }
+    console.log('');
+  }
+}
+
+export function printSetupGuide(): void {
+  console.log('═══ Setup completo (rode na ordem) ═══\n');
+  console.log('  npm install');
+  console.log('  npm run prisma:generate');
+  console.log('  npm run migrate:deploy');
+  console.log('  npm run ml:login          # login afiliado ML');
+  console.log('  npm run wa:login          # QR code WhatsApp');
+  console.log('  npm run wa:channel -- "https://whatsapp.com/channel/..."');
+  console.log('  npm run check             # verificar tudo');
+  console.log('  npm run up                # subir collector + worker + manager\n');
+}
+
+export async function runPreflight(profile: PreflightProfile = 'all'): Promise<PreflightResult> {
+  const items = await runChecks(profile);
+  const ok = items.every((item) => item.ok);
+  return { ok, items };
+}
+
+function parseProfile(argv: string[]): PreflightProfile {
+  const arg = argv.find((a) => a.startsWith('--profile='));
+  const value = arg?.split('=')[1];
+  if (value === 'collector' || value === 'worker' || value === 'manager') return value;
+  return 'all';
+}
+
+async function main(): Promise<void> {
+  if (process.env.RADAR_SKIP_PREFLIGHT === '1') {
+    return;
+  }
+
+  const guide = process.argv.includes('--guide');
+  if (guide) {
+    printSetupGuide();
+    return;
+  }
+
+  const profile = parseProfile(process.argv);
+  const result = await runPreflight(profile);
+  printPreflight(result.items);
+
+  if (!result.ok) {
+    console.log('Corrija os itens acima antes de continuar.\n');
+    printSetupGuide();
+    process.exit(1);
+  }
+
+  console.log('Tudo OK — pode subir o bot.\n');
+}
+
+const isDirectRun = process.argv[1]?.includes('preflight');
+if (isDirectRun) {
+  main()
+    .catch((error) => {
+      console.error(error);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}

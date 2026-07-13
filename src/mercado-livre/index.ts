@@ -25,6 +25,7 @@ function mapToRawOffer(item: ScrapedItem): RawOffer {
     image: item.thumbnail?.replace('-I.jpg', '-O.jpg') ?? null,
     rating: item.rating,
     soldQuantity: item.soldQuantity,
+    salesRank: item.salesRank,
     permalink: item.permalink,
   };
 }

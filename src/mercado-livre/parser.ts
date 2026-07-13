@@ -69,6 +69,43 @@ function parseRating(raw: string | undefined): number | null {
   return Number.isFinite(value) && value <= 5 ? value : null;
 }
 
+/** Ex.: "4º em Impressoras" a partir do texto do card ou página do produto. */
+export function parseSalesRankText(raw: string | undefined): string | null {
+  if (!raw) return null;
+
+  const match = raw.match(/(\d{1,3})\s*[ºª°o]?\s*em\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9\s/&+-]{1,48})/i);
+  if (!match?.[1] || !match[2]) return null;
+
+  const category = match[2]
+    .trim()
+    .replace(/\s*(MAIS VENDIDO|Novo|\+).*$/i, '')
+    .trim();
+
+  if (!category) return null;
+  return `${match[1]}º em ${category}`;
+}
+
+function parseSalesRankFromCard(
+  $: cheerio.CheerioAPI,
+  card: cheerio.Cheerio<cheerio.AnyNode>,
+): string | null {
+  const shortTexts: string[] = [];
+
+  card.find('a, span, p, div, li').each((_, element) => {
+    const value = $(element).text().trim();
+    if (value.length > 0 && value.length < 80 && /\d+\s*[ºª°]\s*em\s+/i.test(value)) {
+      shortTexts.push(value);
+    }
+  });
+
+  for (const text of shortTexts) {
+    const rank = parseSalesRankText(text);
+    if (rank) return rank;
+  }
+
+  return parseSalesRankText(card.text());
+}
+
 function normalizePermalink(href: string): string {
   if (href.startsWith('http')) return href.split('#')[0] ?? href;
   return `https://www.mercadolivre.com.br${href.startsWith('/') ? '' : '/'}${href}`.split('#')[0] ?? href;
@@ -121,6 +158,10 @@ function mapJsonItem(raw: Record<string, unknown>): ScrapedItem | null {
         ? Number.parseInt(raw.sold_quantity, 10)
         : null;
 
+  const salesRank =
+    parseSalesRankText(typeof raw.subtitle === 'string' ? raw.subtitle : undefined) ??
+    extractSalesRankFromRecord(raw);
+
   return {
     id,
     title,
@@ -129,8 +170,39 @@ function mapJsonItem(raw: Record<string, unknown>): ScrapedItem | null {
     thumbnail,
     permalink: normalizePermalink(permalink),
     soldQuantity: Number.isFinite(soldQuantity) ? soldQuantity : null,
+    salesRank,
     rating,
   };
+}
+
+function extractSalesRankFromRecord(raw: Record<string, unknown>): string | null {
+  for (const value of Object.values(raw)) {
+    if (typeof value === 'string') {
+      const rank = parseSalesRankText(value);
+      if (rank) return rank;
+    }
+
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        if (typeof entry === 'string') {
+          const rank = parseSalesRankText(entry);
+          if (rank) return rank;
+        }
+        if (entry && typeof entry === 'object') {
+          const rank = extractSalesRankFromRecord(entry as Record<string, unknown>);
+          if (rank) return rank;
+        }
+      }
+      continue;
+    }
+
+    if (value && typeof value === 'object') {
+      const rank = extractSalesRankFromRecord(value as Record<string, unknown>);
+      if (rank) return rank;
+    }
+  }
+
+  return null;
 }
 
 function extractItemsFromJsonBlob(blob: string): ScrapedItem[] {
@@ -212,6 +284,7 @@ function parseWithCheerio(html: string): ScrapedItem[] {
     const soldText = soldEl.text().trim() || card.text();
     const soldQuantity = parseSoldQuantity(soldText);
     const rating = parseRating(ratingEl.text().trim() || card.find('[aria-label*="estrela"]').attr('aria-label'));
+    const salesRank = parseSalesRankFromCard($, card);
 
     items.push({
       id,
@@ -221,6 +294,7 @@ function parseWithCheerio(html: string): ScrapedItem[] {
       thumbnail,
       permalink,
       soldQuantity,
+      salesRank,
       rating,
     });
   });

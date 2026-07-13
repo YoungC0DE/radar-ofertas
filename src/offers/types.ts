@@ -7,6 +7,7 @@ export interface RawOffer {
   image: string | null;
   rating: number | null;
   soldQuantity: number | null;
+  salesRank: string | null;
   permalink: string;
 }
 
@@ -26,6 +27,7 @@ export interface OfferRecord {
   affiliateLink: string | null;
   rating: number | null;
   soldQuantity: number | null;
+  salesRank: string | null;
   score: number;
   sentAt: Date | null;
   createdAt: Date;
@@ -41,5 +43,6 @@ export interface CreateOfferInput {
   affiliateLink: string;
   rating: number | null;
   soldQuantity: number | null;
+  salesRank: string | null;
   score: number;
 }

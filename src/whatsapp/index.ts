@@ -32,6 +32,22 @@ export function isPlaceholderChannelId(channelId: string): boolean {
   return PLACEHOLDER_CHANNEL_PATTERN.test(channelId);
 }
 
+<<<<<<< Updated upstream
+=======
+export function isNewsletterChannelId(channelId: string): boolean {
+  return isJidNewsletter(channelId);
+}
+
+export async function hasWhatsAppCredentials(): Promise<boolean> {
+  try {
+    await access(path.join(env.WHATSAPP_AUTH_PATH, 'creds.json'));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+>>>>>>> Stashed changes
 function resolveNewsletterName(name: unknown): string | undefined {
   if (typeof name === 'string') return name;
   if (name && typeof name === 'object' && 'text' in name && typeof name.text === 'string') {

@@ -3,7 +3,18 @@ import type { QueueConfig } from '../config/env.js';
 import { buildAffiliateLink } from '../mercado-livre/index.js';
 import { enqueueOfferSend } from '../queue/index.js';
 import { logger } from '../utils/logger.js';
+<<<<<<< Updated upstream
 import { createOffer, offerExists } from './repository.js';
+=======
+import { formatOfferMessageFromTemplate, loadMessageTemplate, loadPlaceholderVisibility } from './message-template.js';
+import {
+  createOffer,
+  deletePendingOffers,
+  findOfferById,
+  findPendingOfferIds,
+  offerExists,
+} from './repository.js';
+>>>>>>> Stashed changes
 import type { OfferRecord, RawOffer, ScoredOffer } from './types.js';
 
 function calculateScore(offer: RawOffer, config: QueueConfig): number {
@@ -39,6 +50,7 @@ async function scoreOffer(offer: RawOffer, config: QueueConfig): Promise<ScoredO
   };
 }
 
+<<<<<<< Updated upstream
 function formatCurrency(value: number): string {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
@@ -61,6 +73,14 @@ export function formatOfferMessage(offer: OfferRecord): string {
     '🛒 Comprar:\n' +
     `${offer.affiliateLink ?? ''}`
   );
+=======
+export async function formatOfferMessage(offer: OfferRecord): Promise<string> {
+  const [template, visibility] = await Promise.all([
+    loadMessageTemplate(),
+    loadPlaceholderVisibility(),
+  ]);
+  return formatOfferMessageFromTemplate(template, offer, visibility);
+>>>>>>> Stashed changes
 }
 
 export async function processOffer(rawOffer: RawOffer): Promise<string | null> {
@@ -86,6 +106,7 @@ export async function processOffer(rawOffer: RawOffer): Promise<string | null> {
     affiliateLink: scored.affiliateLink,
     rating: scored.rating,
     soldQuantity: scored.soldQuantity,
+    salesRank: scored.salesRank,
     score: scored.score,
   });
 
@@ -102,3 +123,74 @@ export async function processOffers(rawOffers: RawOffer[]): Promise<number> {
   }
   return enqueued;
 }
+<<<<<<< Updated upstream
+=======
+
+export async function removeAllPendingOffers(): Promise<number> {
+  const ids = await findPendingOfferIds();
+  if (ids.length === 0) return 0;
+
+  if (isRedisEnabled()) {
+    const queue = getSenderQueue();
+    try {
+      for (const id of ids) {
+        try {
+          const job = await queue.getJob(`send-offer-${id}`);
+          if (job) await job.remove();
+        } catch (error) {
+          logger.warn({ offerId: id, error }, 'Failed to remove sender job');
+        }
+      }
+    } finally {
+      await queue.close();
+    }
+  }
+
+  const deleted = await deletePendingOffers();
+  logger.info({ deleted }, 'Pending offers removed');
+  return deleted;
+}
+
+export async function sendOfferNow(offerId: string): Promise<void> {
+  const offer = await findOfferById(offerId);
+  if (!offer) {
+    throw new Error('Oferta não encontrada');
+  }
+  if (offer.sentAt) {
+    throw new Error('Oferta já foi enviada');
+  }
+  if (!isRedisEnabled()) {
+    throw new Error('Redis desabilitado — não é possível enfileirar envio');
+  }
+
+  const queue = getSenderQueue();
+  const jobId = `send-offer-${offerId}`;
+
+  try {
+    const existing = await queue.getJob(jobId);
+    if (existing) {
+      const state = await existing.getState();
+      if (state === 'delayed') {
+        await existing.promote();
+        return;
+      }
+      if (state === 'active') {
+        return;
+      }
+      await existing.remove();
+    }
+
+    await queue.add(
+      'send',
+      { offerId },
+      {
+        jobId,
+        removeOnComplete: true,
+        removeOnFail: 100,
+      },
+    );
+  } finally {
+    await queue.close();
+  }
+}
+>>>>>>> Stashed changes

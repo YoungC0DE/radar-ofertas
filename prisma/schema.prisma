@@ -18,6 +18,7 @@ model Offer {
   affiliateLink  String?   @map("affiliate_link")
   rating         Float?
   soldQuantity   Int?      @map("sold_quantity")
+  salesRank      String?   @map("sales_rank")
   score          Int       @default(0)
   sentAt         DateTime? @map("sent_at")
   createdAt      DateTime  @default(now()) @map("created_at")
