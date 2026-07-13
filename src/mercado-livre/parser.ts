@@ -48,17 +48,66 @@ function parseMoneyFromContainer(container: cheerio.Cheerio<cheerio.AnyNode>): n
   return base;
 }
 
-function parseSoldQuantity(raw: string | undefined): number | null {
-  if (!raw) return null;
-  const normalized = raw.toLowerCase().replace(/\./g, '');
-  const match = normalized.match(/([\d,]+)\s*(mil|k)?/);
-  if (!match?.[1]) return null;
-
-  const base = Number.parseInt(match[1].replace(',', ''), 10);
+function parseSoldNumber(baseRaw: string, multiplierRaw?: string): number | null {
+  const base = Number.parseInt(baseRaw.replace(/\D/g, ''), 10);
   if (!Number.isFinite(base)) return null;
-
-  const multiplier = match[2] ? 1000 : 1;
+  const multiplier = multiplierRaw ? 1000 : 1;
   return base * multiplier;
+}
+
+/** Ex.: "+1000 vendidos", "1.234 vendidos", "mais de 5mil vendidos". */
+export function parseSoldQuantity(raw: string | undefined): number | null {
+  if (!raw?.trim()) return null;
+
+  const normalized = raw.toLowerCase().replace(/\./g, '');
+  const segments = normalized.split(/[|•·]/).map((part) => part.trim());
+  const candidates = [
+    ...segments.filter((part) => /vendid[oa]s?/.test(part)),
+    ...(segments.some((part) => /vendid[oa]s?/.test(part)) ? [] : [normalized]),
+  ];
+
+  for (const text of candidates) {
+    const plusMatch = text.match(/\+\s*([\d,]+)\s*(mil|k)?/);
+    if (plusMatch?.[1]) {
+      const value = parseSoldNumber(plusMatch[1], plusMatch[2]);
+      if (value !== null) return value;
+    }
+
+    const soldMatch = text.match(/([\d,]+)\s*(mil|k)?\s*vendid[oa]s?/);
+    if (soldMatch?.[1]) {
+      const value = parseSoldNumber(soldMatch[1], soldMatch[2]);
+      if (value !== null && value > 0) return value;
+    }
+
+    const maisDeMatch = text.match(/mais de\s+([\d,]+)\s*(mil|k)?/);
+    if (maisDeMatch?.[1]) {
+      const value = parseSoldNumber(maisDeMatch[1], maisDeMatch[2]);
+      if (value !== null) return value;
+    }
+  }
+
+  return null;
+}
+
+function resolveSoldQuantity(
+  rawQuantity: unknown,
+  textSources: Array<string | undefined>,
+): number | null {
+  if (typeof rawQuantity === 'number' && Number.isFinite(rawQuantity) && rawQuantity > 0) {
+    return rawQuantity;
+  }
+
+  if (typeof rawQuantity === 'string') {
+    const parsed = Number.parseInt(rawQuantity, 10);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+
+  for (const source of textSources) {
+    const parsed = parseSoldQuantity(source);
+    if (parsed !== null && parsed > 0) return parsed;
+  }
+
+  return null;
 }
 
 function parseRating(raw: string | undefined): number | null {
@@ -107,6 +156,59 @@ function parseSalesRankFromCard(
   return parseSalesRankText(card.text());
 }
 
+function parseSoldQuantityFromCard(
+  $: cheerio.CheerioAPI,
+  card: cheerio.Cheerio<cheerio.AnyNode>,
+): number | null {
+  const textSources: string[] = [];
+  const soldEl = card
+    .find(
+      '.ui-search-item__group__element--sold-quantity, .poly-component__sold-quantity, .poly-attributes__sold-quantity',
+    )
+    .first();
+  const soldText = soldEl.text().trim();
+  if (soldText) textSources.push(soldText);
+
+  card.find('span, p, li, div').each((_, element) => {
+    const value = $(element).text().trim();
+    if (value.length > 0 && value.length < 80 && /vendid[oa]s?/i.test(value)) {
+      textSources.push(value);
+    }
+  });
+
+  return resolveSoldQuantity(undefined, textSources);
+}
+
+function extractSalesRankFromRecord(raw: Record<string, unknown>): string | null {
+  for (const value of Object.values(raw)) {
+    if (typeof value === 'string') {
+      const rank = parseSalesRankText(value);
+      if (rank) return rank;
+    }
+
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        if (typeof entry === 'string') {
+          const rank = parseSalesRankText(entry);
+          if (rank) return rank;
+        }
+        if (entry && typeof entry === 'object') {
+          const rank = extractSalesRankFromRecord(entry as Record<string, unknown>);
+          if (rank) return rank;
+        }
+      }
+      continue;
+    }
+
+    if (value && typeof value === 'object') {
+      const rank = extractSalesRankFromRecord(value as Record<string, unknown>);
+      if (rank) return rank;
+    }
+  }
+
+  return null;
+}
+
 function normalizePermalink(href: string): string {
   if (href.startsWith('http')) return href.split('#')[0] ?? href;
   return `https://www.mercadolivre.com.br${href.startsWith('/') ? '' : '/'}${href}`.split('#')[0] ?? href;
@@ -152,12 +254,9 @@ function mapJsonItem(raw: Record<string, unknown>): ScrapedItem | null {
         ? raw.rating
         : null;
 
-  const soldQuantity =
-    typeof raw.sold_quantity === 'number'
-      ? raw.sold_quantity
-      : typeof raw.sold_quantity === 'string'
-        ? Number.parseInt(raw.sold_quantity, 10)
-        : null;
+  const soldQuantity = resolveSoldQuantity(raw.sold_quantity, [
+    typeof raw.subtitle === 'string' ? raw.subtitle : undefined,
+  ]);
 
   const salesRank =
     parseSalesRankText(typeof raw.subtitle === 'string' ? raw.subtitle : undefined) ??
@@ -170,40 +269,10 @@ function mapJsonItem(raw: Record<string, unknown>): ScrapedItem | null {
     originalPrice,
     thumbnail,
     permalink: normalizePermalink(permalink),
-    soldQuantity: Number.isFinite(soldQuantity) ? soldQuantity : null,
+    soldQuantity,
     salesRank,
     rating,
   };
-}
-
-function extractSalesRankFromRecord(raw: Record<string, unknown>): string | null {
-  for (const value of Object.values(raw)) {
-    if (typeof value === 'string') {
-      const rank = parseSalesRankText(value);
-      if (rank) return rank;
-    }
-
-    if (Array.isArray(value)) {
-      for (const entry of value) {
-        if (typeof entry === 'string') {
-          const rank = parseSalesRankText(entry);
-          if (rank) return rank;
-        }
-        if (entry && typeof entry === 'object') {
-          const rank = extractSalesRankFromRecord(entry as Record<string, unknown>);
-          if (rank) return rank;
-        }
-      }
-      continue;
-    }
-
-    if (value && typeof value === 'object') {
-      const rank = extractSalesRankFromRecord(value as Record<string, unknown>);
-      if (rank) return rank;
-    }
-  }
-
-  return null;
 }
 
 function extractItemsFromJsonBlob(blob: string): ScrapedItem[] {
@@ -256,11 +325,6 @@ function parseWithCheerio(html: string): ScrapedItem[] {
     const currentPriceEl = card.find('.poly-price__current').first();
     const oldPriceEl = card.find('s.andes-money-amount, .poly-price__labels s, .poly-price__original').first();
     const imageEl = card.find('img').first();
-    const soldEl = card
-      .find(
-        '.ui-search-item__group__element--sold-quantity, .poly-component__sold-quantity, .poly-attributes__sold-quantity',
-      )
-      .first();
     const ratingEl = card
       .find('.ui-search-reviews__rating-number, .poly-reviews__rating, .poly-component__review-compacted')
       .first();
@@ -282,8 +346,7 @@ function parseWithCheerio(html: string): ScrapedItem[] {
       ? parseMoneyFromContainer(oldPriceEl)
       : null;
     const thumbnail = imageEl.attr('src') ?? imageEl.attr('data-src') ?? null;
-    const soldText = soldEl.text().trim() || card.text();
-    const soldQuantity = parseSoldQuantity(soldText);
+    const soldQuantity = parseSoldQuantityFromCard($, card);
     const rating = parseRating(ratingEl.text().trim() || card.find('[aria-label*="estrela"]').attr('aria-label'));
     const salesRank = parseSalesRankFromCard($, card);
 

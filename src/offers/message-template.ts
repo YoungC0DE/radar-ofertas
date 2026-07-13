@@ -61,7 +61,7 @@ export function formatOfferRating(rating: number | null): string {
 }
 
 export function formatSoldQuantity(soldQuantity: number | null): string {
-  if (soldQuantity === null) return 'Sem dados de vendas';
+  if (soldQuantity === null || soldQuantity <= 0) return 'Sem dados de vendas';
   return `${soldQuantity.toLocaleString('pt-BR')} vendidos`;
 }
 

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
-import { parseListingHtml, parseSalesRankText } from './parser.js';
+import { parseListingHtml, parseSalesRankText, parseSoldQuantity } from './parser.js';
 
 const fixtureDir = dirname(fileURLToPath(import.meta.url));
 
@@ -12,6 +12,19 @@ describe('parser — sales rank', () => {
     assert.equal(parseSalesRankText('4º em Impressoras'), '4º em Impressoras');
     assert.equal(parseSalesRankText('MAIS VENDIDO 4º em Impressoras Novo'), '4º em Impressoras');
     assert.equal(parseSalesRankText('sem ranking'), null);
+  });
+});
+
+describe('parser — sold quantity', () => {
+  it('extrai +1000 vendidos do subtítulo', () => {
+    assert.equal(parseSoldQuantity('Novo | +1000 vendidos'), 1000);
+    assert.equal(parseSoldQuantity('+1000 vendidos'), 1000);
+    assert.equal(parseSoldQuantity('1.234 vendidos'), 1234);
+    assert.equal(parseSoldQuantity('mais de 5mil vendidos'), 5000);
+  });
+
+  it('ignora zero solto no meio do card', () => {
+    assert.equal(parseSoldQuantity('0 vendidos'), null);
   });
 });
 
