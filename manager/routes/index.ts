@@ -6,7 +6,7 @@ import { prisma } from '../../src/database/client.js';
 
 import { logger } from '../../src/utils/logger.js';
 
-import { showDashboard } from '../controllers/dashboard-controller.js';
+import { handleCollectOffers, showDashboard } from '../controllers/dashboard-controller.js';
 
 import { showOfferDetail, showOffersList, handleDeleteAllPending, handleSendOfferNow } from '../controllers/offers-controller.js';
 
@@ -203,6 +203,16 @@ export async function handleManagerRequest(
       return;
     }
 
+    if (path === '/manager/offers/collect' && method === 'POST') {
+      const result = await handleCollectOffers();
+      if ('error' in result) {
+        sendRedirect(res, `/manager?collectError=${encodeURIComponent(result.error)}`);
+        return;
+      }
+      sendRedirect(res, '/manager?collectQueued=1');
+      return;
+    }
+
     const sendNowMatch = path.match(/^\/manager\/offers\/([^/]+)\/send-now$/);
     if (sendNowMatch && method === 'POST') {
       const result = await handleSendOfferNow(sendNowMatch[1]!);
@@ -246,6 +256,8 @@ export async function handleManagerRequest(
         await showDashboard({
           sendNowMessage: url.searchParams.get('sentNow') === '1' ? 'Envio enfileirado com prioridade.' : undefined,
           sendNowError: url.searchParams.get('sendError') ?? undefined,
+          collectMessage: url.searchParams.get('collectQueued') === '1' ? 'Busca de novos anúncios enfileirada.' : undefined,
+          collectError: url.searchParams.get('collectError') ?? undefined,
         }),
       );
 

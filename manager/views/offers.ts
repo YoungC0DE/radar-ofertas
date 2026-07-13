@@ -15,20 +15,28 @@ export function renderOffersPage(
 ): string {
   const rows =
     !data.database.available
-      ? `<tr><td colspan="7">${escapeHtml(data.database.error ?? 'Banco indisponível')}</td></tr>`
+      ? `<tr><td colspan="8">${escapeHtml(data.database.error ?? 'Banco indisponível')}</td></tr>`
       : data.offers.length === 0
-      ? `<tr><td colspan="7">Nenhuma oferta encontrada.</td></tr>`
+      ? `<tr><td colspan="8">Nenhuma oferta encontrada.</td></tr>`
       : data.offers
           .map(
-            (o) => `<tr>
+            (o) => {
+              const scheduleAt = o.sentAt ? null : data.scheduleByOfferId.get(o.id) ?? null;
+              const scheduleCell = scheduleAt
+                ? formatDate(scheduleAt, env.APP_TIMEZONE)
+                : '—';
+
+              return `<tr>
           <td><a class="link" href="/manager/offers/${escapeHtml(o.id)}">${escapeHtml(o.id.slice(0, 10))}…</a></td>
           <td>${escapeHtml(o.title.slice(0, 50))}${o.title.length > 50 ? '…' : ''}</td>
           <td>${o.score}</td>
           <td>${formatCurrency(o.price)}</td>
           <td>${o.discount != null ? `${o.discount}%` : '—'}</td>
           <td>${statusBadge(o.sentAt)}</td>
+          <td>${scheduleCell}</td>
           <td>${formatDate(o.sentAt ?? o.createdAt, env.APP_TIMEZONE)}</td>
-        </tr>`,
+        </tr>`;
+            },
           )
           .join('');
 
@@ -76,7 +84,7 @@ export function renderOffersPage(
       </div>
       <table>
         <thead>
-          <tr><th>ID</th><th>Título</th><th>Score</th><th>Preço</th><th>Desconto</th><th>Status</th><th>Data</th></tr>
+          <tr><th>ID</th><th>Título</th><th>Score</th><th>Preço</th><th>Desconto</th><th>Status</th><th>Previsão de envio</th><th>Data</th></tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>

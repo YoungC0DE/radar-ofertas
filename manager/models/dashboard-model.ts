@@ -36,11 +36,15 @@ export interface DashboardData {
   lastSentAt: Date | null;
   sendNowMessage?: string;
   sendNowError?: string;
+  collectMessage?: string;
+  collectError?: string;
 }
 
 export async function loadDashboardData(options: {
   sendNowMessage?: string;
   sendNowError?: string;
+  collectMessage?: string;
+  collectError?: string;
 } = {}): Promise<DashboardData> {
   const queueConfig = await getRuntimeQueueConfigAsync();
   const operatingHours = {
@@ -111,5 +115,7 @@ export async function loadDashboardData(options: {
     lastSentAt: offersResult.data.lastSentAt,
     sendNowMessage: options.sendNowMessage,
     sendNowError: options.sendNowError,
+    collectMessage: options.collectMessage,
+    collectError: options.collectError,
   };
 }

@@ -244,6 +244,8 @@ export function renderLayout(title: string, body: string, activeNav?: string): s
     }
     section h2 { margin: 0 0 14px; font-size: 0.95rem; font-weight: 600; color: var(--text); }
     .subsection-title { margin: 18px 0 10px; font-size: 0.82rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .subsection-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .subsection-heading .subsection-title { flex: 1; }
     .inline-form { margin: 0; display: inline; }
 
     table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }

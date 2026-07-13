@@ -58,6 +58,18 @@ export async function scheduleCollectorJob(): Promise<void> {
   );
 }
 
+export async function enqueueOfferCollection(): Promise<void> {
+  assertRedisEnabled('enfileiramento de coleta');
+  await getCollectorQueue().add(
+    'collect',
+    { triggeredAt: new Date().toISOString() },
+    {
+      removeOnComplete: true,
+      removeOnFail: 50,
+    },
+  );
+}
+
 export async function rescheduleCollectorJob(): Promise<void> {
   assertRedisEnabled('reagendamento do collector');
   const queue = getCollectorQueue();

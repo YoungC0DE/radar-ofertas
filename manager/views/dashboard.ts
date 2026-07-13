@@ -48,6 +48,11 @@ function renderOffersTable(
   return rows.map((row) => renderOfferRow(row, timezone)).join('');
 }
 
+function formatPreviewCount(shown: number, total: number): string {
+  if (total > shown) return `${shown} de ${total}`;
+  return String(shown);
+}
+
 export function renderDashboard(data: DashboardData): string {
   const hoursLabel = `${String(data.operatingHours.start).padStart(2, '0')}:00 – ${
     data.operatingHours.end === 0 ? '24:00' : `${String(data.operatingHours.end).padStart(2, '0')}:00`
@@ -77,6 +82,12 @@ export function renderDashboard(data: DashboardData): string {
     ? `<p class="alert ok">${escapeHtml(data.sendNowMessage)}</p>`
     : data.sendNowError
       ? `<p class="alert err">${escapeHtml(data.sendNowError)}</p>`
+      : '';
+
+  const collectAlert = data.collectMessage
+    ? `<p class="alert ok">${escapeHtml(data.collectMessage)}</p>`
+    : data.collectError
+      ? `<p class="alert err">${escapeHtml(data.collectError)}</p>`
       : '';
 
   const pendingRows = !data.database.available
@@ -123,14 +134,14 @@ export function renderDashboard(data: DashboardData): string {
     </div>
 
     <section>
-      <h2>Filas (BullMQ)</h2>
+      <h2>Filas</h2>
       ${
         data.queues.available
           ? `<table>
-        <thead><tr><th>Fila</th><th>Waiting</th><th>Active</th><th>Delayed</th><th>Failed</th><th>Completed</th></tr></thead>
+        <thead><tr><th>Fila</th><th>Aguardando</th><th>Em execução</th><th>Agendados</th><th>Falhas</th><th>Concluídos</th></tr></thead>
         <tbody>
-          ${queueRow('offer-collector', data.queues.collector)}
-          ${queueRow('offer-sender', data.queues.sender)}
+          ${queueRow('Coletor de ofertas', data.queues.collector)}
+          ${queueRow('Envio de ofertas', data.queues.sender)}
         </tbody>
       </table>`
           : `<p class="meta"><span class="badge warn">Filas indisponíveis</span> — ${escapeHtml(data.queues.error ?? 'Redis offline')}</p>`
@@ -148,12 +159,18 @@ export function renderDashboard(data: DashboardData): string {
     <section>
       <h2>Últimas ofertas salvas</h2>
       ${sendNowAlert}
-      <h3 class="subsection-title">Próximas pendentes (6)</h3>
+      ${collectAlert}
+      <div class="subsection-heading">
+        <h3 class="subsection-title">Próximas pendentes (${formatPreviewCount(data.pendingOffers.length, data.stats.pending)})</h3>
+        <form method="post" action="/manager/offers/collect" class="inline-form">
+          <button type="submit" class="btn btn-sm primary">Buscar novos anúncios</button>
+        </form>
+      </div>
       <table>
         <thead><tr><th>ID</th><th>Título</th><th>Score</th><th>Preço</th><th>Status</th><th>Horário</th><th>Ação</th></tr></thead>
         <tbody>${pendingRows}</tbody>
       </table>
-      <h3 class="subsection-title">Últimas enviadas (4)</h3>
+      <h3 class="subsection-title">Últimas enviadas (${formatPreviewCount(data.sentOffers.length, data.stats.sent)})</h3>
       <table>
         <thead><tr><th>ID</th><th>Título</th><th>Score</th><th>Preço</th><th>Status</th><th>Horário</th><th>Ação</th></tr></thead>
         <tbody>${sentRows}</tbody>

@@ -1,5 +1,6 @@
 import { countOffers, findOfferById, findOffers, getOfferStats, type OfferSentFilter } from '../../src/offers/repository.js';
 import type { OfferRecord } from '../../src/offers/types.js';
+import { estimatePendingSendTimes } from '../../src/queue/sender-schedule.js';
 import { type DatabaseSnapshot, withDatabase } from './db-model.js';
 
 const PAGE_SIZE = 50;
@@ -7,6 +8,7 @@ const PAGE_SIZE = 50;
 export interface OffersPageData {
   database: DatabaseSnapshot;
   offers: OfferRecord[];
+  scheduleByOfferId: Map<string, Date>;
   filter: OfferSentFilter;
   page: number;
   pageSize: number;
@@ -39,9 +41,16 @@ export async function loadOffersPage(filter: OfferSentFilter, page: number): Pro
     { offers: [] as OfferRecord[], total: 0, totalPages: 1, page: 1, pendingCount: 0 },
   );
 
+  let scheduleByOfferId = new Map<string, Date>();
+  if (result.database.available && result.data.pendingCount > 0) {
+    const pendingOffers = await findOffers({ sent: 'pending', limit: result.data.pendingCount });
+    scheduleByOfferId = await estimatePendingSendTimes(pendingOffers.map((offer) => offer.id));
+  }
+
   return {
     database: result.database,
     offers: result.data.offers,
+    scheduleByOfferId,
     filter,
     page: result.data.page,
     pageSize: PAGE_SIZE,
