@@ -1,0 +1,11 @@
+---
+description: Manter .env e .env.example sincronizados
+globs: .env.example,.env
+alwaysApply: false
+---
+
+# Arquivos de ambiente
+
+- Ao alterar `.env.example`, aplicar a **mesma mudança** em `.env` (valores de exemplo, renomeação de chaves, novas variáveis).
+- `.env.example` é a referência documentada; `.env` é o arquivo usado localmente — devem permanecer alinhados.
+- Não commitar segredos reais no `.env.example`; em `.env` preservar credenciais existentes ao sincronizar.
