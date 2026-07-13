@@ -20,6 +20,11 @@ import { logger } from '../utils/logger.js';
 let socket: WASocket | undefined;
 let isConnecting = false;
 let allowReconnect = true;
+let qrListener: ((qr: string) => void) | undefined;
+
+export interface ConnectWhatsAppOptions {
+  onQr?: (qr: string) => void;
+}
 
 const PLACEHOLDER_CHANNEL_PATTERN = /1203630{6,}@newsletter$/;
 
@@ -113,11 +118,13 @@ async function createSocket(
     if (qr) {
       logger.info('Aguardando leitura do QR code para autenticar o WhatsApp');
       printQrCode(qr);
+      qrListener?.(qr);
     }
 
     if (connection === 'open') {
       socket = sock;
       isConnecting = false;
+      qrListener = undefined;
       logger.info('WhatsApp connected');
     }
 
@@ -146,7 +153,8 @@ async function createSocket(
   return sock;
 }
 
-export async function connectWhatsApp(): Promise<WASocket> {
+export async function connectWhatsApp(options?: ConnectWhatsAppOptions): Promise<WASocket> {
+  if (options?.onQr) qrListener = options.onQr;
   if (socket) return socket;
 
   if (isConnecting) {

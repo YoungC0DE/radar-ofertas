@@ -1,6 +1,6 @@
 import readline from "node:readline";
 import { stdin, stdout } from "node:process";
-import { chromium, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { env } from "../config/env.js";
 import { logger } from "../utils/logger.js";
 import {
@@ -8,6 +8,12 @@ import {
   saveStorageState,
   updateSessionMeta,
 } from "./session.js";
+
+export interface AffiliateLoginSession {
+  browser: Browser;
+  context: BrowserContext;
+  page: Page;
+}
 
 const AFFILIATE_LOGIN_URL =
   "https://www.mercadolivre.com.br/afiliados/linkbuilder#hub";
@@ -24,7 +30,7 @@ async function waitForEnter(prompt: string): Promise<void> {
   });
 }
 
-async function isAffiliatePortalReady(page: Page): Promise<boolean> {
+export async function isAffiliatePortalReady(page: Page): Promise<boolean> {
   const url = page.url();
   if (LOGIN_PAGE_PATTERN.test(url)) return false;
 
@@ -42,7 +48,7 @@ async function isAffiliatePortalReady(page: Page): Promise<boolean> {
   );
 }
 
-export async function loginAffiliateSession(): Promise<void> {
+export async function openAffiliateLoginSession(): Promise<AffiliateLoginSession> {
   await ensureAuthDir();
 
   const browser = await chromium.launch({ headless: false });
@@ -52,20 +58,42 @@ export async function loginAffiliateSession(): Promise<void> {
   });
   const page = await context.newPage();
 
+  logger.info(
+    "Abrindo portal de afiliados — faça login manualmente no navegador",
+  );
+  await page.goto(AFFILIATE_LOGIN_URL, {
+    waitUntil: "domcontentloaded",
+    timeout: env.ML_HTTP_TIMEOUT_MS,
+  });
+
+  logger.info(
+    "O navegador permanecerá aberto até você confirmar. " +
+      "Conclua o login e acesse o Gerador de Links antes de continuar.",
+  );
+
+  return { browser, context, page };
+}
+
+export async function persistAffiliateSession(
+  context: BrowserContext,
+): Promise<void> {
+  const storageState = await context.storageState();
+  await saveStorageState(storageState);
+  await updateSessionMeta({
+    lastLoginAt: new Date().toISOString(),
+    lastError: null,
+  });
+
+  logger.info(
+    { path: env.ML_AUTH_PATH },
+    "Sessão de afiliado salva com sucesso",
+  );
+}
+
+export async function loginAffiliateSession(): Promise<void> {
+  const { browser, context, page } = await openAffiliateLoginSession();
+
   try {
-    logger.info(
-      "Abrindo portal de afiliados — faça login manualmente no navegador",
-    );
-    await page.goto(AFFILIATE_LOGIN_URL, {
-      waitUntil: "domcontentloaded",
-      timeout: env.ML_HTTP_TIMEOUT_MS,
-    });
-
-    logger.info(
-      "O navegador permanecerá aberto até você confirmar. " +
-        "Conclua o login e acesse o Gerador de Links antes de continuar.",
-    );
-
     while (true) {
       await waitForEnter(
         "\nQuando estiver logado no portal de afiliados, pressione Enter para salvar a sessão... ",
@@ -79,17 +107,7 @@ export async function loginAffiliateSession(): Promise<void> {
       );
     }
 
-    const storageState = await context.storageState();
-    await saveStorageState(storageState);
-    await updateSessionMeta({
-      lastLoginAt: new Date().toISOString(),
-      lastError: null,
-    });
-
-    logger.info(
-      { path: env.ML_AUTH_PATH },
-      "Sessão de afiliado salva com sucesso",
-    );
+    await persistAffiliateSession(context);
   } finally {
     await browser.close();
   }

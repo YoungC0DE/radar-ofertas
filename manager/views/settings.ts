@@ -189,6 +189,46 @@ function renderScoreSection(data: SettingsData): string {
   return configRow('Pontuação', value, 'Critérios e score mínimo para aceitar ofertas');
 }
 
+const ML_ICON = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>`;
+const WA_ICON = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`;
+
+function renderConnectCard(
+  service: 'ml' | 'wa',
+  name: string,
+  icon: string,
+  status: { ok: boolean; detail: string },
+): string {
+  const badge = status.ok
+    ? '<span class="badge ok">Conectado</span>'
+    : '<span class="badge warn">Desconectado</span>';
+
+  return `<div class="connect-card">
+    <div class="connect-card-head">
+      <span class="connect-icon connect-icon-${service}">${icon}</span>
+      <div class="connect-card-text">
+        <div class="connect-name">${escapeHtml(name)}</div>
+        <div class="connect-detail meta">${escapeHtml(status.detail)}</div>
+      </div>
+      ${badge}
+    </div>
+    <button type="button" class="btn primary connect-btn" id="connect-${service}">
+      ${status.ok ? 'Reconectar' : 'Conectar'}
+    </button>
+  </div>`;
+}
+
+function renderConnectionsSection(data: SettingsData): string {
+  return `
+    <section class="connect-section">
+      <h2>Conectar com</h2>
+      <p class="meta">Autentique as contas usadas pelo bot direto por aqui — sem precisar rodar comandos no terminal.</p>
+      <div class="connect-grid">
+        ${renderConnectCard('ml', 'Mercado Livre', ML_ICON, data.mlSession)}
+        ${renderConnectCard('wa', 'WhatsApp', WA_ICON, data.waSession)}
+      </div>
+    </section>`;
+}
+
 function renderChannelSection(data: SettingsData): string {
   const nameBlock = data.channelName
     ? `<span class="channel-name">${escapeHtml(data.channelName)}</span>`
@@ -442,11 +482,101 @@ export function renderSettingsPage(data: SettingsData): string {
       .config-categories .subsection-title {
         margin-top: 0;
       }
+      .connect-section {
+        margin-top: 32px;
+      }
+      .connect-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+        margin-top: 16px;
+      }
+      @media (max-width: 760px) {
+        .connect-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .connect-card {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px;
+        background: var(--surface-2);
+      }
+      .connect-card-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .connect-card-text {
+        flex: 1;
+        min-width: 0;
+      }
+      .connect-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        flex-shrink: 0;
+      }
+      .connect-icon-ml {
+        background: linear-gradient(135deg, #ffe600, #f5c000);
+        color: #2d3277;
+      }
+      .connect-icon-wa {
+        background: linear-gradient(135deg, #25d366, #128c7e);
+      }
+      .connect-name {
+        font-weight: 700;
+        font-size: 1rem;
+      }
+      .connect-detail {
+        margin-top: 2px;
+        word-break: break-word;
+      }
+      .connect-btn {
+        align-self: flex-start;
+      }
+      .connect-steps {
+        margin: 12px 0 0;
+        padding-left: 20px;
+        line-height: 1.6;
+        color: var(--text-muted);
+        font-size: 0.9rem;
+      }
+      .connect-status {
+        font-weight: 600;
+        margin: 0;
+      }
+      .connect-error {
+        color: var(--danger, #dc2626);
+        font-size: 0.9rem;
+        margin: 12px 0 0;
+      }
+      .wa-qr-wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        margin-top: 16px;
+      }
+      .wa-qr-wrap img {
+        border: 8px solid #fff;
+        border-radius: 8px;
+        background: #fff;
+      }
+      .hidden {
+        display: none;
+      }
     </style>
     ${alert}
     <section>
       <h2>Configuração</h2>
-      <p class="meta">Alguns valores podem ser editados aqui. Outros vêm do <code>.env</code>.</p>
 
       <div class="config-grid">
         ${renderBrandSection(data)}
@@ -467,6 +597,52 @@ export function renderSettingsPage(data: SettingsData): string {
       </div>
       ${renderMlCategoriesSection(data)}
     </section>
+
+    ${renderConnectionsSection(data)}
+
+    <div id="ml-connect-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="ml-connect-modal-title">
+        <div class="modal-header">
+          <h3 id="ml-connect-modal-title">Conectar ao Mercado Livre</h3>
+        </div>
+        <div class="modal-body">
+          <div class="connect-flow" id="ml-connect-flow">
+            <p class="connect-status" id="ml-connect-status">Abrindo o navegador…</p>
+            <ol class="connect-steps" id="ml-connect-steps">
+              <li>Uma janela do navegador vai abrir no portal de afiliados do Mercado Livre.</li>
+              <li>Faça login normalmente e acesse o <strong>Gerador de Links</strong>.</li>
+              <li>Volte aqui e clique em <strong>Concluir</strong> para salvar a sessão.</li>
+            </ol>
+            <p class="connect-error hidden" id="ml-connect-error"></p>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn" id="ml-connect-cancel">Cancelar</button>
+          <button type="button" class="btn primary" id="ml-connect-finish" disabled>Concluir</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="wa-connect-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="wa-connect-modal-title">
+        <div class="modal-header">
+          <h3 id="wa-connect-modal-title">Conectar ao WhatsApp</h3>
+        </div>
+        <div class="modal-body">
+          <div class="connect-flow" id="wa-connect-flow">
+            <p class="connect-status" id="wa-connect-status">Iniciando conexão…</p>
+            <div class="wa-qr-wrap hidden" id="wa-qr-wrap">
+              <img id="wa-qr-img" alt="QR code do WhatsApp" width="280" height="280">
+              <p class="modal-help">No celular, abra o WhatsApp › <strong>Aparelhos conectados</strong> › <strong>Conectar um aparelho</strong> e aponte a câmera para o QR acima.</p>
+            </div>
+            <p class="connect-error hidden" id="wa-connect-error"></p>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn" id="wa-connect-close">Fechar</button>
+        </div>
+      </div>
+    </div>
 
     <div id="channel-link-modal" class="modal-overlay hidden" aria-hidden="true">
       <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="channel-link-modal-title">
@@ -813,6 +989,162 @@ export function renderSettingsPage(data: SettingsData): string {
         copyFeedback?.classList.remove('hidden');
         setTimeout(() => copyFeedback?.classList.add('hidden'), 2000);
       });
+
+      // --- Conectar com: Mercado Livre ---
+      const mlConnectBtn = document.getElementById('connect-ml');
+      const mlModal = document.getElementById('ml-connect-modal');
+      const mlStatusEl = document.getElementById('ml-connect-status');
+      const mlErrorEl = document.getElementById('ml-connect-error');
+      const mlFinishBtn = document.getElementById('ml-connect-finish');
+      const mlCancelBtn = document.getElementById('ml-connect-cancel');
+      let mlPollTimer = null;
+
+      function stopMlPoll() {
+        if (mlPollTimer) { clearInterval(mlPollTimer); mlPollTimer = null; }
+      }
+
+      function renderMlState(state) {
+        mlErrorEl.classList.add('hidden');
+        if (state.error) {
+          mlErrorEl.textContent = state.error;
+          mlErrorEl.classList.remove('hidden');
+        }
+        switch (state.status) {
+          case 'opening':
+            mlStatusEl.textContent = 'Abrindo o navegador…';
+            mlFinishBtn.disabled = true;
+            break;
+          case 'awaiting-login':
+            mlStatusEl.textContent = 'Navegador aberto. Faça login e clique em Concluir.';
+            mlFinishBtn.disabled = false;
+            break;
+          case 'saving':
+            mlStatusEl.textContent = 'Salvando sessão…';
+            mlFinishBtn.disabled = true;
+            break;
+          case 'connected':
+            mlStatusEl.textContent = 'Sessão do Mercado Livre salva com sucesso! ✅';
+            mlFinishBtn.disabled = true;
+            stopMlPoll();
+            setTimeout(() => location.reload(), 1200);
+            break;
+          case 'error':
+            mlStatusEl.textContent = 'Não foi possível conectar.';
+            mlFinishBtn.disabled = true;
+            stopMlPoll();
+            break;
+        }
+      }
+
+      async function pollMl() {
+        try {
+          const res = await fetch('/manager/settings/connect/ml/status');
+          if (res.ok) renderMlState(await res.json());
+        } catch (_) {}
+      }
+
+      async function cancelMl() {
+        stopMlPoll();
+        closeModal(mlModal);
+        try { await fetch('/manager/settings/connect/ml/cancel', { method: 'POST' }); } catch (_) {}
+      }
+
+      mlConnectBtn?.addEventListener('click', async () => {
+        openModal(mlModal);
+        mlStatusEl.textContent = 'Abrindo o navegador…';
+        mlErrorEl.classList.add('hidden');
+        mlFinishBtn.disabled = true;
+        try {
+          const res = await fetch('/manager/settings/connect/ml/start', { method: 'POST' });
+          if (res.ok) renderMlState(await res.json());
+        } catch (_) {}
+        stopMlPoll();
+        mlPollTimer = setInterval(pollMl, 1500);
+      });
+
+      mlFinishBtn?.addEventListener('click', async () => {
+        mlStatusEl.textContent = 'Salvando sessão…';
+        mlFinishBtn.disabled = true;
+        try {
+          const res = await fetch('/manager/settings/connect/ml/finish', { method: 'POST' });
+          if (res.ok) renderMlState(await res.json());
+        } catch (_) {}
+      });
+
+      mlCancelBtn?.addEventListener('click', cancelMl);
+      mlModal?.addEventListener('click', (e) => { if (e.target === mlModal) cancelMl(); });
+
+      // --- Conectar com: WhatsApp ---
+      const waConnectBtn = document.getElementById('connect-wa');
+      const waModal = document.getElementById('wa-connect-modal');
+      const waStatusEl = document.getElementById('wa-connect-status');
+      const waErrorEl = document.getElementById('wa-connect-error');
+      const waQrWrap = document.getElementById('wa-qr-wrap');
+      const waQrImg = document.getElementById('wa-qr-img');
+      const waCloseBtn = document.getElementById('wa-connect-close');
+      let waPollTimer = null;
+      let waLastQr = '';
+
+      function stopWaPoll() {
+        if (waPollTimer) { clearInterval(waPollTimer); waPollTimer = null; }
+      }
+
+      function renderWaState(state) {
+        waErrorEl.classList.add('hidden');
+        switch (state.status) {
+          case 'connecting':
+            waStatusEl.textContent = 'Iniciando conexão…';
+            waQrWrap.classList.add('hidden');
+            break;
+          case 'qr':
+            waStatusEl.textContent = 'Escaneie o QR code com o WhatsApp:';
+            if (state.qr && state.qr !== waLastQr) {
+              waLastQr = state.qr;
+              waQrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encodeURIComponent(state.qr);
+            }
+            waQrWrap.classList.remove('hidden');
+            break;
+          case 'connected':
+            waStatusEl.textContent = 'WhatsApp conectado com sucesso! ✅';
+            waQrWrap.classList.add('hidden');
+            stopWaPoll();
+            setTimeout(() => location.reload(), 1200);
+            break;
+          case 'error':
+            waStatusEl.textContent = 'Não foi possível conectar.';
+            waQrWrap.classList.add('hidden');
+            if (state.error) {
+              waErrorEl.textContent = state.error;
+              waErrorEl.classList.remove('hidden');
+            }
+            stopWaPoll();
+            break;
+        }
+      }
+
+      async function pollWa() {
+        try {
+          const res = await fetch('/manager/settings/connect/wa/status');
+          if (res.ok) renderWaState(await res.json());
+        } catch (_) {}
+      }
+
+      waConnectBtn?.addEventListener('click', async () => {
+        openModal(waModal);
+        waStatusEl.textContent = 'Iniciando conexão…';
+        waErrorEl.classList.add('hidden');
+        waQrWrap.classList.add('hidden');
+        waLastQr = '';
+        try {
+          const res = await fetch('/manager/settings/connect/wa/start', { method: 'POST' });
+          if (res.ok) renderWaState(await res.json());
+        } catch (_) {}
+        stopWaPoll();
+        waPollTimer = setInterval(pollWa, 1500);
+      });
+
+      waCloseBtn?.addEventListener('click', () => { stopWaPoll(); closeModal(waModal); });
+      waModal?.addEventListener('click', (e) => { if (e.target === waModal) { stopWaPoll(); closeModal(waModal); } });
     </script>`;
 
   return renderLayout('Configuração', body, 'settings');

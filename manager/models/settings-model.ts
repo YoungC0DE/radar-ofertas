@@ -32,6 +32,11 @@ import {
   saveBrandSettings,
 } from './brand-model.js';
 import { isPlaceholderChannelId } from '../../src/whatsapp/index.js';
+import {
+  getMercadoLivreSessionStatus,
+  getWhatsAppSessionStatus,
+  type SessionStatus,
+} from './session-model.js';
 
 export type SettingsSaveType = 'channel' | 'interval' | 'brand' | 'score' | 'hours' | 'senderDelay' | null;
 
@@ -53,6 +58,8 @@ export interface SettingsData {
   brandLogoHref: string | null;
   brandInitial: string;
   categories: CategoryValidation[];
+  mlSession: SessionStatus;
+  waSession: SessionStatus;
   saved: SettingsSaveType;
   error: string | null;
 }
@@ -69,6 +76,10 @@ export async function loadSettingsData(
   await Promise.all([hydrateQueueConfigCache(), hydrateBrandCache()]);
   const scoreConfig = await getRuntimeScoreConfigAsync();
   const senderDelayMinutes = await getSenderDelayMinutesFromDb();
+  const [mlSession, waSession] = await Promise.all([
+    getMercadoLivreSessionStatus(),
+    getWhatsAppSessionStatus(),
+  ]);
   const operatingHours = {
     start: getOperatingHoursStart(),
     end: getOperatingHoursEnd(),
@@ -106,6 +117,8 @@ export async function loadSettingsData(
     brandLogoHref: getBrandLogoHref(brand),
     brandInitial: getBrandInitial(brand.name),
     categories: env.ML_CATEGORIES.map((category) => validateCategoryConfig(category)),
+    mlSession,
+    waSession,
     saved,
     error,
   };

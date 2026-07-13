@@ -14,6 +14,14 @@ import { showOfferDetail, showOffersList, handleDeleteAllPending, handleAffiliat
 import { handleTemplateSave, showTemplatePage } from '../controllers/template-controller.js';
 import { handleChannelLinkSave, handleBrandSave, handleOperatingHoursSave, handleScoreSave, handleSendIntervalSave, handleSenderDelaySave, showSettingsPage } from '../controllers/settings-controller.js';
 import { getLogsJson, showLogsPage } from '../controllers/logs-controller.js';
+import {
+  cancelMercadoLivreConnectJson,
+  finishMercadoLivreConnectJson,
+  getMercadoLivreConnectJson,
+  getWhatsAppConnectJson,
+  startMercadoLivreConnectJson,
+  startWhatsAppConnectJson,
+} from '../controllers/connection-controller.js';
 
 
 
@@ -214,6 +222,36 @@ export async function handleManagerRequest(
       const body = await readFormBody(req);
       const form = parseFormUrlEncoded(body);
       sendHtml(res, 200, await handleChannelLinkSave(form.inviteLink ?? ''));
+      return;
+    }
+
+    if (path === '/manager/settings/connect/wa/start' && method === 'POST') {
+      sendJson(res, 200, startWhatsAppConnectJson());
+      return;
+    }
+
+    if (path === '/manager/settings/connect/wa/status' && method === 'GET') {
+      sendJson(res, 200, getWhatsAppConnectJson());
+      return;
+    }
+
+    if (path === '/manager/settings/connect/ml/start' && method === 'POST') {
+      sendJson(res, 200, startMercadoLivreConnectJson());
+      return;
+    }
+
+    if (path === '/manager/settings/connect/ml/finish' && method === 'POST') {
+      sendJson(res, 200, await finishMercadoLivreConnectJson());
+      return;
+    }
+
+    if (path === '/manager/settings/connect/ml/cancel' && method === 'POST') {
+      sendJson(res, 200, await cancelMercadoLivreConnectJson());
+      return;
+    }
+
+    if (path === '/manager/settings/connect/ml/status' && method === 'GET') {
+      sendJson(res, 200, getMercadoLivreConnectJson());
       return;
     }
 
