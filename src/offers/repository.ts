@@ -49,8 +49,6 @@ export async function markOfferSent(id: string): Promise<void> {
     data: { sentAt: nowInTimezone(env.APP_TIMEZONE) },
   });
 }
-<<<<<<< Updated upstream
-=======
 
 export type OfferSentFilter = 'all' | 'pending' | 'sent';
 
@@ -123,4 +121,3 @@ export async function findLastSentAt(): Promise<Date | null> {
   });
   return offer?.sentAt ?? null;
 }
->>>>>>> Stashed changes

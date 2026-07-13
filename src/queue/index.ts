@@ -1,4 +1,5 @@
 import { Queue } from 'bullmq';
+import { getRuntimeQueueConfig } from '../config/queue-config-store.js';
 import { env } from '../config/env.js';
 
 export const QUEUE_NAMES = {
@@ -42,7 +43,8 @@ export function getSenderQueue(): Queue<SenderJobData> {
 export async function scheduleCollectorJob(): Promise<void> {
   assertRedisEnabled('agendamento do collector');
   const queue = getCollectorQueue();
-  const intervalMs = env.QUEUE_CONFIG.collectorIntervalMinutes * 60 * 1000;
+  const config = getRuntimeQueueConfig();
+  const intervalMs = config.collectorIntervalMinutes * 60 * 1000;
 
   await queue.add(
     'collect',
@@ -54,6 +56,20 @@ export async function scheduleCollectorJob(): Promise<void> {
       removeOnFail: 50,
     },
   );
+}
+
+export async function rescheduleCollectorJob(): Promise<void> {
+  assertRedisEnabled('reagendamento do collector');
+  const queue = getCollectorQueue();
+  const repeatables = await queue.getRepeatableJobs();
+
+  for (const job of repeatables) {
+    if (job.id === 'offer-collector-repeat' || job.name === 'collect') {
+      await queue.removeRepeatableByKey(job.key);
+    }
+  }
+
+  await scheduleCollectorJob();
 }
 
 export async function enqueueOfferSend(offerId: string): Promise<void> {

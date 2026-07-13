@@ -57,30 +57,34 @@ export async function loadDashboardData(options: {
         findLastSentAt(),
       ]);
 
-      const schedule = await estimatePendingSendTimes(pendingOffers.map((offer) => offer.id));
-
-      return {
-        stats,
-        pendingOffers: pendingOffers.map((offer) => ({
-          offer,
-          scheduleAt: schedule.get(offer.id) ?? null,
-          isPending: true,
-        })),
-        sentOffers: sentOffers.map((offer) => ({
-          offer,
-          scheduleAt: offer.sentAt,
-          isPending: false,
-        })),
-        lastSentAt,
-      };
+      return { stats, pendingOffers, sentOffers, lastSentAt };
     },
     {
       stats: emptyStats,
-      pendingOffers: [] as DashboardOfferRow[],
-      sentOffers: [] as DashboardOfferRow[],
+      pendingOffers: [] as OfferRecord[],
+      sentOffers: [] as OfferRecord[],
       lastSentAt: null as Date | null,
     },
   );
+
+  let pendingRows: DashboardOfferRow[] = [];
+  let sentRows: DashboardOfferRow[] = [];
+
+  if (offersResult.database.available) {
+    const schedule = await estimatePendingSendTimes(
+      offersResult.data.pendingOffers.map((offer) => offer.id),
+    );
+    pendingRows = offersResult.data.pendingOffers.map((offer) => ({
+      offer,
+      scheduleAt: schedule.get(offer.id) ?? null,
+      isPending: true,
+    }));
+    sentRows = offersResult.data.sentOffers.map((offer) => ({
+      offer,
+      scheduleAt: offer.sentAt,
+      isPending: false,
+    }));
+  }
 
   const [queues, mlSession, waSession] = await Promise.all([
     getQueuesSnapshot(),
@@ -93,8 +97,8 @@ export async function loadDashboardData(options: {
   return {
     database: offersResult.database,
     stats: offersResult.data.stats,
-    pendingOffers: offersResult.data.pendingOffers,
-    sentOffers: offersResult.data.sentOffers,
+    pendingOffers: pendingRows,
+    sentOffers: sentRows,
     queues,
     sessions: [mlSession, waSession],
     withinOperatingHours: isWithinOperatingHours(env.APP_TIMEZONE, {

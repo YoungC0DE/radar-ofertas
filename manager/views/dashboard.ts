@@ -90,7 +90,7 @@ export function renderDashboard(data: DashboardData): string {
   const body = `
     ${
       !data.database.available
-        ? `<section><p class="meta"><span class="badge err">PostgreSQL indisponível</span> — ${escapeHtml(data.database.error ?? 'erro de conexão')}. Rode <code>docker compose up -d postgres</code> e depois <code>npm run migrate:deploy</code>.</p></section>`
+        ? `<section><p class="meta"><span class="badge err">PostgreSQL indisponível</span> — ${escapeHtml(data.database.error ?? 'erro de conexão')}. Confira <code>DATABASE_URL</code> no <code>.env</code> e rode <code>npm run migrate:deploy</code>.</p></section>`
         : ''
     }
     <div class="dashboard-top">

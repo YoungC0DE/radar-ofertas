@@ -38,6 +38,13 @@ export async function getRuntimeQueueConfigAsync(): Promise<QueueConfig> {
   return { ...env.QUEUE_CONFIG, ...overrides };
 }
 
+export function getSenderDelayMs(config: QueueConfig = getRuntimeQueueConfig()): number {
+  if (config.senderDelayMs != null) {
+    return config.senderDelayMs;
+  }
+  return config.senderDelayMinutes * 60 * 1000;
+}
+
 export async function saveCollectorIntervalMinutes(minutes: number): Promise<void> {
   if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) {
     throw new Error('Informe um intervalo entre 1 e 1440 minutos');

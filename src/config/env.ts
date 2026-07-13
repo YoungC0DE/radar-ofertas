@@ -11,6 +11,7 @@ const queueConfigSchema = z.object({
   minScore: z.number().int().nonnegative().default(50),
   senderConcurrency: z.number().int().positive().default(1),
   senderDelayMinutes: z.number().int().nonnegative().default(15),
+  senderDelayMs: z.number().int().nonnegative().optional(),
   maxPrice: z.number().positive().default(5000),
   minSoldQuantity: z.number().int().nonnegative().default(100),
   /** Hora de início da janela operacional (inclusiva, 0–23). Default: 9 = 09:00 */
