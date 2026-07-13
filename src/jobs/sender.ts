@@ -56,8 +56,9 @@ export function startSenderWorker(sock: WASocket): Worker<SenderJobData> {
 
       logger.info({ offerId, title: offer.title }, 'Offer published');
 
-      if (env.QUEUE_CONFIG.senderDelayMs > 0) {
-        await new Promise((r) => setTimeout(r, env.QUEUE_CONFIG.senderDelayMs));
+      const senderDelayMs = env.QUEUE_CONFIG.senderDelayMinutes * 60 * 1000;
+      if (senderDelayMs > 0) {
+        await new Promise((r) => setTimeout(r, senderDelayMs));
       }
     },
     {
