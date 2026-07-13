@@ -1,14 +1,27 @@
 ---
 description: Regras de banco de dados com Prisma
-globs: prisma/**,src/database/**,src/offers/repository.ts
+globs: prisma/**,src/database/**,src/offers/repository.ts,src/config/*-config*.ts,src/config/queue-config-store.ts
 alwaysApply: false
 ---
 
 # Database
 
-- Prisma ORM; acesso via `offers/repository.ts`.
+- Prisma ORM; schema em `prisma/schema.prisma`.
+- Ofertas: acesso via `offers/repository.ts` — nunca chamar `prisma` direto de jobs ou scraping.
+- Settings (key-value): tabela `settings` para config runtime editável pelo manager.
 - `mercado_livre_id` unique para duplicidade.
 - Migrations versionadas em `prisma/migrations/`.
+
+## Tabelas
+
+| Tabela | Uso |
+|--------|-----|
+| `offers` | Ofertas coletadas e enviadas |
+| `settings` | Config runtime (score, brand, template, filas, canal WA) |
+
+## Chaves `settings` conhecidas
+
+`scoreConfig`, `brandSettings`, `messageTemplate`, `messageTemplatePlaceholders`, `whatsappChannelCache`, `senderDelayMinutes`, `collectorIntervalMinutes`, `operatingHoursStart`, `operatingHoursEnd`, `searchLimit`
 
 ```bash
 npm run migrate        # dev

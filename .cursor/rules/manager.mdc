@@ -1,0 +1,35 @@
+---
+description: Regras do painel web manager
+globs: manager/**
+alwaysApply: false
+---
+
+# Manager
+
+Painel admin server-rendered em `manager/`. Entry: `npm run manager` → `http://localhost:MANAGER_PORT/manager`.
+
+## Estrutura MVC
+
+- `routes/index.ts` — roteamento e auth.
+- `controllers/` — handlers (parse form, redirect).
+- `models/` — monta dados para views; **reutiliza** `src/` (não duplicar lógica).
+- `views/` — HTML em TypeScript (sem framework).
+
+## Auth
+
+`MANAGER_TOKEN` opcional. Se definido, exige `?token=` ou header `Authorization: Bearer`.
+
+## Páginas
+
+| Rota | Função |
+|------|--------|
+| `/manager` | Dashboard (status, coleta manual, envio imediato) |
+| `/manager/offers` | Lista e detalhe de ofertas |
+| `/manager/settings` | Score, brand, horários, intervalos, canal |
+| `/manager/template` | Editor de template WhatsApp |
+| `/manager/health` | Health check |
+
+## Regras
+
+- Não colocar regra de negócio no manager — delegar para `src/offers/`, `src/config/`, etc.
+- Models do manager podem importar de `src/`; `src/` nunca importa de `manager/`.

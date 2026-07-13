@@ -1,13 +1,14 @@
 # Contexto do Projeto
 
-Bot automatizado: **Mercado Livre → ofertas → WhatsApp Channel**.
+Bot automatizado: **Mercado Livre → ofertas → WhatsApp Channel**, com painel admin web.
 
 ## Escopo
 
 - Coletar produtos de categorias configuradas via **scraping híbrido** (HTTP + Playwright fallback).
-- Aplicar regras de negócio (score, filtros, deduplicação).
+- Aplicar regras de negócio (score configurável, filtros, deduplicação).
 - Gerar links de afiliado encurtados com **sessão persistida** (estilo Baileys).
-- Publicar ofertas qualificadas em canal WhatsApp.
+- Publicar ofertas qualificadas em canal WhatsApp (template editável).
+- Gerenciar tudo via **manager** web (`/manager`).
 
 **Fora de escopo:** API Oficial do Mercado Livre para coleta ou geração de links de afiliado.
 
@@ -17,6 +18,7 @@ Bot automatizado: **Mercado Livre → ofertas → WhatsApp Channel**.
 |-----------|--------|
 | Scraping híbrido (HTTP + Playwright) | ✅ Adotada |
 | Sessão de afiliado persistida em arquivos locais | ✅ Adotada |
+| Config runtime em tabela `settings` (editável pelo manager) | ✅ Adotada |
 | API Oficial do Mercado Livre | ❌ Descartada |
 
 ### Dois subsistemas no domínio `mercado-livre/`
@@ -26,7 +28,16 @@ Bot automatizado: **Mercado Livre → ofertas → WhatsApp Channel**.
 
 ## Estrutura (por domínio)
 
-`config/` · `whatsapp/` · `mercado-livre/` · `offers/` · `jobs/` · `queue/` · `database/` · `utils/`
+`config/` · `whatsapp/` · `mercado-livre/` · `offers/` · `jobs/` · `queue/` · `database/` · `utils/` · `scripts/` · `manager/`
+
+### Config runtime (`config/`)
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `env.ts` | Variáveis de ambiente (Zod) |
+| `score-config.ts` | Regras de pontuação (DB + fallback ENV) |
+| `brand-config.ts` | Nome/logo do painel |
+| `queue-config-store.ts` | Intervalos, horários, search limit |
 
 ### Módulo `mercado-livre/`
 
@@ -37,42 +48,45 @@ mercado-livre/
 ├── parser.ts          → parse HTML/JSON embutido
 ├── http-scraper.ts    → coleta via fetch (principal)
 ├── browser-scraper.ts → coleta via Playwright (fallback)
+├── category-url.ts    → validação de categorias/URLs
 ├── session.ts         → persistência de sessão afiliado
 ├── affiliate-link.ts  → geração de link (HTTP → browser → fallback)
 └── auth.ts            → login manual via Playwright
 ```
 
-Entry de login: `src/ml-login.ts` → `npm run ml:login`
+### Manager (`manager/`)
+
+Painel MVC server-rendered: dashboard, ofertas, settings, template WhatsApp.
 
 ## Fluxo da aplicação
 
 ```
 Categorias configuradas (ML_CATEGORIES)
         ↓
-HTTP scrape (lista.mercadolivre.com.br) — ou Playwright se bloqueado
+HTTP scrape — ou Playwright se bloqueado
         ↓
 Parse HTML/JSON → RawOffer
         ↓
-Aplicação das regras de negócio (offers/service)
+Score (score-config) + filtros (offers/service)
         ↓
-Cálculo de score das ofertas
+Geração de link afiliado (HTTP createLink / Playwright fallback)
         ↓
-Geração de link afiliado (HTTP createLink com sessão / Playwright fallback)
-        ↓
-Remoção de ofertas repetidas (mercado_livre_id unique)
+Deduplicação (mercado_livre_id unique + title+price)
         ↓
 Persistência + enfileiramento (PostgreSQL + BullMQ)
         ↓
-Envio para o canal do WhatsApp (Baileys)
+Envio para canal WhatsApp (template + Baileys)
 ```
 
 ## Processos
 
-| Entry | Função |
-|-------|--------|
-| `app.ts` | Collector — agenda coleta, processa fila `offer-collector` |
-| `worker.ts` | Sender — conexão WhatsApp, processa fila `offer-sender` |
-| `ml-login.ts` | Login afiliado ML — salva sessão em `ML_AUTH_PATH` |
+| Entry | Comando | Função |
+|-------|---------|--------|
+| `app.ts` | `npm run dev` | Collector — agenda coleta, processa fila `offer-collector` |
+| `worker.ts` | `npm run worker` | Sender — conexão WhatsApp, processa fila `offer-sender` |
+| `ml-login.ts` | `npm run ml:login` | Login afiliado ML — salva sessão em `ML_AUTH_PATH` |
+| `manager/server.ts` | `npm run manager` | Painel web em `/manager` |
+| `scripts/up.ts` | `npm run up` | Sobe collector + worker + manager localmente |
 
 ## Integrações
 

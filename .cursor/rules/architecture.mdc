@@ -12,22 +12,32 @@ src/
 ├── app.ts              → entry: collector
 ├── worker.ts           → entry: envio WhatsApp
 ├── ml-login.ts         → entry: login afiliado ML
-├── config/env.ts       → variáveis de ambiente
+├── config/             → ENV (Zod) + stores de runtime (settings DB)
 ├── whatsapp/           → Baileys (conexão + envio)
 ├── mercado-livre/      → scraping híbrido + sessão afiliado
-├── offers/             → tipos, persistência, regras de negócio
+├── offers/             → tipos, persistência, regras de negócio, template
 ├── jobs/               → workers BullMQ (collector, sender)
-├── queue/              → filas Redis/BullMQ
+├── queue/              → filas Redis/BullMQ + agendamento de envio
 ├── database/           → Prisma client
+├── scripts/            → preflight, up (orquestração local)
 └── utils/              → logger e helpers
+
+manager/                → painel web (MVC server-rendered)
+├── server.ts           → entry: npm run manager
+├── routes/             → roteamento HTTP
+├── controllers/        → handlers de request
+├── models/             → dados para views (reutiliza src/)
+└── views/              → HTML gerado em TS
 ```
 
 ## Regras
 
 - Um domínio = uma pasta com responsabilidade clara.
-- Regras de negócio de ofertas ficam em `offers/`, nunca em `whatsapp/` ou `mercado-livre/`.
-- Acesso ao banco apenas via `offers/repository.ts`.
+- Regras de negócio de ofertas ficam em `offers/`, nunca em `whatsapp/`, `mercado-livre/` ou `manager/`.
+- Ofertas: acesso ao banco via `offers/repository.ts`.
+- Configuração runtime: `config/*-config*.ts` e `queue-config-store.ts` leem/escrevem tabela `settings` (fallback em ENV).
 - Processos pesados passam por `queue/` + `jobs/`.
+- `manager/` apenas orquestra UI — reutiliza `src/` para lógica de negócio.
 - Novas features: adicionar ao domínio correto, não criar camada nova.
 - Mercado Livre: scraping híbrido (HTTP primeiro, Playwright fallback). Proibido depender da API oficial.
 - Sessão de afiliado persistida em `ML_AUTH_PATH` — mesmo padrão de `WHATSAPP_AUTH_PATH`.

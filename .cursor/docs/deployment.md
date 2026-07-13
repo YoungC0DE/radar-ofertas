@@ -9,6 +9,8 @@
 | app | build local (bookworm + Chromium) | — | Collector (scraping + enfileira) |
 | worker | build local | — | WhatsApp + envio |
 
+> O **manager** não está no docker-compose — rodar separadamente com `npm run manager` (ou adicionar serviço futuro).
+
 ## Primeiro deploy
 
 ```bash
@@ -18,13 +20,16 @@ cp .env.example .env
 docker compose up -d postgres redis
 npm run migrate
 docker compose up -d
+npm run manager   # opcional — painel admin
 ```
 
 ## Autenticação WhatsApp
 
-1. Subir worker: `docker compose logs -f worker`
-2. Escanear QR code exibido no terminal.
-3. Sessão persistida em volume `whatsapp_auth` → `./data/auth_info_baileys`.
+```bash
+npm run wa:login
+```
+
+Ou via worker: `docker compose logs -f worker` e escanear QR. Sessão persistida em `./data/auth_info_baileys`.
 
 ## Autenticação Mercado Livre (afiliado)
 
@@ -51,7 +56,7 @@ Repetir quando links de afiliado falharem (cookie expirado).
 | `ML_CATEGORIES` | Categorias ou URLs de listagem |
 | `AFFILIATE_CONFIG` | Tag de afiliado (`{"tag":"sua-tag"}`) |
 
-Opcionais: `ML_AUTH_PATH`, `ML_USE_BROWSER_FALLBACK`, `ML_BROWSER_HEADLESS`, `ML_SEARCH_LIMIT`, `QUEUE_CONFIG`.
+Opcionais: `APP_TIMEZONE`, `ML_AUTH_PATH`, `ML_USE_BROWSER_FALLBACK`, `ML_BROWSER_HEADLESS`, `ML_SEARCH_LIMIT`, `ML_HTTP_TIMEOUT_MS`, `QUEUE_CONFIG`, `MANAGER_PORT`, `MANAGER_TOKEN`, `REDIS_ENABLED`.
 
 ## Docker + Playwright
 
@@ -64,25 +69,39 @@ O `Dockerfile` usa `node:22-bookworm-slim` com Chromium instalado para fallback 
 ## Local (sem Docker)
 
 ```bash
-# Terminal 1 — infra
+# Infra
 docker compose up postgres redis
 
-# Setup sessão afiliado (uma vez)
+# Setup sessões (uma vez)
 npm run ml:login
+npm run wa:login
 
-# Terminal 2 — collector
-npm run dev
+# Tudo de uma vez
+npm run up
 
-# Terminal 3 — worker
-npm run worker
+# Ou separado:
+npm run dev       # collector
+npm run worker    # sender
+npm run manager   # painel
 ```
 
 ## Scripts npm
 
 | Script | Descrição |
 |--------|-----------|
+| `up` | Sobe collector + worker + manager (com preflight) |
+| `check` | Preflight — valida ambiente |
+| `setup` | Preflight + guia de setup |
 | `dev` | Collector + fila de coleta |
 | `worker` | Worker de envio WhatsApp |
+| `manager` | Painel web admin |
 | `ml:login` | Login afiliado ML (salva sessão) |
+| `wa:login` | Login WhatsApp (QR) |
+| `wa:channel` | Obter ID do canal |
 | `migrate` | Prisma migrate dev |
+| `test` | Testes unitários |
 | `build` | Compila TypeScript |
+
+## Preflight
+
+Todos os processos principais rodam preflight antes de iniciar (`predev`, `preworker`, `premanager`). Use `npm run check` para validar manualmente.

@@ -12,11 +12,12 @@ alwaysApply: false
 - **Afiliado:** `affiliate-link.ts` tenta HTTP com cookies → Playwright → fallback `matt_tool`.
 - **Sessão:** `session.ts` persiste em `ML_AUTH_PATH`. Login manual via `npm run ml:login`.
 - **Parser:** `parser.ts` centraliza extração HTML/JSON — não duplicar lógica de parse.
+- **Categorias:** `category-url.ts` valida IDs e URLs (`ML_CATEGORIES`).
 
 ## Proibições
 
 - Não usar API oficial (`api.mercadolibre.com`) para coleta ou links.
-- Não colocar regra de score/filtro em `mercado-livre/` — isso fica em `offers/`.
+- Não colocar regra de score/filtro em `mercado-livre/` — isso fica em `offers/` e `config/score-config.ts`.
 - Não abrir Playwright em todo ciclo de coleta — apenas fallback.
 
 ## Novos arquivos
@@ -25,4 +26,4 @@ Preferir adicionar ao domínio existente (`parser.ts`, `affiliate-link.ts`) em v
 
 ## ENV
 
-Variáveis em `config/env.ts`: `ML_AUTH_PATH`, `ML_CATEGORIES`, `ML_SEARCH_LIMIT`, `ML_USE_BROWSER_FALLBACK`, `ML_BROWSER_HEADLESS`, `AFFILIATE_CONFIG`.
+Variáveis em `config/env.ts`: `ML_AUTH_PATH`, `ML_CATEGORIES`, `ML_SEARCH_LIMIT`, `ML_USE_BROWSER_FALLBACK`, `ML_BROWSER_HEADLESS`, `ML_HTTP_TIMEOUT_MS`, `ML_SCRAPER_USER_AGENT`, `AFFILIATE_CONFIG`.

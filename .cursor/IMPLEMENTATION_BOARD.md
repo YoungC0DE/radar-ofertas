@@ -2,7 +2,7 @@
 
 Quadro de tarefas do projeto **Radar Ofertas**. Atualizar conforme o desenvolvimento avança.
 
-> **Decisão arquitetural (atual):** scraping híbrido HTTP + Playwright. Sessão de afiliado persistida em `ML_AUTH_PATH` (estilo Baileys). API Oficial descartada.
+> **Decisão arquitetural (atual):** scraping híbrido HTTP + Playwright. Sessão de afiliado persistida em `ML_AUTH_PATH` (estilo Baileys). Config runtime em tabela `settings` editável pelo manager. API Oficial descartada.
 
 ---
 
@@ -21,8 +21,9 @@ Quadro de tarefas do projeto **Radar Ofertas**. Atualizar conforme o desenvolvim
 
 - [ ] Criar testes para `affiliate-link.ts` com mocks de fetch
 - [ ] Criar testes de integração do collector com HTTP mockado
-- [ ] Health check endpoints para app e worker
+- [ ] Health check endpoints para app e worker (manager já tem `/manager/health`)
 - [ ] Documentar troubleshooting de sessão expirada e anti-bot
+- [ ] Adicionar serviço `manager` ao docker-compose
 
 ---
 
@@ -34,16 +35,37 @@ Quadro de tarefas do projeto **Radar Ofertas**. Atualizar conforme o desenvolvim
 
 ## 🟢 Concluído
 
-### Scraping — coleta de produtos (novo)
+### Painel admin (manager)
 
-- [x] Validar URLs de listagem para cada `ML_CATEGORIES` configurada (IDs vs URLs completas) — `category-url.ts`
+- [x] Estrutura MVC em `manager/` (routes, controllers, models, views)
+- [x] Dashboard com status, coleta manual e envio imediato
+- [x] Lista e detalhe de ofertas com preview de mensagem
+- [x] Settings: score, brand, horários operacionais, intervalos, canal
+- [x] Editor de template WhatsApp com placeholders
+- [x] Auth opcional via `MANAGER_TOKEN`
+- [x] Health check em `/manager/health`
+- [x] Preflight profile `manager`
+
+### Config runtime (settings DB)
+
+- [x] Tabela `settings` (migration + Prisma schema)
+- [x] `score-config.ts` — regras de pontuação editáveis
+- [x] `brand-config.ts` — nome/logo do painel
+- [x] `queue-config-store.ts` — intervalos, horários, search limit
+- [x] `message-template.ts` — template WhatsApp editável
+- [x] `channel-cache.ts` — cache de canal WhatsApp
+- [x] Cache em memória com hidratação no startup
+
+### Scraping — coleta de produtos
+
+- [x] Validar URLs de listagem para cada `ML_CATEGORIES` configurada — `category-url.ts`
 - [x] Implementar paginação (`_Desde_`) em `http-scraper.ts`
 - [x] Implementar retry com exponential backoff para HTTP 403/429/5xx
 - [x] Warm-up de cookies antes da primeira requisição HTTP (anti-bot)
 - [x] Coleta paralela de categorias com limite de concorrência (`runWithConcurrency`)
-- [x] Extrair `sold_quantity` e `rating` do HTML no parser Cheerio
+- [x] Extrair `sold_quantity`, `rating` e `sales_rank` do HTML no parser
 
-### Afiliado — links encurtados (novo)
+### Afiliado — links encurtados
 
 - [x] Validar múltiplos payloads do `createLink` (campos `url`, `tag`, `short_url`, variantes)
 - [x] Detectar sessão expirada e logar alerta claro (`run npm run ml:login`)
@@ -52,9 +74,13 @@ Quadro de tarefas do projeto **Radar Ofertas**. Atualizar conforme o desenvolvim
 - [x] Cache de links já gerados por `mercado_livre_id`
 - [x] Logs estruturados com `affiliate_source` (http/browser/cache/fallback)
 
-### Qualidade e infra (novo)
+### Qualidade e infra
 
-- [x] Testes unitários para `parser.ts` e `category-url.ts` (fixtures HTML + `npm run test`)
+- [x] Testes unitários para `parser.ts`, `category-url.ts` e `message-template.ts`
+- [x] Script `preflight.ts` com profiles (collector, worker, manager)
+- [x] Script `up.ts` — orquestra collector + worker + manager
+- [x] Janela operacional de envio (`sender-schedule.ts` + `APP_TIMEZONE`)
+- [x] `REDIS_ENABLED=false` para dev sem Redis
 
 ### Infraestrutura
 
@@ -62,53 +88,50 @@ Quadro de tarefas do projeto **Radar Ofertas**. Atualizar conforme o desenvolvim
 - [x] Configuração de ambiente com Zod (`config/env.ts`)
 - [x] Docker Compose (postgres, redis, app, worker)
 - [x] Dockerfile com Chromium para Playwright fallback
-- [x] Prisma + PostgreSQL (schema `offers`)
+- [x] Prisma + PostgreSQL (schema `offers` + `settings`)
 - [x] Filas BullMQ (`offer-collector`, `offer-sender`)
 - [x] Logger centralizado (pino)
-- [x] Processos separados: `app.ts`, `worker.ts`, `ml-login.ts`
+- [x] Processos separados: `app.ts`, `worker.ts`, `ml-login.ts`, `manager/server.ts`
 
 ### Mercado Livre — scraping híbrido
 
-- [x] Módulo `mercado-livre/` dividido por responsabilidade (parser, http, browser, session, affiliate, auth)
-- [x] Coleta HTTP via `fetch` + parser HTML/JSON (`http-scraper.ts`, `parser.ts`)
-- [x] Fallback Playwright para coleta (`browser-scraper.ts`)
+- [x] Módulo `mercado-livre/` dividido por responsabilidade
+- [x] Coleta HTTP via `fetch` + parser HTML/JSON
+- [x] Fallback Playwright para coleta
 - [x] Suporte a `ML_CATEGORIES` como ID ou URL completa
-- [x] Variáveis ENV: `ML_AUTH_PATH`, `ML_USE_BROWSER_FALLBACK`, `ML_BROWSER_HEADLESS`, `ML_SCRAPER_USER_AGENT`
-- [x] Persistência de sessão afiliado (`session.ts` — `storage-state.json`, `session-meta.json`)
-- [x] Login manual afiliado (`npm run ml:login` → `auth.ts`)
-- [x] Geração de link afiliado em 3 níveis: HTTP createLink → Playwright → fallback `matt_tool` (`affiliate-link.ts`)
+- [x] Persistência de sessão afiliado (`session.ts`)
+- [x] Login manual afiliado (`npm run ml:login`)
+- [x] Geração de link afiliado em 3 níveis: HTTP → Playwright → fallback `matt_tool`
 - [x] `buildAffiliateLink()` async integrado em `offers/service.ts`
-- [x] Dependências: `cheerio`, `playwright` (+ postinstall chromium)
 
 ### Regras de negócio
 
 - [x] DTOs (`RawOffer`, `ScoredOffer`, `OfferRecord`)
-- [x] Cálculo de score e filtros
-- [x] Deduplicação (`mercado_livre_id` unique)
-- [x] Formatação de mensagem WhatsApp
+- [x] Cálculo de score configurável (`score-config.ts`)
+- [x] Deduplicação (`mercado_livre_id` unique + title+price)
+- [x] Formatação de mensagem WhatsApp via template
 - [x] Pipeline `processOffer` → persistência → enfileiramento
 
 ### Jobs e integrações
 
 - [x] Job collector (`jobs/collector.ts`)
-- [x] Job sender (`jobs/sender.ts`) com idempotência
+- [x] Job sender (`jobs/sender.ts`) com idempotência e janela operacional
 - [x] WhatsApp Baileys (conexão, reconexão, envio)
-- [x] Agendamento periódico de coleta
+- [x] Agendamento periódico de coleta (reagendável via manager)
 
 ### Documentação
 
-- [x] `.cursor/context/project.md` — escopo e decisão scraping híbrido
-- [x] `.cursor/docs/architecture.md` — diagrama e fluxo atualizado
-- [x] `.cursor/docs/mercado-livre.md` — guia técnico do domínio
-- [x] `.cursor/docs/deployment.md` — `ml:login` e Docker + Chromium
-- [x] `.cursor/rules/mercado-livre.mdc` — regras do domínio
-- [x] `.cursor/rules/architecture.mdc` — atualizado
-- [x] Implementation Board atualizado
+- [x] `.cursor/context/project.md` — escopo atualizado
+- [x] `.cursor/docs/architecture.md` — manager + settings
+- [x] `.cursor/docs/manager.md` — guia do painel
+- [x] `.cursor/docs/database.md` — tabela settings
+- [x] `.cursor/rules/manager.mdc` — regras do painel
+- [x] Rules e docs sincronizados com código atual
 
 ### Removido / descartado
 
-- [x] Integração via API Oficial (`api.mercadolibre.com`, `MERCADO_LIVRE_TOKEN`, `ML_SITE_ID`)
-- [x] `buildAffiliateLink` síncrono com apenas query params (substituído por fluxo async com sessão)
+- [x] Integração via API Oficial (`api.mercadolibre.com`)
+- [x] `buildAffiliateLink` síncrono com apenas query params
 
 ---
 
@@ -117,9 +140,9 @@ Quadro de tarefas do projeto **Radar Ofertas**. Atualizar conforme o desenvolvim
 - **Stealth browser:** Camoufox ou playwright-extra para reduzir detecção no fallback.
 - **Proxy rotativo:** Para coleta em volume alto sem ban de IP.
 - **Fila dedicada de links:** Separar geração de afiliado do collector para não bloquear coleta.
-- **Painel admin:** Status da sessão ML, última coleta, taxa de fallback browser.
 - **Múltiplas tags de afiliado:** Selecionar tag por canal/categoria.
 - **Webhook de alerta:** Notificar quando sessão ML expirar (similar a QR WhatsApp).
+- **Manager no Docker:** Adicionar serviço ao docker-compose com porta exposta.
 
 ---
 
@@ -127,9 +150,9 @@ Quadro de tarefas do projeto **Radar Ofertas**. Atualizar conforme o desenvolvim
 
 ### Onde começar
 
-1. Rodar `npm run ml:login` e validar que `storage-state.json` é criado.
-2. Testar coleta HTTP: log deve mostrar `method: 'http'` em `http-scraper.ts`.
-3. Forçar fallback: temporariamente quebrar URL ou setar `ML_USE_BROWSER_FALLBACK=true` com HTTP bloqueado.
+1. Rodar `npm run check` para validar ambiente.
+2. Rodar `npm run ml:login` e validar que `storage-state.json` é criado.
+3. Acessar `http://localhost:3000/manager` para configurar score, template e horários.
 4. **Prioridade máxima:** abrir DevTools no link-builder, capturar request `createLink` real, atualizar `affiliate-link.ts`.
 
 ### Arquivos-chave
@@ -138,16 +161,20 @@ Quadro de tarefas do projeto **Radar Ofertas**. Atualizar conforme o desenvolvim
 |---------|------------------|
 | `src/mercado-livre/parser.ts` | Ajustar extração de produtos do HTML |
 | `src/mercado-livre/affiliate-link.ts` | Endpoint createLink, seletores UI |
-| `src/mercado-livre/session.ts` | Persistência e validação de sessão |
-| `src/mercado-livre/http-scraper.ts` | URL de listagem, headers, retry |
-| `src/offers/service.ts` | Regras de score — não mexer em scraping aqui |
+| `src/config/score-config.ts` | Regras de pontuação |
+| `src/offers/message-template.ts` | Template WhatsApp |
+| `manager/routes/index.ts` | Rotas do painel |
+| `src/offers/service.ts` | Pipeline de ofertas — não mexer em scraping aqui |
 
 ### Comandos úteis
 
 ```bash
+npm run up          # sobe tudo (collector + worker + manager)
+npm run check       # valida ambiente
 npm run ml:login    # login afiliado (navegador visível)
-npm run dev         # collector
-npm run worker      # whatsapp sender
+npm run wa:login    # login WhatsApp (QR)
+npm run manager     # painel admin
+npm run test        # testes unitários
 npm run build       # verificar TypeScript
 ```
 
@@ -158,4 +185,5 @@ ML_CATEGORIES=MLB1648
 ML_AUTH_PATH=./data/ml_auth
 AFFILIATE_CONFIG={"tag":"sua-tag-afiliado"}
 ML_USE_BROWSER_FALLBACK=true
+MANAGER_PORT=3000
 ```
