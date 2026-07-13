@@ -78,7 +78,8 @@ export function parseSalesRankText(raw: string | undefined): string | null {
 
   const category = match[2]
     .trim()
-    .replace(/\s*(MAIS VENDIDO|Novo|\+).*$/i, '')
+    .split(/(?=Chegará|Disponível)/i)[0]
+    ?.replace(/\s*(MAIS VENDIDO|Novo|\+).*$/i, '')
     .trim();
 
   if (!category) return null;

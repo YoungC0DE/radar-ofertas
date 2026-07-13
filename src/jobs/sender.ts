@@ -50,7 +50,7 @@ export function startSenderWorker(sock: WASocket): Worker<SenderJobData> {
         return;
       }
 
-      const caption = formatOfferMessage(offer);
+      const caption = await formatOfferMessage(offer);
       await sendOffer(sock, env.WHATSAPP_CHANNEL_ID, offer.image, caption);
       await markOfferSent(offerId);
 

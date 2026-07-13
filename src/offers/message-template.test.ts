@@ -4,6 +4,7 @@ import {
   DEFAULT_MESSAGE_TEMPLATE,
   DEFAULT_PLACEHOLDER_VISIBILITY,
   formatOfferMessageFromTemplate,
+  formatTopSoldLabel,
   renderMessageTemplate,
   sampleTemplateValues,
 } from './message-template.js';
@@ -45,6 +46,22 @@ describe('message-template', () => {
     const result = formatOfferMessageFromTemplate('{{top_sold}}\n{{qty_sold}}', noRank);
     assert.doesNotMatch(result, /º em/);
     assert.match(result, /200 vendidos/);
+  });
+
+  it('formata ranking com frete e parcelamento', () => {
+    const formatted = formatTopSoldLabel(
+      '419º em outros meiosChegará grátis amanhãDisponível em 12',
+    );
+    assert.equal(
+      formatted,
+      '419º em outros meios - Chegará grátis amanhã - Disponível em 12x',
+    );
+  });
+
+  it('preserva linhas em branco no template', () => {
+    const template = 'Linha 1\n\nLinha 2';
+    const result = renderMessageTemplate(template, sampleTemplateValues());
+    assert.equal(result, 'Linha 1\n\nLinha 2');
   });
 
   it('omite placeholders desativados', () => {

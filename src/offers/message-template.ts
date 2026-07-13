@@ -29,16 +29,15 @@ export const DEFAULT_PLACEHOLDER_VISIBILITY: PlaceholderVisibility = {
   product_link: true,
 };
 
-export const DEFAULT_MESSAGE_TEMPLATE = `🔥 OFERTA IMPERDÍVEL!
-
-🏪 {{store}}
+export const DEFAULT_MESSAGE_TEMPLATE = `🔥 OFERTA IMPERDÍVEL! - 🏪 {{store}}
 
 {{name}}
 
 💰 {{price}}
+
 ⭐ {{avalia}}
-📦 {{qty_sold}}
-{{top_sold}}
+
+📦 {{qty_sold}}{{top_sold}}
 
 🛒 Compre aqui:
 {{product_link}}`;
@@ -67,7 +66,31 @@ export function formatSoldQuantity(soldQuantity: number | null): string {
 }
 
 export function formatTopSoldLabel(salesRank: string | null): string {
-  return salesRank?.trim() ?? '';
+  if (!salesRank?.trim()) return '';
+
+  const raw = salesRank.trim();
+  if (raw.includes(' - ')) return raw;
+
+  const parts: string[] = [];
+
+  const rankMatch = raw.match(
+    /(\d{1,3}\s*[ºª°]\s*em\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9\s/&+-]*?)(?=Chegará|Disponível|$)/i,
+  );
+  if (rankMatch?.[1]) {
+    parts.push(rankMatch[1].trim());
+  }
+
+  const shippingMatch = raw.match(/Chegará grátis\s+(?:amanhã|hoje|em\s+\d+\s+dias?)/i);
+  if (shippingMatch) parts.push(shippingMatch[0].trim());
+
+  const installmentMatch = raw.match(/Disponível em\s+\d+/i);
+  if (installmentMatch) {
+    parts.push(`${installmentMatch[0].trim()}x`);
+  }
+
+  if (parts.length > 0) return parts.join(' - ');
+
+  return raw;
 }
 
 export interface MessageTemplateValues {
@@ -95,8 +118,13 @@ export function buildTemplateValues(offer: OfferRecord): MessageTemplateValues {
 export function cleanupRenderedMessage(text: string): string {
   return text
     .split('\n')
-    .filter((line) => /[A-Za-z0-9À-ÿ$]/.test(line))
+    .filter((line) => {
+      const trimmed = line.trim();
+      if (trimmed === '') return true;
+      return /[A-Za-z0-9À-ÿ$]/.test(trimmed);
+    })
     .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
