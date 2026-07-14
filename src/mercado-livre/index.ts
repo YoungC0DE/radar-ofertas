@@ -2,7 +2,7 @@ import { env } from '../config/env.js';
 import { runWithConcurrency } from '../utils/concurrency.js';
 import { logger } from '../utils/logger.js';
 import type { RawOffer } from '../offers/types.js';
-import { generateAffiliateLink } from './affiliate-link.js';
+import { generateAffiliateLink, type AffiliateLinkOptions } from './affiliate-link.js';
 import { fetchCategoryViaBrowser } from './browser-scraper.js';
 import { ML_ITEMS_PER_PAGE } from './category-url.js';
 import {
@@ -52,8 +52,9 @@ export async function buildAffiliateLink(
   permalink: string,
   mercadoLivreId?: string,
   minDelayMs?: number,
+  options?: AffiliateLinkOptions,
 ): Promise<string> {
-  return generateAffiliateLink(permalink, mercadoLivreId, minDelayMs);
+  return generateAffiliateLink(permalink, mercadoLivreId, minDelayMs, options);
 }
 
 const MAX_SCRAPE_PAGES = 50;

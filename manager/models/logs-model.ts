@@ -1,6 +1,8 @@
 import { env } from '../../src/config/env.js';
 import {
+  countMlScrapeLogs,
   getLogTotalCount,
+  getMlScrapeLogs,
   getRecentLogs,
   type LogEntry,
   type LogFilters,
@@ -11,6 +13,8 @@ import {
 export interface LogsPageData {
   logs: LogEntry[];
   total: number;
+  mlScrapeCount: number;
+  mlScrapeLogs: LogEntry[];
   filters: Required<Pick<LogFilters, 'level' | 'source' | 'limit'>>;
   redisEnabled: boolean;
 }
@@ -45,14 +49,18 @@ export async function loadLogsPage(searchParams: URLSearchParams): Promise<LogsP
     limit: parseLogLimit(searchParams.get('limit')),
   };
 
-  const [logs, total] = await Promise.all([
+  const [logs, total, mlScrapeCount, mlScrapeLogs] = await Promise.all([
     getRecentLogs(filters),
     getLogTotalCount(),
+    countMlScrapeLogs(),
+    getMlScrapeLogs({ limit: 200 }),
   ]);
 
   return {
     logs,
     total,
+    mlScrapeCount,
+    mlScrapeLogs,
     filters,
     redisEnabled: env.REDIS_ENABLED,
   };
@@ -61,6 +69,8 @@ export async function loadLogsPage(searchParams: URLSearchParams): Promise<LogsP
 export interface LogsApiData {
   logs: LogEntry[];
   total: number;
+  mlScrapeCount: number;
+  mlScrapeLogs: LogEntry[];
 }
 
 export async function loadLogsApi(searchParams: URLSearchParams): Promise<LogsApiData> {
@@ -71,6 +81,13 @@ export async function loadLogsApi(searchParams: URLSearchParams): Promise<LogsAp
     since: searchParams.get('since') ?? undefined,
   };
 
-  const [logs, total] = await Promise.all([getRecentLogs(filters), getLogTotalCount()]);
-  return { logs, total };
+  const mlSince = searchParams.get('mlSince') ?? undefined;
+
+  const [logs, total, mlScrapeCount, mlScrapeLogs] = await Promise.all([
+    getRecentLogs(filters),
+    getLogTotalCount(),
+    countMlScrapeLogs(),
+    getMlScrapeLogs({ since: mlSince, limit: 200 }),
+  ]);
+  return { logs, total, mlScrapeCount, mlScrapeLogs };
 }

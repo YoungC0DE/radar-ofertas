@@ -13,6 +13,7 @@ function toRecord(offer: PrismaOffer): OfferRecord {
     oldPrice: offer.oldPrice ? Number(offer.oldPrice) : null,
     discount: offer.discount,
     image: offer.image,
+    permalink: offer.permalink,
     affiliateLink: offer.affiliateLink,
     rating: offer.rating,
     soldQuantity: offer.soldQuantity,
@@ -52,6 +53,13 @@ export async function createOffer(input: CreateOfferInput): Promise<OfferRecord>
 export async function findOfferById(id: string): Promise<OfferRecord | null> {
   const offer = await prisma.offer.findUnique({ where: { id } });
   return offer ? toRecord(offer) : null;
+}
+
+export async function updateOfferAffiliateLink(id: string, affiliateLink: string): Promise<void> {
+  await prisma.offer.update({
+    where: { id },
+    data: { affiliateLink },
+  });
 }
 
 export async function markOfferSent(id: string): Promise<void> {

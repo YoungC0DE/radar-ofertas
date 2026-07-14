@@ -91,17 +91,217 @@ function renderLogLine(entry: LogEntry): string {
   </div>`;
 }
 
+function formatMlScrapeDetail(entry: LogEntry): string {
+  const { meta, message } = entry;
+  if (typeof meta.url === 'string') {
+    try {
+      const parsed = new URL(meta.url);
+      return parsed.pathname + parsed.search;
+    } catch {
+      return meta.url;
+    }
+  }
+
+  const parts: string[] = [];
+  if (typeof meta.category === 'string') parts.push(meta.category);
+  if (meta.page != null) parts.push(`pág. ${meta.page}`);
+  if (meta.scraped != null) parts.push(`${meta.scraped} itens`);
+  if (meta.method != null) parts.push(String(meta.method));
+  if (parts.length > 0) return parts.join(' · ');
+  return message;
+}
+
+function mlScrapeStatusLabel(entry: LogEntry): string {
+  if (entry.level === 'error' || entry.level === 'fatal') return 'ERRO';
+  if (entry.level === 'warn') return 'RETRY';
+  if (entry.message === 'ML site visit') return 'VISITA';
+  return 'OK';
+}
+
+function mlScrapeStatusClass(entry: LogEntry): string {
+  if (entry.level === 'error' || entry.level === 'fatal') return 'ml-status-error';
+  if (entry.level === 'warn') return 'ml-status-warn';
+  return 'ml-status-ok';
+}
+
+function renderMlScrapeLine(entry: LogEntry): string {
+  const detail = formatMlScrapeDetail(entry);
+  const status = mlScrapeStatusLabel(entry);
+  const statusClass = mlScrapeStatusClass(entry);
+  const method = typeof entry.meta.method === 'string' ? entry.meta.method.toUpperCase() : 'HTTP';
+  const metaEncoded = encodeURIComponent(JSON.stringify(entry.meta, null, 2));
+
+  return `<div class="ml-scrape-line ${statusClass}" data-meta="${metaEncoded}" title="${escapeHtml(detail)}">
+    <span class="ml-scrape-ts">${formatLogTime(entry.timestamp)}</span>
+    <span class="ml-scrape-status">${status}</span>
+    <span class="ml-scrape-method">${escapeHtml(method)}</span>
+    <span class="ml-scrape-detail">${escapeHtml(detail)}</span>
+  </div>`;
+}
+
 export function renderLogsPage(data: LogsPageData): string {
   const lines =
     data.logs.length === 0
       ? '<div class="audit-empty">Aguardando eventos do sistema…</div>'
       : data.logs.map(renderLogLine).join('');
 
+  const mlLines =
+    data.mlScrapeLogs.length === 0
+      ? '<div class="ml-scrape-empty">Nenhuma visita ao Mercado Livre ainda…</div>'
+      : data.mlScrapeLogs.map(renderMlScrapeLine).join('');
+
   const transportLabel = data.redisEnabled ? 'REDIS + API' : 'API LOCAL';
 
   const body = `
     <style>
+      .logs-layout {
+        display: flex;
+        align-items: stretch;
+        gap: 16px;
+      }
+      .ml-scrape-console {
+        flex: 1 1 640px;
+        min-width: 480px;
+        max-width: 900px;
+        --ml-bg: #0d1117;
+        --ml-surface: #161b22;
+        --ml-border: #30363d;
+        --ml-text: #c9d1d9;
+        --ml-muted: #8b949e;
+        --ml-accent: #ffe600;
+        --ml-accent-dim: rgba(255, 230, 0, 0.12);
+        background: var(--ml-surface);
+        border: 1px solid var(--ml-border);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 8px 24px rgba(1, 4, 9, 0.35);
+        display: flex;
+        flex-direction: column;
+      }
+      .ml-scrape-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--ml-border);
+        background: linear-gradient(180deg, #1c2128 0%, #161b22 100%);
+      }
+      .ml-scrape-title {
+        margin: 0;
+        font-size: 0.74rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        color: var(--ml-accent);
+      }
+      .ml-scrape-count-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: var(--ml-accent-dim);
+        border: 1px solid rgba(255, 230, 0, 0.35);
+        color: var(--ml-accent);
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        white-space: nowrap;
+      }
+      .ml-scrape-output-wrap {
+        flex: 1;
+        background: var(--ml-bg);
+        min-height: 420px;
+        max-height: calc(100vh - 280px);
+        overflow: auto;
+      }
+      .ml-scrape-output {
+        padding: 12px 14px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+        font-size: 0.76rem;
+        line-height: 1.5;
+      }
+      .ml-scrape-line {
+        display: grid;
+        grid-template-columns: auto auto auto 1fr;
+        gap: 8px;
+        align-items: baseline;
+        padding: 6px 0;
+        border-bottom: 1px solid rgba(48, 54, 61, 0.6);
+        cursor: pointer;
+      }
+      .ml-scrape-line:hover {
+        background: rgba(255, 230, 0, 0.04);
+      }
+      .ml-scrape-ts {
+        color: var(--ml-muted);
+        white-space: nowrap;
+        font-size: 0.7rem;
+      }
+      .ml-scrape-status {
+        font-size: 0.62rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        padding: 2px 6px;
+        border-radius: 4px;
+        white-space: nowrap;
+      }
+      .ml-status-ok .ml-scrape-status {
+        background: rgba(63, 185, 80, 0.15);
+        color: #3fb950;
+      }
+      .ml-status-warn .ml-scrape-status {
+        background: rgba(210, 153, 34, 0.15);
+        color: #d29922;
+      }
+      .ml-status-error .ml-scrape-status {
+        background: rgba(248, 81, 73, 0.15);
+        color: #f85149;
+      }
+      .ml-scrape-method {
+        color: #58a6ff;
+        font-size: 0.65rem;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .ml-scrape-detail {
+        color: var(--ml-text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .ml-scrape-empty {
+        color: var(--ml-muted);
+        padding: 24px 16px;
+        text-align: center;
+        font-size: 0.8rem;
+      }
+      .ml-scrape-footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 16px;
+        border-top: 1px solid var(--ml-border);
+        background: #161b22;
+        color: var(--ml-muted);
+        font-size: 0.68rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+      @media (max-width: 1300px) {
+        .logs-layout {
+          flex-direction: column;
+        }
+        .ml-scrape-console {
+          flex: none;
+          max-width: none;
+          width: 100%;
+        }
+      }
       .audit-console {
+        flex: 1;
+        min-width: 0;
         --audit-bg: #0d1117;
         --audit-surface: #161b22;
         --audit-border: #30363d;
@@ -132,7 +332,11 @@ export function renderLogsPage(data: LogsPageData): string {
         display: flex;
         align-items: center;
         gap: 12px;
-        min-width: 220px;
+        min-width: 0;
+        flex-wrap: wrap;
+      }
+      .audit-stat-card {
+        display: none;
       }
       .audit-title {
         margin: 0;
@@ -140,6 +344,7 @@ export function renderLogsPage(data: LogsPageData): string {
         font-weight: 700;
         letter-spacing: 0.12em;
         color: #f0f6fc;
+        white-space: nowrap;
       }
       .audit-live {
         display: inline-flex;
@@ -365,7 +570,22 @@ export function renderLogsPage(data: LogsPageData): string {
       }
     </style>
 
-    <section class="audit-console">
+    <div class="logs-layout">
+      <aside class="ml-scrape-console">
+        <div class="ml-scrape-header">
+          <h2 class="ml-scrape-title">LOG MERCADO LIVRE</h2>
+          <span class="ml-scrape-count-badge" id="audit-ml-scrape-count">${data.mlScrapeCount} visitas</span>
+        </div>
+        <div class="ml-scrape-output-wrap" id="ml-scrape-output-wrap">
+          <div class="ml-scrape-output" id="ml-scrape-output">${mlLines}</div>
+        </div>
+        <div class="ml-scrape-footer">
+          <span id="ml-scrape-footer-count">${data.mlScrapeLogs.length} no buffer</span>
+          <span>cada acesso ao site</span>
+        </div>
+      </aside>
+
+      <section class="audit-console">
       <div class="audit-header">
         <div class="audit-title-wrap">
           <h2 class="audit-title">CONSOLE DE AUDITORIA</h2>
@@ -408,6 +628,7 @@ export function renderLogsPage(data: LogsPageData): string {
         <span>${escapeHtml(transportLabel)}</span>
       </div>
     </section>
+    </div>
 
     <div id="log-meta-modal" class="modal-overlay hidden" aria-hidden="true">
       <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="log-meta-modal-title">
@@ -427,6 +648,10 @@ export function renderLogsPage(data: LogsPageData): string {
       const auditOutput = document.getElementById('audit-output');
       const auditOutputWrap = document.getElementById('audit-output-wrap');
       const auditFooterCount = document.getElementById('audit-footer-count');
+      const auditMlScrapeCount = document.getElementById('audit-ml-scrape-count');
+      const mlScrapeOutput = document.getElementById('ml-scrape-output');
+      const mlScrapeOutputWrap = document.getElementById('ml-scrape-output-wrap');
+      const mlScrapeFooterCount = document.getElementById('ml-scrape-footer-count');
       const auditLiveBadge = document.getElementById('audit-live-badge');
       const auditLiveText = auditLiveBadge.querySelector('.audit-live-text');
       const auditPauseBtn = document.getElementById('audit-pause-btn');
@@ -439,9 +664,12 @@ export function renderLogsPage(data: LogsPageData): string {
       const cursorNode = auditOutput.querySelector('.audit-cursor');
 
       let lastTimestamp = ${JSON.stringify(data.logs.at(-1)?.timestamp ?? '')};
+      let lastMlTimestamp = ${JSON.stringify(data.mlScrapeLogs.at(-1)?.timestamp ?? '')};
       let refreshTimer = null;
       let isPaused = false;
       let totalEvents = ${data.total};
+      let mlScrapeCount = ${data.mlScrapeCount};
+      let mlScrapeVisible = ${data.mlScrapeLogs.length};
       const activeLevels = new Set(['info', 'debug', 'warn', 'error', 'fatal', 'trace']);
 
       function escapeHtml(value) {
@@ -534,6 +762,84 @@ export function renderLogsPage(data: LogsPageData): string {
         auditFooterCount.textContent = 'A MOSTRAR ' + visible + ' DE ' + totalEvents + ' EVENTOS';
       }
 
+      function updateMlScrapeCount() {
+        if (auditMlScrapeCount) {
+          auditMlScrapeCount.textContent = mlScrapeCount + ' visitas';
+        }
+        if (mlScrapeFooterCount) {
+          mlScrapeFooterCount.textContent = mlScrapeVisible + ' no buffer';
+        }
+      }
+
+      function formatMlScrapeDetail(entry) {
+        const meta = entry.meta || {};
+        if (typeof meta.url === 'string') {
+          try {
+            const parsed = new URL(meta.url);
+            return parsed.pathname + parsed.search;
+          } catch {
+            return meta.url;
+          }
+        }
+        const parts = [];
+        if (typeof meta.category === 'string') parts.push(meta.category);
+        if (meta.page != null) parts.push('pág. ' + meta.page);
+        if (meta.scraped != null) parts.push(meta.scraped + ' itens');
+        if (meta.method != null) parts.push(String(meta.method));
+        return parts.length > 0 ? parts.join(' · ') : entry.message;
+      }
+
+      function mlScrapeStatusLabel(entry) {
+        if (entry.level === 'error' || entry.level === 'fatal') return 'ERRO';
+        if (entry.level === 'warn') return 'RETRY';
+        if (entry.message === 'ML site visit') return 'VISITA';
+        return 'OK';
+      }
+
+      function mlScrapeStatusClass(entry) {
+        if (entry.level === 'error' || entry.level === 'fatal') return 'ml-status-error';
+        if (entry.level === 'warn') return 'ml-status-warn';
+        return 'ml-status-ok';
+      }
+
+      function renderMlScrapeLine(entry) {
+        const detail = formatMlScrapeDetail(entry);
+        const status = mlScrapeStatusLabel(entry);
+        const statusClass = mlScrapeStatusClass(entry);
+        const method = typeof entry.meta?.method === 'string' ? entry.meta.method.toUpperCase() : 'HTTP';
+        const metaEncoded = encodeURIComponent(JSON.stringify(entry.meta || {}, null, 2));
+
+        return '<div class="ml-scrape-line ' + statusClass + '" data-meta="' + metaEncoded + '" title="' + escapeHtml(detail) + '">' +
+          '<span class="ml-scrape-ts">' + formatLogTime(entry.timestamp) + '</span>' +
+          '<span class="ml-scrape-status">' + status + '</span>' +
+          '<span class="ml-scrape-method">' + escapeHtml(method) + '</span>' +
+          '<span class="ml-scrape-detail">' + escapeHtml(detail) + '</span>' +
+        '</div>';
+      }
+
+      function bindMlScrapeLineClicks() {
+        mlScrapeOutput.querySelectorAll('.ml-scrape-line').forEach((line) => {
+          line.addEventListener('click', () => {
+            const encoded = line.getAttribute('data-meta') || '%7B%7D';
+            metaContent.textContent = decodeURIComponent(encoded);
+            openModal(metaModal);
+          });
+        });
+      }
+
+      function insertMlScrapeLines(entries) {
+        if (entries.length === 0) return;
+        const html = entries.map(renderMlScrapeLine).join('');
+        const empty = mlScrapeOutput.querySelector('.ml-scrape-empty');
+        if (empty) empty.remove();
+        mlScrapeOutput.insertAdjacentHTML('beforeend', html);
+        mlScrapeVisible += entries.length;
+        bindMlScrapeLineClicks();
+        if (auditAutoScroll.checked && mlScrapeOutputWrap) {
+          mlScrapeOutputWrap.scrollTop = mlScrapeOutputWrap.scrollHeight;
+        }
+      }
+
       function applyFilters() {
         const query = auditSearchInput.value.trim().toLowerCase();
         auditOutput.querySelectorAll('.audit-line').forEach((line) => {
@@ -597,12 +903,28 @@ export function renderLogsPage(data: LogsPageData): string {
         if (isPaused) return;
         const params = new URLSearchParams({ level: 'all', source: 'all', limit: '1000' });
         if (lastTimestamp) params.set('since', lastTimestamp);
+        if (lastMlTimestamp) params.set('mlSince', lastMlTimestamp);
 
         const response = await fetch('/manager/api/logs?' + params.toString());
         if (!response.ok) return;
         const payload = await response.json();
         const logs = payload.logs ?? [];
+        const mlLogs = payload.mlScrapeLogs ?? [];
         totalEvents = payload.total ?? totalEvents;
+        mlScrapeCount = payload.mlScrapeCount ?? mlScrapeCount;
+        updateMlScrapeCount();
+
+        if (mlLogs.length > 0) {
+          insertMlScrapeLines(mlLogs);
+          lastMlTimestamp = mlLogs[mlLogs.length - 1].timestamp;
+          const maxMlRows = 200;
+          const mlLines = mlScrapeOutput.querySelectorAll('.ml-scrape-line');
+          while (mlLines.length > maxMlRows && mlLines[0]) {
+            mlLines[0].remove();
+            mlScrapeVisible = Math.max(0, mlScrapeVisible - 1);
+          }
+          updateMlScrapeCount();
+        }
 
         if (logs.length > 0) {
           insertLines(logs);
@@ -656,6 +978,7 @@ export function renderLogsPage(data: LogsPageData): string {
       });
 
       bindLineClicks();
+      bindMlScrapeLineClicks();
       applyFilters();
       scrollToBottom();
       scheduleRefresh();
