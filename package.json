@@ -16,6 +16,7 @@
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "prisma:generate": "prisma generate",
+    "prisma": "prisma generate",
     "ml:login": "tsx --env-file=.env src/ml-login.ts",
     "wa:channel": "tsx --env-file=.env src/wa-channel.ts",
     "wa:login": "tsx --env-file=.env src/wa-login.ts",

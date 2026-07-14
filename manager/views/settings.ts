@@ -229,6 +229,57 @@ function renderConnectionsSection(data: SettingsData): string {
     </section>`;
 }
 
+const WORKER_ICON = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`;
+const PRISMA_ICON = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.8 15.4 13.6 2.7a1.6 1.6 0 0 0-2.9.4L4.1 18.6a1.6 1.6 0 0 0 1 2l8.6 2.3a1.6 1.6 0 0 0 2-1.9z"/><path d="M9 4 7 19l8 2"/></svg>`;
+
+function workerStatusBadge(status: string): string {
+  if (status === 'running') return '<span class="badge ok">Rodando</span>';
+  if (status === 'starting') return '<span class="badge warn">Iniciando…</span>';
+  if (status === 'error') return '<span class="badge err">Erro</span>';
+  return '<span class="badge warn">Parado</span>';
+}
+
+function renderOperationsSection(data: SettingsData): string {
+  const worker = data.workerState;
+  const running = worker.status === 'running' || worker.status === 'starting';
+  const workerDetail = worker.detail ?? (running ? 'Processo de envio em execução' : 'Processo de envio parado');
+
+  return `
+    <section class="connect-section">
+      <h2>Operações</h2>
+      <p class="meta">Controle os processos do bot direto pelo painel. O worker aqui é gerenciado por este painel — não rode um <code>npm run worker</code> no terminal ao mesmo tempo.</p>
+      <div class="connect-grid">
+        <div class="connect-card">
+          <div class="connect-card-head">
+            <span class="connect-icon connect-icon-worker">${WORKER_ICON}</span>
+            <div class="connect-card-text">
+              <div class="connect-name">Worker de envio</div>
+              <div class="connect-detail meta" id="worker-detail">${escapeHtml(workerDetail)}</div>
+            </div>
+            <span id="worker-badge">${workerStatusBadge(worker.status)}</span>
+          </div>
+          <div class="op-actions">
+            <button type="button" class="btn primary" id="worker-start"${running ? ' disabled' : ''}>Iniciar</button>
+            <button type="button" class="btn" id="worker-restart">Reiniciar</button>
+            <button type="button" class="btn btn-danger" id="worker-stop"${running ? '' : ' disabled'}>Parar</button>
+          </div>
+        </div>
+        <div class="connect-card">
+          <div class="connect-card-head">
+            <span class="connect-icon connect-icon-prisma">${PRISMA_ICON}</span>
+            <div class="connect-card-text">
+              <div class="connect-name">Prisma Client</div>
+              <div class="connect-detail meta">Regenera o client do Prisma (<code>npm run prisma</code>)</div>
+            </div>
+          </div>
+          <div class="op-actions">
+            <button type="button" class="btn primary" id="prisma-generate">Gerar Prisma Client</button>
+          </div>
+        </div>
+      </div>
+    </section>`;
+}
+
 function renderChannelSection(data: SettingsData): string {
   const nameBlock = data.channelName
     ? `<span class="channel-name">${escapeHtml(data.channelName)}</span>`
@@ -531,6 +582,43 @@ export function renderSettingsPage(data: SettingsData): string {
       .connect-icon-wa {
         background: linear-gradient(135deg, #25d366, #128c7e);
       }
+      .connect-icon-worker {
+        background: linear-gradient(135deg, #6366f1, #4338ca);
+      }
+      .connect-icon-prisma {
+        background: linear-gradient(135deg, #4f46e5, #0f172a);
+      }
+      .op-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .btn-danger {
+        border-color: rgba(220, 38, 38, 0.45);
+        color: var(--danger, #dc2626);
+      }
+      .btn-danger:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .op-output {
+        margin: 12px 0 0;
+        padding: 12px;
+        border-radius: 8px;
+        background: #0d1117;
+        color: #c9d1d9;
+        border: 1px solid #30363d;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.78rem;
+        line-height: 1.5;
+        max-height: 320px;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .op-output:empty {
+        display: none;
+      }
       .connect-name {
         font-weight: 700;
         font-size: 1rem;
@@ -599,6 +687,24 @@ export function renderSettingsPage(data: SettingsData): string {
     </section>
 
     ${renderConnectionsSection(data)}
+
+    ${renderOperationsSection(data)}
+
+    <div id="prisma-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="prisma-modal-title">
+        <div class="modal-header">
+          <h3 id="prisma-modal-title">Gerar Prisma Client</h3>
+        </div>
+        <div class="modal-body">
+          <p class="connect-status" id="prisma-status">Executando <code>prisma generate</code>…</p>
+          <pre class="op-output" id="prisma-output"></pre>
+          <p class="connect-error hidden" id="prisma-error"></p>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn" id="prisma-close">Fechar</button>
+        </div>
+      </div>
+    </div>
 
     <div id="ml-connect-modal" class="modal-overlay hidden" aria-hidden="true">
       <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="ml-connect-modal-title">
@@ -1145,6 +1251,115 @@ export function renderSettingsPage(data: SettingsData): string {
 
       waCloseBtn?.addEventListener('click', () => { stopWaPoll(); closeModal(waModal); });
       waModal?.addEventListener('click', (e) => { if (e.target === waModal) { stopWaPoll(); closeModal(waModal); } });
+
+      // --- Operações: Worker ---
+      const workerStartBtn = document.getElementById('worker-start');
+      const workerRestartBtn = document.getElementById('worker-restart');
+      const workerStopBtn = document.getElementById('worker-stop');
+      const workerBadge = document.getElementById('worker-badge');
+      const workerDetail = document.getElementById('worker-detail');
+      let workerPollTimer = null;
+
+      function workerBadgeHtml(status) {
+        if (status === 'running') return '<span class="badge ok">Rodando</span>';
+        if (status === 'starting') return '<span class="badge warn">Iniciando…</span>';
+        if (status === 'error') return '<span class="badge err">Erro</span>';
+        return '<span class="badge warn">Parado</span>';
+      }
+
+      function renderWorkerState(state) {
+        const running = state.status === 'running' || state.status === 'starting';
+        workerBadge.innerHTML = workerBadgeHtml(state.status);
+        if (state.detail) workerDetail.textContent = state.detail;
+        else workerDetail.textContent = running ? 'Processo de envio em execução' : 'Processo de envio parado';
+        workerStartBtn.disabled = running;
+        workerStopBtn.disabled = !running;
+      }
+
+      async function pollWorker() {
+        try {
+          const res = await fetch('/manager/settings/worker/status');
+          if (res.ok) renderWorkerState(await res.json());
+        } catch (_) {}
+      }
+
+      function ensureWorkerPoll() {
+        if (workerPollTimer) return;
+        workerPollTimer = setInterval(pollWorker, 2500);
+      }
+
+      async function workerAction(endpoint, pending) {
+        [workerStartBtn, workerRestartBtn, workerStopBtn].forEach((b) => { if (b) b.disabled = true; });
+        workerDetail.textContent = pending;
+        try {
+          const res = await fetch(endpoint, { method: 'POST' });
+          if (res.ok) renderWorkerState(await res.json());
+        } catch (_) {}
+        ensureWorkerPoll();
+        setTimeout(pollWorker, 600);
+      }
+
+      workerStartBtn?.addEventListener('click', () => workerAction('/manager/settings/worker/start', 'Iniciando worker…'));
+      workerRestartBtn?.addEventListener('click', () => workerAction('/manager/settings/worker/restart', 'Reiniciando worker…'));
+      workerStopBtn?.addEventListener('click', () => workerAction('/manager/settings/worker/stop', 'Parando worker…'));
+      ensureWorkerPoll();
+
+      // --- Operações: Prisma generate ---
+      const prismaBtn = document.getElementById('prisma-generate');
+      const prismaModal = document.getElementById('prisma-modal');
+      const prismaStatusEl = document.getElementById('prisma-status');
+      const prismaOutputEl = document.getElementById('prisma-output');
+      const prismaErrorEl = document.getElementById('prisma-error');
+      const prismaCloseBtn = document.getElementById('prisma-close');
+      let prismaPollTimer = null;
+
+      function stopPrismaPoll() {
+        if (prismaPollTimer) { clearInterval(prismaPollTimer); prismaPollTimer = null; }
+      }
+
+      function renderPrismaState(state) {
+        prismaErrorEl.classList.add('hidden');
+        prismaOutputEl.textContent = state.output || '';
+        switch (state.status) {
+          case 'running':
+            prismaStatusEl.textContent = 'Executando prisma generate…';
+            break;
+          case 'done':
+            prismaStatusEl.textContent = 'Prisma Client gerado com sucesso! ✅';
+            stopPrismaPoll();
+            break;
+          case 'error':
+            prismaStatusEl.textContent = 'Falha ao gerar o Prisma Client.';
+            if (state.error) { prismaErrorEl.textContent = state.error; prismaErrorEl.classList.remove('hidden'); }
+            stopPrismaPoll();
+            break;
+          default:
+            prismaStatusEl.textContent = 'Pronto para executar.';
+        }
+      }
+
+      async function pollPrisma() {
+        try {
+          const res = await fetch('/manager/settings/prisma/status');
+          if (res.ok) renderPrismaState(await res.json());
+        } catch (_) {}
+      }
+
+      prismaBtn?.addEventListener('click', async () => {
+        openModal(prismaModal);
+        prismaStatusEl.textContent = 'Executando prisma generate…';
+        prismaOutputEl.textContent = '';
+        prismaErrorEl.classList.add('hidden');
+        try {
+          const res = await fetch('/manager/settings/prisma/generate', { method: 'POST' });
+          if (res.ok) renderPrismaState(await res.json());
+        } catch (_) {}
+        stopPrismaPoll();
+        prismaPollTimer = setInterval(pollPrisma, 1200);
+      });
+
+      prismaCloseBtn?.addEventListener('click', () => { stopPrismaPoll(); closeModal(prismaModal); });
+      prismaModal?.addEventListener('click', (e) => { if (e.target === prismaModal) { stopPrismaPoll(); closeModal(prismaModal); } });
     </script>`;
 
   return renderLayout('Configuração', body, 'settings');

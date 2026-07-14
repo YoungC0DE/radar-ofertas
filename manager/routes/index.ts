@@ -22,6 +22,14 @@ import {
   startMercadoLivreConnectJson,
   startWhatsAppConnectJson,
 } from '../controllers/connection-controller.js';
+import {
+  getPrismaJson,
+  getWorkerJson,
+  restartWorkerJson,
+  runPrismaGenerateJson,
+  startWorkerJson,
+  stopWorkerJson,
+} from '../controllers/process-controller.js';
 
 
 
@@ -252,6 +260,36 @@ export async function handleManagerRequest(
 
     if (path === '/manager/settings/connect/ml/status' && method === 'GET') {
       sendJson(res, 200, getMercadoLivreConnectJson());
+      return;
+    }
+
+    if (path === '/manager/settings/worker/start' && method === 'POST') {
+      sendJson(res, 200, startWorkerJson());
+      return;
+    }
+
+    if (path === '/manager/settings/worker/restart' && method === 'POST') {
+      sendJson(res, 200, await restartWorkerJson());
+      return;
+    }
+
+    if (path === '/manager/settings/worker/stop' && method === 'POST') {
+      sendJson(res, 200, await stopWorkerJson());
+      return;
+    }
+
+    if (path === '/manager/settings/worker/status' && method === 'GET') {
+      sendJson(res, 200, getWorkerJson());
+      return;
+    }
+
+    if (path === '/manager/settings/prisma/generate' && method === 'POST') {
+      sendJson(res, 200, runPrismaGenerateJson());
+      return;
+    }
+
+    if (path === '/manager/settings/prisma/status' && method === 'GET') {
+      sendJson(res, 200, getPrismaJson());
       return;
     }
 
