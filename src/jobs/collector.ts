@@ -1,15 +1,15 @@
 import { Worker } from 'bullmq';
 import { env } from '../config/env.js';
-import { searchConfiguredCategories } from '../mercado-livre/index.js';
-import { processOffers } from '../offers/service.js';
+import { getOperatingHoursStart, getOperatingHoursEnd, hydrateQueueConfigCache } from '../config/queue-config-store.js';
+import { collectNewOffers } from '../offers/service.js';
 import { getQueueConnection, QUEUE_NAMES, type CollectorJobData } from '../queue/index.js';
 import { isWithinOperatingHours } from '../utils/datetime.js';
 import { logger } from '../utils/logger.js';
 
 function getOperatingHours() {
   return {
-    startHour: env.QUEUE_CONFIG.operatingHoursStart,
-    endHour: env.QUEUE_CONFIG.operatingHoursEnd,
+    startHour: getOperatingHoursStart(),
+    endHour: getOperatingHoursEnd(),
   };
 }
 
@@ -17,6 +17,7 @@ export function startCollectorWorker(): Worker<CollectorJobData> {
   const worker = new Worker<CollectorJobData>(
     QUEUE_NAMES.OFFER_COLLECTOR,
     async (job) => {
+      await hydrateQueueConfigCache();
       const operatingHours = getOperatingHours();
 
       if (!isWithinOperatingHours(env.APP_TIMEZONE, operatingHours)) {
@@ -33,15 +34,14 @@ export function startCollectorWorker(): Worker<CollectorJobData> {
 
       logger.info({ jobId: job.id }, 'Starting offer collection');
 
-      const rawOffers = await searchConfiguredCategories();
-      const enqueued = await processOffers(rawOffers);
+      const { total, enqueued } = await collectNewOffers();
 
       logger.info(
-        { total: rawOffers.length, enqueued, triggeredAt: job.data.triggeredAt },
+        { total, enqueued, triggeredAt: job.data.triggeredAt },
         'Offer collection completed',
       );
 
-      return { total: rawOffers.length, enqueued };
+      return { total, enqueued };
     },
     { connection: getQueueConnection() },
   );

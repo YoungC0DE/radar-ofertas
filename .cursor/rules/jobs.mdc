@@ -7,11 +7,16 @@ alwaysApply: false
 # Jobs
 
 - Processos assíncronos em `jobs/` (collector, sender).
-- Configuração de filas em `queue/`.
+- Configuração de filas em `queue/`; agendamento em `queue/sender-schedule.ts`.
 - Collector consulta Mercado Livre via scraping híbrido (`mercado-livre/`); sender publica — nunca enviar direto após coleta.
 - Jobs idempotentes: verificar estado antes de agir.
+- Intervalos e janela operacional: `queue-config-store.ts` (DB → cache → fallback ENV).
 
 ## Filas
 
 - `offer-collector` — repeatable, processo `app.ts`.
 - `offer-sender` — standard, processo `worker.ts`.
+
+## Janela operacional
+
+Sender respeita `operatingHoursStart`/`operatingHoursEnd` (timezone `APP_TIMEZONE`). Jobs fora da janela ficam delayed até o próximo horário válido.

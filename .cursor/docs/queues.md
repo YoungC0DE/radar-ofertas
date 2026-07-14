@@ -1,13 +1,27 @@
 # Filas — Redis + BullMQ
 
-Tudo em `src/queue/index.ts`.
+Configuração em `src/queue/index.ts`. Agendamento de envio em `src/queue/sender-schedule.ts`.
 
 ## Filas
 
 | Nome | Tipo | Processo | Descrição |
 |------|------|----------|-----------|
-| `offer-collector` | Repeatable | `app.ts` | Coleta periódica via scraping ML (default: 15 min) |
+| `offer-collector` | Repeatable | `app.ts` | Coleta periódica via scraping ML |
 | `offer-sender` | Standard | `worker.ts` | Envio individual ao WhatsApp |
+
+## Config runtime
+
+Intervalos e horários lidos de `queue-config-store.ts` (tabela `settings` → cache → fallback `QUEUE_CONFIG` em ENV):
+
+| Parâmetro | Default ENV | Editável no manager |
+|-----------|-------------|---------------------|
+| `collectorIntervalMinutes` | 15 | ✅ |
+| `senderDelayMinutes` | 15 | ✅ |
+| `operatingHoursStart` | 9 | ✅ |
+| `operatingHoursEnd` | 0 (24:00) | ✅ |
+| `searchLimit` | `ML_SEARCH_LIMIT` (50) | ✅ |
+| `minScore` | 50 | via score settings |
+| `senderConcurrency` | 1 | apenas ENV |
 
 ## Fluxo
 
@@ -18,13 +32,13 @@ jobs/collector
     ↓
 mercado-livre/          → HTTP scrape → (Playwright fallback)
     ↓
-offers/service          → score, link afiliado, dedup
+score-config + offers/service → score, link afiliado, dedup
     ↓
 PostgreSQL + offer-sender queue
     ↓
-jobs/sender
+jobs/sender             → respeita janela operacional
     ↓
-whatsapp/               → canal WhatsApp
+message-template + whatsapp/ → canal WhatsApp
 ```
 
 ## Collector (`offer-collector`)
@@ -33,16 +47,20 @@ whatsapp/               → canal WhatsApp
 2. `searchConfiguredCategories()` — HTTP primeiro, Playwright se falhar.
 3. `processOffers()` — score, gera link afiliado (async), deduplica, enfileira.
 4. Retorna `{ total, enqueued }`.
-
-**Nota:** geração de link afiliado por produto pode aumentar tempo do job — considerar rate limit futuro.
+5. Reagendamento via `rescheduleCollectorJob()` quando intervalo muda no manager.
 
 ## Sender (`offer-sender`)
 
 1. Recebe `{ offerId }` da fila.
 2. Verifica se oferta existe e `sent_at IS NULL`.
-3. Formata mensagem e publica via Baileys.
+3. Formata mensagem via `message-template` e publica via Baileys.
 4. Marca `sent_at` e aplica delay entre envios.
+5. Fora da janela operacional (`APP_TIMEZONE`): job fica delayed até horário válido.
 
-## Configuração (QUEUE_CONFIG)
+## Desabilitar Redis
 
-Ver `.env.example`. Idempotência via `mercado_livre_id` unique e check de `sent_at`.
+`REDIS_ENABLED=false` — collector e sender rodam inline (útil para dev sem Redis).
+
+## Idempotência
+
+`mercado_livre_id` unique + check de `sent_at` + dedup por title+price em ofertas já enviadas.

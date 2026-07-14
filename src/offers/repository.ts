@@ -16,6 +16,7 @@ function toRecord(offer: PrismaOffer): OfferRecord {
     affiliateLink: offer.affiliateLink,
     rating: offer.rating,
     soldQuantity: offer.soldQuantity,
+    salesRank: offer.salesRank,
     score: offer.score,
     sentAt: offer.sentAt,
     createdAt: offer.createdAt,
@@ -24,6 +25,17 @@ function toRecord(offer: PrismaOffer): OfferRecord {
 
 export async function offerExists(mercadoLivreId: string): Promise<boolean> {
   const count = await prisma.offer.count({ where: { mercadoLivreId } });
+  return count > 0;
+}
+
+export async function sentOfferExistsByTitleAndPrice(title: string, price: number): Promise<boolean> {
+  const count = await prisma.offer.count({
+    where: {
+      title,
+      price,
+      sentAt: { not: null },
+    },
+  });
   return count > 0;
 }
 
@@ -47,4 +59,76 @@ export async function markOfferSent(id: string): Promise<void> {
     where: { id },
     data: { sentAt: nowInTimezone(env.APP_TIMEZONE) },
   });
+}
+
+export type OfferSentFilter = 'all' | 'pending' | 'sent';
+
+export interface OfferStats {
+  total: number;
+  pending: number;
+  sent: number;
+}
+
+export interface FindOffersOptions {
+  sent?: OfferSentFilter;
+  limit?: number;
+  offset?: number;
+}
+
+function sentWhere(sent: OfferSentFilter = 'all') {
+  if (sent === 'pending') return { sentAt: null };
+  if (sent === 'sent') return { sentAt: { not: null } };
+  return {};
+}
+
+export async function getOfferStats(): Promise<OfferStats> {
+  const [total, pending, sent] = await Promise.all([
+    prisma.offer.count(),
+    prisma.offer.count({ where: { sentAt: null } }),
+    prisma.offer.count({ where: { sentAt: { not: null } } }),
+  ]);
+  return { total, pending, sent };
+}
+
+export async function countOffers(sent: OfferSentFilter = 'all'): Promise<number> {
+  return prisma.offer.count({ where: sentWhere(sent) });
+}
+
+export async function findOffers(options: FindOffersOptions = {}): Promise<OfferRecord[]> {
+  const { sent = 'all', limit = 50, offset = 0 } = options;
+  const orderBy =
+    sent === 'sent'
+      ? { sentAt: 'desc' as const }
+      : sent === 'pending'
+        ? { createdAt: 'asc' as const }
+        : { createdAt: 'desc' as const };
+  const offers = await prisma.offer.findMany({
+    where: sentWhere(sent),
+    orderBy,
+    take: limit,
+    skip: offset,
+  });
+  return offers.map(toRecord);
+}
+
+export async function findPendingOfferIds(): Promise<string[]> {
+  const offers = await prisma.offer.findMany({
+    where: { sentAt: null },
+    select: { id: true },
+  });
+  return offers.map((offer) => offer.id);
+}
+
+export async function deletePendingOffers(): Promise<number> {
+  const result = await prisma.offer.deleteMany({ where: { sentAt: null } });
+  return result.count;
+}
+
+export async function findLastSentAt(): Promise<Date | null> {
+  const offer = await prisma.offer.findFirst({
+    where: { sentAt: { not: null } },
+    orderBy: { sentAt: 'desc' },
+    select: { sentAt: true },
+  });
+  return offer?.sentAt ?? null;
 }

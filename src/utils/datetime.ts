@@ -54,6 +54,28 @@ export function formatInTimezone(value: Date, timeZone: string): string {
   }).format(value);
 }
 
+/**
+ * Formata datas gravadas via nowInTimezone — os componentes de horário
+ * já correspondem ao relógio local e estão nos campos UTC do Date.
+ */
+export function formatStoredLocalDate(value: Date): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'UTC',
+    dateStyle: 'short',
+    timeStyle: 'medium',
+  }).format(value);
+}
+
+export function formatIsoInTimezone(
+  iso: string | null | undefined,
+  timeZone: string,
+): string {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return formatInTimezone(date, timeZone);
+}
+
 export interface OperatingHours {
   startHour: number;
   endHour: number;

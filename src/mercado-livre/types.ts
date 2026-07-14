@@ -6,6 +6,7 @@ export interface ScrapedItem {
   thumbnail: string | null;
   permalink: string;
   soldQuantity: number | null;
+  salesRank: string | null;
   rating: number | null;
 }
 

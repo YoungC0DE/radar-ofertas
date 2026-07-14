@@ -4,7 +4,13 @@ import { logger } from '../utils/logger.js';
 import type { RawOffer } from '../offers/types.js';
 import { generateAffiliateLink } from './affiliate-link.js';
 import { fetchCategoryViaBrowser } from './browser-scraper.js';
-import { fetchCategoryViaHttp, validateCategoryConfig } from './http-scraper.js';
+import { ML_ITEMS_PER_PAGE } from './category-url.js';
+import {
+  fetchCategoryViaHttp,
+  fetchSingleCategoryPage,
+  fetchSingleOffersPage,
+  validateCategoryConfig,
+} from './http-scraper.js';
 import type { ScrapedItem } from './types.js';
 
 const CATEGORY_CONCURRENCY = 2;
@@ -25,6 +31,7 @@ function mapToRawOffer(item: ScrapedItem): RawOffer {
     image: item.thumbnail?.replace('-I.jpg', '-O.jpg') ?? null,
     rating: item.rating,
     soldQuantity: item.soldQuantity,
+    salesRank: item.salesRank,
     permalink: item.permalink,
   };
 }
@@ -44,8 +51,82 @@ async function scrapeCategory(category: string): Promise<ScrapedItem[]> {
 export async function buildAffiliateLink(
   permalink: string,
   mercadoLivreId?: string,
+  minDelayMs?: number,
 ): Promise<string> {
-  return generateAffiliateLink(permalink, mercadoLivreId);
+  return generateAffiliateLink(permalink, mercadoLivreId, minDelayMs);
+}
+
+const MAX_SCRAPE_PAGES = 50;
+
+export async function* iterateScrapedPages(category: string): AsyncGenerator<RawOffer[]> {
+  const validation = validateCategoryConfig(category);
+  if (!validation.valid) {
+    logger.error({ category, reason: validation.reason }, 'Invalid ML category config');
+    return;
+  }
+
+  const seen = new Map<string, ScrapedItem>();
+
+  try {
+    if (validation.listingKind === 'offers') {
+      let stalePages = 0;
+
+      for (let page = 0; page < MAX_SCRAPE_PAGES; page++) {
+        const items = await fetchSingleOffersPage(validation.url, page);
+        if (items.length === 0) break;
+
+        const fresh: ScrapedItem[] = [];
+        for (const item of items) {
+          if (!seen.has(item.id)) {
+            seen.set(item.id, item);
+            fresh.push(item);
+          }
+        }
+
+        logger.info(
+          { category, page, scraped: items.length, fresh: fresh.length, method: 'http' },
+          'Offers page scraped',
+        );
+
+        if (fresh.length === 0) {
+          stalePages++;
+          if (stalePages >= 2) break;
+        } else {
+          stalePages = 0;
+          yield fresh.map(mapToRawOffer);
+        }
+      }
+    } else {
+      for (let pageNum = 0; pageNum < MAX_SCRAPE_PAGES; pageNum++) {
+        const offset = pageNum * ML_ITEMS_PER_PAGE;
+        const items = await fetchSingleCategoryPage(validation.url, offset);
+        if (items.length === 0) break;
+
+        const fresh: ScrapedItem[] = [];
+        for (const item of items) {
+          if (!seen.has(item.id)) {
+            seen.set(item.id, item);
+            fresh.push(item);
+          }
+        }
+
+        logger.info(
+          { category, page: pageNum, scraped: items.length, fresh: fresh.length, method: 'http' },
+          'Category page scraped',
+        );
+
+        if (fresh.length === 0) break;
+        yield fresh.map(mapToRawOffer);
+
+        if (items.length < ML_ITEMS_PER_PAGE) break;
+      }
+    }
+  } catch (httpError) {
+    logger.warn({ category, httpError }, 'HTTP scrape failed — trying browser fallback');
+    if (!env.ML_USE_BROWSER_FALLBACK) throw httpError;
+    const items = await fetchCategoryViaBrowser(category);
+    if (items.length > 0) yield items.map(mapToRawOffer);
+  }
 }
 
 export async function searchConfiguredCategories(): Promise<RawOffer[]> {

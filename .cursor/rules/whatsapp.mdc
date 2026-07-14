@@ -6,7 +6,15 @@ alwaysApply: false
 
 # WhatsApp
 
-- Tudo em `whatsapp/index.ts` — conexão, eventos e envio.
-- Zero regra de negócio; formatação fica em `offers/service.ts`.
+- Conexão e envio em `whatsapp/index.ts` — zero regra de negócio.
+- Formatação de mensagem em `offers/message-template.ts` (template editável via manager).
+- Cache de canal em `whatsapp/channel-cache.ts` (nome, invite link).
 - Sessão em `WHATSAPP_AUTH_PATH`; canal em `WHATSAPP_CHANNEL_ID`.
-- Apenas `worker.ts` instancia conexão.
+- Apenas `worker.ts` instancia conexão Baileys.
+
+## Setup
+
+```bash
+npm run wa:login    # autenticar (QR)
+npm run wa:channel  # obter WHATSAPP_CHANNEL_ID
+```

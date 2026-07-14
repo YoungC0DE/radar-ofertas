@@ -1,10 +1,21 @@
 import { startSenderWorker } from './jobs/sender.js';
+import { hydrateQueueConfigCache } from './config/queue-config-store.js';
+import { hydrateScoreConfigCache } from './config/score-config.js';
+import { hydrateBrandCache } from './config/brand-config.js';
+import { hydrateTemplateCache } from './offers/message-template.js';
 import { logger } from './utils/logger.js';
 import { connectWhatsApp, isPlaceholderChannelId, validateWhatsAppChannel } from './whatsapp/index.js';
 import { env } from './config/env.js';
 
 async function main(): Promise<void> {
   logger.info('Starting sender worker process');
+
+  await Promise.all([
+    hydrateQueueConfigCache(),
+    hydrateScoreConfigCache(),
+    hydrateBrandCache(),
+    hydrateTemplateCache(),
+  ]);
 
   const sock = await connectWhatsApp();
 

@@ -1,4 +1,5 @@
 import { Queue } from 'bullmq';
+import { getCollectorIntervalMinutes } from '../config/queue-config-store.js';
 import { env } from '../config/env.js';
 
 export const QUEUE_NAMES = {
@@ -12,6 +13,7 @@ export interface CollectorJobData {
 
 export interface SenderJobData {
   offerId: string;
+  force?: boolean;
 }
 
 const connection = {
@@ -19,17 +21,30 @@ const connection = {
   maxRetriesPerRequest: null as null,
 };
 
+export function isRedisEnabled(): boolean {
+  return env.REDIS_ENABLED;
+}
+
+function assertRedisEnabled(feature: string): void {
+  if (!env.REDIS_ENABLED) {
+    throw new Error(`Redis desabilitado (REDIS_ENABLED=false) — necessário para ${feature}`);
+  }
+}
+
 export function getCollectorQueue(): Queue<CollectorJobData> {
+  assertRedisEnabled('filas de coleta');
   return new Queue<CollectorJobData>(QUEUE_NAMES.OFFER_COLLECTOR, { connection });
 }
 
 export function getSenderQueue(): Queue<SenderJobData> {
+  assertRedisEnabled('filas de envio');
   return new Queue<SenderJobData>(QUEUE_NAMES.OFFER_SENDER, { connection });
 }
 
 export async function scheduleCollectorJob(): Promise<void> {
+  assertRedisEnabled('agendamento do collector');
   const queue = getCollectorQueue();
-  const intervalMs = env.QUEUE_CONFIG.collectorIntervalMinutes * 60 * 1000;
+  const intervalMs = getCollectorIntervalMinutes() * 60 * 1000;
 
   await queue.add(
     'collect',
@@ -43,7 +58,34 @@ export async function scheduleCollectorJob(): Promise<void> {
   );
 }
 
+export async function enqueueOfferCollection(): Promise<void> {
+  assertRedisEnabled('enfileiramento de coleta');
+  await getCollectorQueue().add(
+    'collect',
+    { triggeredAt: new Date().toISOString() },
+    {
+      removeOnComplete: true,
+      removeOnFail: 50,
+    },
+  );
+}
+
+export async function rescheduleCollectorJob(): Promise<void> {
+  assertRedisEnabled('reagendamento do collector');
+  const queue = getCollectorQueue();
+  const repeatables = await queue.getRepeatableJobs();
+
+  for (const job of repeatables) {
+    if (job.id === 'offer-collector-repeat' || job.name === 'collect') {
+      await queue.removeRepeatableByKey(job.key);
+    }
+  }
+
+  await scheduleCollectorJob();
+}
+
 export async function enqueueOfferSend(offerId: string): Promise<void> {
+  assertRedisEnabled('enfileiramento de envio');
   await getSenderQueue().add(
     'send',
     { offerId },

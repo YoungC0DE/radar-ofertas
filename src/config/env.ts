@@ -11,12 +11,16 @@ const queueConfigSchema = z.object({
   minScore: z.number().int().nonnegative().default(50),
   senderConcurrency: z.number().int().positive().default(1),
   senderDelayMinutes: z.number().int().nonnegative().default(15),
+  senderDelayMs: z.number().int().nonnegative().optional(),
   maxPrice: z.number().positive().default(5000),
   minSoldQuantity: z.number().int().nonnegative().default(100),
   /** Hora de início da janela operacional (inclusiva, 0–23). Default: 9 = 09:00 */
   operatingHoursStart: z.number().int().min(0).max(23).default(9),
   /** Hora de fim da janela operacional (exclusiva). 0 = meia-noite (24:00) */
   operatingHoursEnd: z.number().int().min(0).max(24).default(0),
+  affiliateLinkDelayMs: z.number().int().nonnegative().default(500),
+  affiliateLinkBacklogDelayMinutes: z.number().int().positive().default(2),
+  affiliateLinkBacklogThreshold: z.number().int().positive().default(5),
 });
 
 const envSchema = z.object({
@@ -73,6 +77,12 @@ const envSchema = z.object({
         return z.NEVER;
       }
     }),
+  REDIS_ENABLED: z
+    .string()
+    .default('true')
+    .transform((val) => val === 'true' || val === '1'),
+  MANAGER_PORT: z.coerce.number().int().positive().default(3000),
+  MANAGER_TOKEN: z.string().optional(),
 });
 
 const envParse = envSchema.safeParse(process.env);

@@ -7,7 +7,8 @@ alwaysApply: false
 # TypeScript
 
 - Tipagem forte; evitar `any`.
-- Tipos de ofertas em `offers/types.ts` (`RawOffer` mapeado do scraping ML).
+- Tipos de ofertas em `offers/types.ts` (`RawOffer`, `OfferRecord`).
+- Config types em `config/score-config.ts`, `config/brand-config.ts`.
 - `async/await` sempre.
 - `import type` para tipos (`verbatimModuleSyntax`).
 - ENV validado com Zod em `config/env.ts`.

@@ -1,10 +1,14 @@
 import pino from 'pino';
-import { env } from '../config/env.js';
 
-export const logger = pino({
-  level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport:
-    env.NODE_ENV === 'local'
-      ? { target: 'pino/file', options: { destination: 1 } }
-      : undefined,
-});
+import { env } from '../config/env.js';
+import { createLogCaptureStream } from './log-store.js';
+
+const level = env.NODE_ENV === 'production' ? 'info' : 'debug';
+
+export const logger = pino(
+  { level },
+  pino.multistream([
+    { stream: process.stdout },
+    { stream: createLogCaptureStream(), level: 'debug' },
+  ]),
+);

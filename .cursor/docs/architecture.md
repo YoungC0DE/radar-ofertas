@@ -1,6 +1,6 @@
 # Arquitetura
 
-Sistema em processos separados, organizado por domínio. Integração com Mercado Livre via **scraping híbrido** (HTTP + Playwright) e **sessão de afiliado persistida**.
+Sistema em processos separados, organizado por domínio. Integração com Mercado Livre via **scraping híbrido** (HTTP + Playwright) e **sessão de afiliado persistida**. Configuração runtime editável via painel **manager**.
 
 ## Estrutura
 
@@ -9,20 +9,26 @@ src/
 ├── app.ts              → collector (coleta + enfileira)
 ├── worker.ts           → WhatsApp + envio
 ├── ml-login.ts         → login afiliado ML (setup manual)
-├── config/             → ENV (Zod)
-├── whatsapp/           → Baileys
+├── config/             → ENV (Zod) + stores de runtime
+│   ├── env.ts
+│   ├── score-config.ts
+│   ├── brand-config.ts
+│   └── queue-config-store.ts
+├── whatsapp/           → Baileys + channel-cache
 ├── mercado-livre/      → scraping + sessão afiliado
-│   ├── http-scraper.ts
-│   ├── browser-scraper.ts
-│   ├── parser.ts
-│   ├── session.ts
-│   ├── affiliate-link.ts
-│   └── auth.ts
-├── offers/             → domínio de ofertas
+├── offers/             → domínio de ofertas + message-template
 ├── jobs/               → workers BullMQ
-├── queue/              → filas Redis
+├── queue/              → filas Redis + sender-schedule
 ├── database/           → Prisma
-└── utils/              → logger
+├── scripts/            → preflight, up
+└── utils/              → logger, datetime
+
+manager/                → painel web (MVC)
+├── server.ts
+├── routes/
+├── controllers/
+├── models/
+└── views/
 ```
 
 ## Decisões arquiteturais
@@ -39,9 +45,18 @@ src/
 
 **Motivos:** API oficial descartada; programa de afiliados não expõe API pública para links encurtados; sessão persistida espelha o padrão Baileys do WhatsApp.
 
+### Config runtime (settings DB)
+
+Parâmetros operacionais (score, intervalos, horários, template, brand) persistidos na tabela `settings`. Editáveis pelo manager; lidos com cache em memória nos processos `app`, `worker` e `manager`. Fallback para `QUEUE_CONFIG` e defaults em ENV.
+
 ### Processos separados
 
-Collector (`app.ts`) e sender (`worker.ts`) rodam em processos distintos. Login de afiliado é comando separado (`ml-login.ts`), executado sob demanda.
+| Processo | Entry | Função |
+|----------|-------|--------|
+| Collector | `app.ts` | Coleta periódica + enfileiramento |
+| Sender | `worker.ts` | Envio WhatsApp com janela operacional |
+| Manager | `manager/server.ts` | Painel admin (opcional, processo independente) |
+| ML Login | `ml-login.ts` | Setup manual de sessão afiliado |
 
 ## Fluxo completo
 
@@ -51,7 +66,7 @@ flowchart TD
     B -->|sucesso| C[parser.ts → RawOffer]
     B -->|403 / vazio| D[browser-scraper Playwright]
     D --> C
-    C --> E[offers/service score + filtros]
+    C --> E[score-config + offers/service]
     E --> F{Sessão afiliado válida?}
     F -->|sim| G[HTTP createLink]
     F -->|não| H[fallback matt_tool ou ml:login]
@@ -61,14 +76,16 @@ flowchart TD
     J --> K{Deduplicação}
     K -->|nova| L[(PostgreSQL)]
     L --> M[offer-sender]
-    M --> N[whatsapp/]
+    M --> N[message-template + whatsapp/]
+    O[manager/] -.->|edita settings| L
 ```
 
 ## Princípios
 
 - HTTP primeiro, browser só quando necessário.
 - Sessão de afiliado em disco (`./data/ml_auth/`), nunca hardcoded.
-- Regras de negócio apenas em `offers/`.
+- Regras de negócio apenas em `offers/` e `config/score-config.ts`.
+- Manager apenas orquestra UI — reutiliza `src/`.
 - Playwright não roda em cada ciclo de coleta — apenas fallback.
 
 ## Documentação relacionada
@@ -77,5 +94,6 @@ flowchart TD
 - [Filas](./queues.md)
 - [Database](./database.md)
 - [WhatsApp](./whatsapp.md)
+- [Manager](./manager.md)
 - [Deployment](./deployment.md)
 - [Implementation Board](../IMPLEMENTATION_BOARD.md)
