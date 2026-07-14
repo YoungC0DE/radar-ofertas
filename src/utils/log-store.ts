@@ -5,7 +5,20 @@ import { Redis } from 'ioredis';
 import { env } from '../config/env.js';
 
 const REDIS_KEY = 'radar:app-logs';
+const SCRAPE_COUNT_KEY = 'radar:ml-scrape-count';
 const MAX_LOGS = 1000;
+
+const ML_SCRAPE_LOG_MESSAGES = new Set([
+  'ML site visit',
+  'HTTP scrape retry',
+  'Blocked HTML — retrying',
+  'HTTP fetch retry',
+  'HTTP scrape failed',
+  'HTTP scrape failed — trying browser fallback',
+  'Category page scraped',
+  'Offers page scraped',
+  'Category scraped',
+]);
 
 const LEVEL_NAMES: Record<number, LogLevel> = {
   10: 'trace',
@@ -40,8 +53,29 @@ export interface LogFilters {
 }
 
 const memoryBuffer: LogEntry[] = [];
+let memoryScrapeCount = 0;
 let redisClient: Redis | null = null;
 let redisFailed = false;
+
+export function isMlScrapeLogEntry(entry: LogEntry): boolean {
+  return ML_SCRAPE_LOG_MESSAGES.has(entry.message);
+}
+
+function isMlScrapeCountEntry(entry: LogEntry): boolean {
+  if (entry.message === 'ML site visit') return true;
+  if (
+    entry.message === 'HTTP scrape retry' ||
+    entry.message === 'Blocked HTML — retrying' ||
+    entry.message === 'HTTP fetch retry'
+  ) {
+    return true;
+  }
+  return (
+    entry.message === 'Category page scraped' ||
+    entry.message === 'Offers page scraped' ||
+    entry.message === 'Category scraped'
+  );
+}
 
 function detectProcessSource(): LogSource {
   const entry = process.argv[1]?.replace(/\\/g, '/') ?? '';
@@ -117,8 +151,27 @@ async function pushToRedis(entry: LogEntry): Promise<void> {
   }
 }
 
+async function incrementMlScrapeCount(): Promise<void> {
+  memoryScrapeCount++;
+
+  const redis = getRedis();
+  if (!redis) return;
+
+  try {
+    if (redis.status !== 'ready') {
+      await redis.connect();
+    }
+    await redis.incr(SCRAPE_COUNT_KEY);
+  } catch {
+    redisFailed = true;
+  }
+}
+
 export async function appendLog(entry: LogEntry): Promise<void> {
   pushToMemory(entry);
+  if (isMlScrapeCountEntry(entry)) {
+    await incrementMlScrapeCount();
+  }
   await pushToRedis(entry);
 }
 
@@ -180,12 +233,56 @@ export async function getLogTotalCount(): Promise<number> {
   return all.length;
 }
 
+export async function countMlScrapeLogs(): Promise<number> {
+  const all = await getMergedLogs();
+  const fromLogs = all.filter(isMlScrapeCountEntry).length;
+  let redisCount: number | null = null;
+
+  const redis = getRedis();
+  if (redis) {
+    try {
+      if (redis.status !== 'ready') {
+        await redis.connect();
+      }
+      const raw = await redis.get(SCRAPE_COUNT_KEY);
+      if (raw != null) {
+        const parsed = Number.parseInt(raw, 10);
+        if (!Number.isNaN(parsed)) redisCount = parsed;
+      }
+    } catch {
+      redisFailed = true;
+    }
+  }
+
+  return Math.max(redisCount ?? 0, memoryScrapeCount, fromLogs);
+}
+
 export async function getRecentLogs(filters: LogFilters = {}): Promise<LogEntry[]> {
   const limit = Math.min(Math.max(filters.limit ?? 200, 1), MAX_LOGS);
   const all = await getMergedLogs();
 
   return all
     .filter((entry) => matchesFilters(entry, filters))
+    .slice(-limit);
+}
+
+export interface MlScrapeLogFilters {
+  since?: string;
+  limit?: number;
+}
+
+export async function getMlScrapeLogs(filters: MlScrapeLogFilters = {}): Promise<LogEntry[]> {
+  const limit = Math.min(Math.max(filters.limit ?? 200, 1), MAX_LOGS);
+  const all = await getMergedLogs();
+
+  return all
+    .filter((entry) => isMlScrapeLogEntry(entry))
+    .filter((entry) => {
+      if (!filters.since) return true;
+      const sinceMs = Date.parse(filters.since);
+      if (Number.isNaN(sinceMs)) return true;
+      return Date.parse(entry.timestamp) > sinceMs;
+    })
     .slice(-limit);
 }
 

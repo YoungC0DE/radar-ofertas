@@ -24,6 +24,7 @@ export interface OfferRecord {
   oldPrice: number | null;
   discount: number | null;
   image: string | null;
+  permalink: string | null;
   affiliateLink: string | null;
   rating: number | null;
   soldQuantity: number | null;
@@ -40,7 +41,8 @@ export interface CreateOfferInput {
   oldPrice: number | null;
   discount: number | null;
   image: string | null;
-  affiliateLink: string;
+  permalink: string | null;
+  affiliateLink: string | null;
   rating: number | null;
   soldQuantity: number | null;
   salesRank: string | null;

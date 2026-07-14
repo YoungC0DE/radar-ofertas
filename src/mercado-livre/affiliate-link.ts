@@ -234,10 +234,24 @@ async function createLinkViaBrowser(permalink: string): Promise<AffiliateLinkRes
   }
 }
 
-export async function generateAffiliateLink(
+export interface AffiliateLinkOptions {
+  /**
+   * Permite abrir o Chromium como fallback. Default `true`. No caminho de envio
+   * passamos `false` para nunca lançar navegador dentro da fila de envio.
+   */
+  allowBrowser?: boolean;
+  /**
+   * Se definido, devolve o link de fallback (permalink + tag) caso a geração
+   * exceda este tempo em ms — evita travar a fila de envio numa sessão ML lenta.
+   */
+  timeoutMs?: number;
+}
+
+async function resolveAffiliateLink(
   permalink: string,
-  mercadoLivreId?: string,
-  minDelayMs?: number,
+  mercadoLivreId: string | undefined,
+  minDelayMs: number | undefined,
+  allowBrowser: boolean,
 ): Promise<string> {
   if (mercadoLivreId) {
     const cached = linkCache.get(mercadoLivreId);
@@ -256,7 +270,7 @@ export async function generateAffiliateLink(
     return link;
   }
 
-  if (env.ML_USE_BROWSER_FALLBACK) {
+  if (allowBrowser && env.ML_USE_BROWSER_FALLBACK) {
     const browserResult = await createLinkViaBrowser(permalink);
     if (browserResult) {
       const link = browserResult.shortUrl ?? browserResult.url;
@@ -269,4 +283,37 @@ export async function generateAffiliateLink(
   const fallback = fallbackAffiliateLink(permalink).url;
   if (mercadoLivreId) linkCache.set(mercadoLivreId, fallback);
   return fallback;
+}
+
+export async function generateAffiliateLink(
+  permalink: string,
+  mercadoLivreId?: string,
+  minDelayMs?: number,
+  options: AffiliateLinkOptions = {},
+): Promise<string> {
+  const { allowBrowser = true, timeoutMs } = options;
+
+  if (!timeoutMs) {
+    return resolveAffiliateLink(permalink, mercadoLivreId, minDelayMs, allowBrowser);
+  }
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutFallback = new Promise<string>((resolve) => {
+    timer = setTimeout(() => {
+      logger.warn(
+        { permalink, timeoutMs, affiliate_source: 'fallback-timeout' },
+        'Geração de link excedeu o tempo limite — usando fallback para não travar o envio',
+      );
+      resolve(fallbackAffiliateLink(permalink).url);
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([
+      resolveAffiliateLink(permalink, mercadoLivreId, minDelayMs, allowBrowser),
+      timeoutFallback,
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }

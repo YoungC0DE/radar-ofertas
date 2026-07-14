@@ -1,17 +1,11 @@
 import { env } from '../config/env.js';
-import {
-  getAffiliateLinkBacklogDelayMinutesCached,
-  getAffiliateLinkBacklogThresholdCached,
-  getAffiliateLinkDelayMsCached,
-  getSearchLimit,
-} from '../config/queue-config-store.js';
+import { getSearchLimit } from '../config/queue-config-store.js';
 import { calculateOfferScore, getRuntimeScoreConfig } from '../config/score-config.js';
-import { buildAffiliateLink, iterateScrapedPages } from '../mercado-livre/index.js';
+import { iterateScrapedPages } from '../mercado-livre/index.js';
 import { enqueueOfferSend, getSenderQueue, isRedisEnabled } from '../queue/index.js';
 import { logger } from '../utils/logger.js';
 import { formatOfferMessageFromTemplate, loadMessageTemplate, loadPlaceholderVisibility } from './message-template.js';
 import {
-  countOffers,
   createOffer,
   deletePendingOffers,
   findOfferById,
@@ -19,27 +13,7 @@ import {
   offerExists,
   sentOfferExistsByTitleAndPrice,
 } from './repository.js';
-import type { OfferRecord, RawOffer, ScoredOffer } from './types.js';
-
-async function resolveAffiliateLinkDelayMs(): Promise<number> {
-  const pending = await countOffers('pending');
-  const threshold = getAffiliateLinkBacklogThresholdCached();
-  if (pending >= threshold) {
-    const delayMs = getAffiliateLinkBacklogDelayMinutesCached() * 60 * 1000;
-    logger.info({ pending, threshold, delayMs }, 'Pending backlog — slowing affiliate link calls');
-    return delayMs;
-  }
-  return getAffiliateLinkDelayMsCached();
-}
-
-async function scoreOffer(offer: RawOffer): Promise<ScoredOffer> {
-  const linkDelayMs = await resolveAffiliateLinkDelayMs();
-  return {
-    ...offer,
-    score: calculateOfferScore(offer),
-    affiliateLink: await buildAffiliateLink(offer.permalink, offer.mercadoLivreId, linkDelayMs),
-  };
-}
+import type { OfferRecord, RawOffer } from './types.js';
 
 export async function formatOfferMessage(offer: OfferRecord): Promise<string> {
   const [template, visibility] = await Promise.all([
@@ -51,35 +25,39 @@ export async function formatOfferMessage(offer: OfferRecord): Promise<string> {
 
 export async function processOffer(rawOffer: RawOffer): Promise<string | null> {
   const scoreConfig = getRuntimeScoreConfig();
-  const scored = await scoreOffer(rawOffer);
+  const score = calculateOfferScore(rawOffer);
 
-  if (scored.score < scoreConfig.minScore) {
-    logger.debug({ mercadoLivreId: scored.mercadoLivreId, score: scored.score }, 'Below min score');
+  if (score < scoreConfig.minScore) {
+    logger.debug({ mercadoLivreId: rawOffer.mercadoLivreId, score }, 'Below min score');
     return null;
   }
 
-  if (await offerExists(scored.mercadoLivreId)) {
-    logger.debug({ mercadoLivreId: scored.mercadoLivreId }, 'Offer already exists');
+  if (await offerExists(rawOffer.mercadoLivreId)) {
+    logger.debug({ mercadoLivreId: rawOffer.mercadoLivreId }, 'Offer already exists');
     return null;
   }
 
-  if (await sentOfferExistsByTitleAndPrice(scored.title, scored.price)) {
-    logger.debug({ title: scored.title, price: scored.price }, 'Duplicate sent offer (same title+price)');
+  if (await sentOfferExistsByTitleAndPrice(rawOffer.title, rawOffer.price)) {
+    logger.debug({ title: rawOffer.title, price: rawOffer.price }, 'Duplicate sent offer (same title+price)');
     return null;
   }
 
+  // Não geramos o link de afiliado aqui. Guardamos o permalink e deixamos o link
+  // nulo — ele é gerado sob demanda na hora do envio (sender), evitando chamadas
+  // ao ML para ofertas que talvez nunca sejam enviadas.
   const offer = await createOffer({
-    mercadoLivreId: scored.mercadoLivreId,
-    title: scored.title,
-    price: scored.price,
-    oldPrice: scored.oldPrice,
-    discount: scored.discount,
-    image: scored.image,
-    affiliateLink: scored.affiliateLink,
-    rating: scored.rating,
-    soldQuantity: scored.soldQuantity,
-    salesRank: scored.salesRank,
-    score: scored.score,
+    mercadoLivreId: rawOffer.mercadoLivreId,
+    title: rawOffer.title,
+    price: rawOffer.price,
+    oldPrice: rawOffer.oldPrice,
+    discount: rawOffer.discount,
+    image: rawOffer.image,
+    permalink: rawOffer.permalink,
+    affiliateLink: null,
+    rating: rawOffer.rating,
+    soldQuantity: rawOffer.soldQuantity,
+    salesRank: rawOffer.salesRank,
+    score,
   });
 
   await enqueueOfferSend(offer.id);

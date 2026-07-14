@@ -121,6 +121,8 @@ async function fetchHtmlWithRetry(url: string): Promise<string> {
         throw new Error(`Blocked or empty HTML for ${url}`);
       }
 
+      logger.info({ url, method: 'http', attempt: attempt + 1 }, 'ML site visit');
+
       return html;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));

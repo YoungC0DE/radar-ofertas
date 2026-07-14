@@ -23,6 +23,7 @@ model Offer {
   oldPrice       Decimal?  @map("old_price") @db.Decimal(12, 2)
   discount       Int?
   image          String?
+  permalink      String?
   affiliateLink  String?   @map("affiliate_link")
   rating         Float?
   soldQuantity   Int?      @map("sold_quantity")

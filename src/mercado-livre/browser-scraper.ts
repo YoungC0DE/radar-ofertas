@@ -89,6 +89,7 @@ export async function fetchCategoryViaBrowser(category: string): Promise<Scraped
     const gotoAndGetHtml = async (url: string): Promise<string> => {
       await page.goto(url, { waitUntil: 'networkidle', timeout: env.ML_HTTP_TIMEOUT_MS });
       await page.waitForTimeout(2500);
+      logger.info({ url, method: 'browser' }, 'ML site visit');
       return page.content();
     };
 
