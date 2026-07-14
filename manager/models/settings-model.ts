@@ -37,6 +37,7 @@ import {
   getWhatsAppSessionStatus,
   type SessionStatus,
 } from './session-model.js';
+import { getWorkerState, type WorkerState } from './process-model.js';
 
 export type SettingsSaveType = 'channel' | 'interval' | 'brand' | 'score' | 'hours' | 'senderDelay' | null;
 
@@ -60,6 +61,7 @@ export interface SettingsData {
   categories: CategoryValidation[];
   mlSession: SessionStatus;
   waSession: SessionStatus;
+  workerState: WorkerState;
   saved: SettingsSaveType;
   error: string | null;
 }
@@ -119,6 +121,7 @@ export async function loadSettingsData(
     categories: env.ML_CATEGORIES.map((category) => validateCategoryConfig(category)),
     mlSession,
     waSession,
+    workerState: getWorkerState(),
     saved,
     error,
   };

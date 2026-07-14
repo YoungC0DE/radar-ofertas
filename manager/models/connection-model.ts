@@ -4,7 +4,7 @@ import {
   persistAffiliateSession,
   type AffiliateLoginSession,
 } from '../../src/mercado-livre/auth.js';
-import { connectWhatsApp } from '../../src/whatsapp/index.js';
+import { connectWhatsApp, disconnectWhatsApp } from '../../src/whatsapp/index.js';
 import { logger } from '../../src/utils/logger.js';
 
 // --- WhatsApp connection flow -------------------------------------------------
@@ -45,9 +45,13 @@ export function startWhatsAppConnection(): WhatsAppConnectState {
       waStatus = 'qr';
     },
   })
-    .then(() => {
+    .then(async () => {
       waStatus = 'connected';
       waQr = null;
+      // O painel só precisa autenticar e persistir as credenciais em disco.
+      // Manter este socket aberto brigaria com o worker (connectionReplaced),
+      // então desconectamos e deixamos o worker ser o único a usar o WhatsApp.
+      await disconnectWhatsApp().catch(() => {});
     })
     .catch((error: unknown) => {
       waStatus = 'error';

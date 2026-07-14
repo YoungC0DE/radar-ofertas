@@ -1,4 +1,4 @@
-import { access } from 'node:fs/promises';
+import { access, rm } from 'node:fs/promises';
 import path from 'node:path';
 import makeWASocket, {
   DisconnectReason,
@@ -50,6 +50,17 @@ export async function hasWhatsAppCredentials(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export async function clearWhatsAppCredentials(): Promise<void> {
+  socket = undefined;
+  isConnecting = false;
+  qrListener = undefined;
+  await rm(env.WHATSAPP_AUTH_PATH, { recursive: true, force: true });
+  logger.warn(
+    { path: env.WHATSAPP_AUTH_PATH },
+    'Credenciais do WhatsApp removidas — escaneie um novo QR para reconectar',
+  );
 }
 
 function resolveNewsletterName(name: unknown): string | undefined {
@@ -133,13 +144,28 @@ async function createSocket(
       isConnecting = false;
 
       const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
-      if (shouldReconnect && allowReconnect) {
+      if (statusCode === DisconnectReason.loggedOut) {
+        // Sessão morta. Sem apagar as credenciais, o Baileys nunca emite um novo
+        // QR (ele insiste no creds.json inválido). Limpamos para permitir re-scan.
+        logger.error('WhatsApp logged out — limpando credenciais para permitir novo QR');
+        void clearWhatsAppCredentials();
+        return;
+      }
+
+      if (statusCode === DisconnectReason.connectionReplaced) {
+        // Outro socket assumiu a sessão (mesma conta em outro processo).
+        // Reconectar só reinicia o ping-pong — então paramos aqui.
+        allowReconnect = false;
+        logger.error(
+          'WhatsApp: outra sessão assumiu a conexão (connectionReplaced) — não vou reconectar. Rode apenas UM processo com WhatsApp por vez.',
+        );
+        return;
+      }
+
+      if (allowReconnect) {
         logger.warn('WhatsApp disconnected, reconnecting in 3s...');
         setTimeout(() => void connectWhatsApp(), 3000);
-      } else {
-        logger.error('WhatsApp logged out — scan QR again');
       }
     }
   });
@@ -177,10 +203,21 @@ export async function connectWhatsApp(options?: ConnectWhatsAppOptions): Promise
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('WhatsApp connection timeout')), 120_000);
 
-    sock.ev.on('connection.update', ({ connection }: ConnectionUpdateEvent) => {
+    sock.ev.on('connection.update', ({ connection, lastDisconnect }: ConnectionUpdateEvent) => {
       if (connection === 'open') {
         clearTimeout(timeout);
         resolve(sock);
+        return;
+      }
+
+      if (connection === 'close') {
+        const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
+        // Logout with stale creds never yields a QR; fail fast so callers (ex.: o
+        // painel) possam limpar e reiniciar em vez de travar 120s no timeout.
+        if (statusCode === DisconnectReason.loggedOut) {
+          clearTimeout(timeout);
+          reject(new Error('WhatsApp logged out — credenciais inválidas, reconecte para novo QR'));
+        }
       }
     });
   });

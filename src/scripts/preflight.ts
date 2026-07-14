@@ -3,11 +3,6 @@ import { prisma } from '../database/client.js';
 import { validateCategoryConfig } from '../mercado-livre/category-url.js';
 import { hasValidSession, loadSessionMeta, loadStorageState } from '../mercado-livre/session.js';
 import { getCollectorQueue, isRedisEnabled } from '../queue/index.js';
-import {
-  hasWhatsAppCredentials,
-  isNewsletterChannelId,
-  isPlaceholderChannelId,
-} from '../whatsapp/index.js';
 import { formatIsoInTimezone } from '../utils/datetime.js';
 
 export type PreflightProfile = 'all' | 'collector' | 'worker' | 'manager';
@@ -115,56 +110,6 @@ async function checkAffiliateTag(): Promise<PreflightItem> {
   return { ok: true, label: 'Tag afiliado', detail: tag };
 }
 
-async function checkWhatsAppAuth(): Promise<PreflightItem> {
-  if (!(await hasWhatsAppCredentials())) {
-    return {
-      ok: false,
-      label: 'WhatsApp',
-      detail: 'Sem credenciais salvas',
-      fix: 'npm run wa:login',
-    };
-  }
-
-  return {
-    ok: true,
-    label: 'WhatsApp',
-    detail: `Auth em ${env.WHATSAPP_AUTH_PATH}`,
-  };
-}
-
-async function checkWhatsAppChannel(): Promise<PreflightItem> {
-  const channelId = env.WHATSAPP_CHANNEL_ID;
-
-  if (!channelId) {
-    return {
-      ok: false,
-      label: 'Canal WhatsApp',
-      detail: 'WHATSAPP_CHANNEL_ID vazio',
-      fix: 'npm run wa:channel -- "https://whatsapp.com/channel/SEU_CODIGO"',
-    };
-  }
-
-  if (!isNewsletterChannelId(channelId)) {
-    return {
-      ok: false,
-      label: 'Canal WhatsApp',
-      detail: 'ID deve terminar com @newsletter',
-      fix: 'npm run wa:channel -- "https://whatsapp.com/channel/SEU_CODIGO"',
-    };
-  }
-
-  if (isPlaceholderChannelId(channelId)) {
-    return {
-      ok: false,
-      label: 'Canal WhatsApp',
-      detail: 'ID parece placeholder',
-      fix: 'npm run wa:channel -- "https://whatsapp.com/channel/SEU_CODIGO"',
-    };
-  }
-
-  return { ok: true, label: 'Canal WhatsApp', detail: channelId };
-}
-
 async function checkCategories(): Promise<PreflightItem> {
   const invalid = env.ML_CATEGORIES
     .map((category) => validateCategoryConfig(category))
@@ -202,11 +147,6 @@ async function runChecks(profile: PreflightProfile): Promise<PreflightItem[]> {
   if (profile === 'all' || profile === 'collector') {
     items.push(await checkMercadoLivre());
     items.push(await checkAffiliateTag());
-  }
-
-  if (profile === 'all' || profile === 'worker') {
-    items.push(await checkWhatsAppAuth());
-    items.push(await checkWhatsAppChannel());
   }
 
   return items;
