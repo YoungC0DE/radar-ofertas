@@ -78,7 +78,7 @@ Quadro de tarefas do projeto **Radar Ofertas**. Atualizar conforme o desenvolvim
 
 - [x] Testes unitários para `parser.ts`, `category-url.ts` e `message-template.ts`
 - [x] Script `preflight.ts` com profiles (collector, worker, manager)
-- [x] Script `up.ts` — orquestra collector + worker + manager
+- [x] Script `up.ts` — orquestra collector + manager (worker via painel)
 - [x] Janela operacional de envio (`sender-schedule.ts` + `APP_TIMEZONE`)
 - [x] `REDIS_ENABLED=false` para dev sem Redis
 
@@ -169,11 +169,12 @@ Quadro de tarefas do projeto **Radar Ofertas**. Atualizar conforme o desenvolvim
 ### Comandos úteis
 
 ```bash
-npm run up          # sobe tudo (collector + worker + manager)
+npm run up          # collector + manager (worker via painel)
 npm run check       # valida ambiente
 npm run ml:login    # login afiliado (navegador visível)
 npm run wa:login    # login WhatsApp (QR)
 npm run manager     # painel admin
+npm run worker      # envio WhatsApp (ou iniciar via painel)
 npm run test        # testes unitários
 npm run build       # verificar TypeScript
 ```

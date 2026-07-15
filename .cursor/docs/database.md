@@ -37,13 +37,18 @@ Configuração runtime editável pelo manager. Chave primária: `key` (string).
 | `operatingHoursStart` | Int — hora início janela (0–23) |
 | `operatingHoursEnd` | Int — hora fim janela (0 = 24:00) |
 | `searchLimit` | Int — limite de produtos por coleta |
+| `affiliateLinkDelayMs` | Int — delay entre gerações de link afiliado |
+| `affiliateLinkBacklogDelayMinutes` | Int — backoff quando há backlog |
+| `affiliateLinkBacklogThreshold` | Int — quantidade de pendentes para ativar backoff |
+| `mlCustomSources` | JSON — URLs customizadas de coleta |
+| `mlEnvSourceFlags` | JSON — ativar/desativar categorias do `.env` |
 
 ## Comandos
 
 ```bash
 npm run migrate          # Aplica migrations em dev
 npm run migrate:deploy   # Aplica em produção
-npm run prisma:studio    # UI visual
+npx prisma studio        # UI visual (não há script npm dedicado)
 ```
 
 ## Acesso ao banco
@@ -52,6 +57,7 @@ npm run prisma:studio    # UI visual
 |---------|--------|
 | Ofertas | `offers/repository.ts` |
 | Settings (score, brand, filas, template) | `config/*-config*.ts`, `queue-config-store.ts`, `offers/message-template.ts`, `whatsapp/channel-cache.ts` |
+| Fontes ML | `config/ml-sources-config.ts` |
 
 Nunca chamar `prisma` diretamente de jobs ou módulos de scraping.
 

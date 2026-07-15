@@ -25,8 +25,9 @@ Painel admin server-rendered em `manager/`. Entry: `npm run manager` → `http:/
 |------|--------|
 | `/manager` | Dashboard (status, coleta manual, envio imediato) |
 | `/manager/offers` | Lista e detalhe de ofertas |
-| `/manager/settings` | Score, brand, horários, intervalos, canal |
+| `/manager/settings` | Score, brand, horários, fontes ML, conexões WA/ML, worker |
 | `/manager/template` | Editor de template WhatsApp |
+| `/manager/logs` | Logs da aplicação |
 | `/manager/health` | Health check |
 
 ## Regras

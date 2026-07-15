@@ -18,33 +18,42 @@ cp .env.example .env
 # Editar .env com valores reais
 
 docker compose up -d postgres redis
-npm run migrate
+npm run migrate:deploy
 docker compose up -d
 npm run manager   # opcional — painel admin
 ```
 
 ## Autenticação WhatsApp
 
+Via painel (recomendado em dev):
+
+1. `npm run up` ou `npm run manager`
+2. Settings → Conectar WhatsApp → escanear QR
+3. Iniciar worker em Settings → Worker de envio
+
+Via CLI:
+
 ```bash
 npm run wa:login
 ```
 
-Ou via worker: `docker compose logs -f worker` e escanear QR. Sessão persistida em `./data/auth_info_baileys`.
+Ou via worker Docker: `docker compose logs -f worker` e escanear QR. Sessão persistida em `./data/auth_info_baileys`.
 
 ## Autenticação Mercado Livre (afiliado)
 
-Executar **no host** (navegador visível):
+Via painel (recomendado):
+
+1. Settings → Conectar Mercado Livre
+2. Login manual no navegador aberto
+3. Clicar em "Salvar sessão"
+
+Via CLI (no host, navegador visível):
 
 ```bash
 npm run ml:login
 ```
 
-1. Navegador abre o portal de afiliados.
-2. Faça login manualmente.
-3. Quando estiver no Gerador de Links, pressione **Enter** no terminal para salvar a sessão.
-4. Sessão salva em `./data/ml_auth/` (montado no container via volume `./data`).
-
-Repetir quando links de afiliado falharem (cookie expirado).
+Sessão salva em `./data/ml_auth/` (montado no container via volume `./data`). Repetir quando links de afiliado falharem (cookie expirado).
 
 ## Variáveis obrigatórias
 
@@ -64,19 +73,18 @@ O `Dockerfile` usa `node:22-bookworm-slim` com Chromium instalado para fallback 
 
 - Coleta HTTP funciona sem browser na maioria dos casos.
 - Fallback Playwright disponível no container `app`.
-- `ml:login` recomendado no host (requer navegador visível).
+- Login ML recomendado no host ou via painel (requer navegador visível).
 
 ## Local (sem Docker)
 
 ```bash
 # Infra
-docker compose up postgres redis
+docker compose up -d postgres redis
 
-# Setup sessões (uma vez)
-npm run ml:login
-npm run wa:login
+# Setup
+npm run check
 
-# Tudo de uma vez
+# Collector + manager (worker via painel)
 npm run up
 
 # Ou separado:
@@ -89,7 +97,7 @@ npm run manager   # painel
 
 | Script | Descrição |
 |--------|-----------|
-| `up` | Sobe collector + worker + manager (com preflight) |
+| `up` | Sobe collector + manager (com preflight) |
 | `check` | Preflight — valida ambiente |
 | `setup` | Preflight + guia de setup |
 | `dev` | Collector + fila de coleta |

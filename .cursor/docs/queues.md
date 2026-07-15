@@ -15,18 +15,21 @@ Intervalos e horários lidos de `queue-config-store.ts` (tabela `settings` → c
 
 | Parâmetro | Default ENV | Editável no manager |
 |-----------|-------------|---------------------|
-| `collectorIntervalMinutes` | 15 | ✅ |
-| `senderDelayMinutes` | 15 | ✅ |
-| `operatingHoursStart` | 9 | ✅ |
-| `operatingHoursEnd` | 0 (24:00) | ✅ |
-| `searchLimit` | `ML_SEARCH_LIMIT` (50) | ✅ |
+| `collectorIntervalMinutes` | 15 | ✅ Settings |
+| `senderDelayMinutes` | 15 | ✅ Settings |
+| `operatingHoursStart` | 9 | ✅ Settings |
+| `operatingHoursEnd` | 0 (24:00) | ✅ Settings |
+| `searchLimit` | `ML_SEARCH_LIMIT` (50) | ✅ Ofertas |
+| `affiliateLinkDelayMs` | 500 | ✅ Ofertas |
+| `affiliateLinkBacklogDelayMinutes` | 2 | ✅ Ofertas |
+| `affiliateLinkBacklogThreshold` | 5 | ✅ Ofertas |
 | `minScore` | 50 | via score settings |
 | `senderConcurrency` | 1 | apenas ENV |
 
 ## Fluxo
 
 ```
-Categorias (ML_CATEGORIES)
+Fontes ML (.env + settings)
     ↓
 jobs/collector
     ↓
@@ -53,9 +56,10 @@ message-template + whatsapp/ → canal WhatsApp
 
 1. Recebe `{ offerId }` da fila.
 2. Verifica se oferta existe e `sent_at IS NULL`.
-3. Formata mensagem via `message-template` e publica via Baileys.
-4. Marca `sent_at` e aplica delay entre envios.
-5. Fora da janela operacional (`APP_TIMEZONE`): job fica delayed até horário válido.
+3. Gera link afiliado se ainda não existir.
+4. Formata mensagem via `message-template` e publica via Baileys.
+5. Marca `sent_at` e aplica delay entre envios.
+6. Fora da janela operacional (`APP_TIMEZONE`): job fica delayed até horário válido.
 
 ## Desabilitar Redis
 

@@ -7,33 +7,49 @@ Domínio `src/mercado-livre/`. Coleta via scraping; links de afiliado via sessã
 | Subsistema | Método principal | Fallback | Login |
 |------------|------------------|----------|-------|
 | Coleta de produtos | HTTP + parser HTML/JSON | Playwright | Não |
-| Links de afiliado | HTTP `createLink` + cookies | Playwright link-builder | Sim (`ml:login`) |
+| Links de afiliado | HTTP `createLink` + cookies | Playwright link-builder | Sim (painel ou `ml:login`) |
+
+## Fontes de coleta
+
+Categorias vêm de duas origens, gerenciadas por `config/ml-sources-config.ts`:
+
+1. **`ML_CATEGORIES` no `.env`** — IDs ou URLs; ativar/desativar no manager.
+2. **URLs customizadas** — adicionadas em Settings, persistidas em `mlCustomSources`.
+
+Tipos suportados: listagens de categoria (`lista.mercadolivre.com.br`), página de ofertas (`/ofertas`) e URLs completas.
 
 ## Coleta de produtos
 
 ### Fluxo HTTP (principal)
 
 ```
-ML_CATEGORIES
+Fontes configuradas
     ↓
-buildCategoryListingUrl()  → lista.mercadolivre.com.br/_CategoryId_{id}
+buildCategoryListingUrl() / normalizeOffersListingUrl()
     ↓
-fetch() com User-Agent configurável
+fetch() com User-Agent configurável (+ warm-up de cookies)
     ↓
-parser.ts                  → JSON embutido ou Cheerio (.ui-search-layout__item)
+parser.ts                  → JSON embutido ou Cheerio
     ↓
-ScrapedItem[] → RawOffer
+ScrapedItem[] → RawOffer (com paginação)
 ```
 
 `ML_CATEGORIES` aceita:
 - IDs de categoria: `MLB1648` → URL `https://lista.mercadolivre.com.br/_CategoryId_MLB1648`
 - URLs completas: `https://lista.mercadolivre.com.br/notebooks`
+- Página de ofertas: `https://www.mercadolivre.com.br/ofertas`
+
+### Paginação
+
+- Categorias: offset `_Desde_` em `category-url.ts`
+- Ofertas: parâmetro `?page=` com detecção de páginas vazias consecutivas
+- Limite total respeita `searchLimit` (settings) / `ML_SEARCH_LIMIT` (ENV)
 
 ### Fluxo Playwright (fallback)
 
 Ativado quando `ML_USE_BROWSER_FALLBACK=true` e HTTP falha (403, captcha, HTML vazio, zero produtos).
 
-Arquivo: `browser-scraper.ts` — Chromium headless, mesmo parser.
+Arquivo: `browser-scraper.ts` — Chromium headless, mesmo parser e paginação.
 
 ## Sessão de afiliado (estilo Baileys)
 
@@ -45,7 +61,9 @@ ml_auth/
 └── session-meta.json    → lastLoginAt, lastRefreshAt, lastError
 ```
 
-### Primeiro login
+### Login
+
+Via painel (Settings → Conectar ML) ou CLI:
 
 ```bash
 npm run ml:login
@@ -53,7 +71,7 @@ npm run ml:login
 
 1. Abre navegador visível (`headless: false`).
 2. Usuário faz login no portal de afiliados manualmente.
-3. Usuário pressiona Enter no terminal quando o login estiver concluído.
+3. Salva sessão quando o portal estiver pronto.
 4. Sessão salva em `storage-state.json`.
 
 Repetir quando links deixarem de funcionar (sessão expirada).
@@ -62,13 +80,16 @@ Repetir quando links deixarem de funcionar (sessão expirada).
 
 Ordem de tentativa em `affiliate-link.ts`:
 
-1. **HTTP** — POST nos endpoints internos `createLink` com cookies da sessão + `AFFILIATE_CONFIG.tag`.
-2. **Playwright** — preenche link-builder no portal, extrai URL gerada, atualiza sessão.
-3. **Fallback** — adiciona `matt_tool`/`matt_word` na URL (sem encurtamento).
+1. **Cache** — link já gerado para o `mercado_livre_id`.
+2. **HTTP** — POST nos endpoints internos `createLink` com cookies da sessão + `AFFILIATE_CONFIG.tag`.
+3. **Playwright** — preenche link-builder no portal, extrai URL gerada, atualiza sessão.
+4. **Fallback** — adiciona `matt_tool`/`matt_word` na URL (sem encurtamento).
 
-Retorno preferido: link encurtado `mercadolivre.com/sec/...`.
+Retorno preferido: link encurtado `mercadolivre.com/sec/...` ou `meli.la/...`.
 
-`buildAffiliateLink()` é **async** — chamado em `offers/service.ts` durante `processOffer()`.
+`buildAffiliateLink()` é **async** — chamado em `offers/service.ts` e `jobs/sender.ts`.
+
+Rate limit configurável via `affiliateLinkDelayMs` e backoff quando há backlog de pendentes.
 
 ## Variáveis de ambiente
 
@@ -87,15 +108,15 @@ Retorno preferido: link encurtado `mercadolivre.com/sec/...`.
 
 ```typescript
 searchConfiguredCategories(): Promise<RawOffer[]>
-buildAffiliateLink(permalink: string): Promise<string>
+iterateScrapedPages(category: string): AsyncGenerator<RawOffer[]>
+buildAffiliateLink(permalink: string, mercadoLivreId?: string): Promise<string>
 ```
 
 ## Limitações conhecidas
 
 - Endpoint `createLink` é interno e pode mudar sem aviso.
 - Seletores do link-builder podem quebrar com redesign do portal.
-- Paginação não implementada — apenas primeira página por categoria.
-- Sessão expira — requer `npm run ml:login` periodicamente.
+- Sessão expira — requer novo login periodicamente.
 - Scraping sujeito a anti-bot (403, captcha).
 
 ## Arquivos por responsabilidade
@@ -103,12 +124,13 @@ buildAffiliateLink(permalink: string): Promise<string>
 | Arquivo | Responsabilidade |
 |---------|------------------|
 | `parser.ts` | Extrair produtos de HTML (JSON embutido + Cheerio) |
-| `http-scraper.ts` | Fetch de listagens |
+| `http-scraper.ts` | Fetch de listagens com paginação e retry |
 | `browser-scraper.ts` | Fallback Playwright para coleta |
-| `session.ts` | Load/save cookies, validação de sessão |
-| `affiliate-link.ts` | Geração de links (HTTP → browser → fallback) |
+| `category-url.ts` | Validação de URLs, paginação, tipos de listagem |
+| `session.ts` | Load/save cookies, validação e refresh de sessão |
+| `affiliate-link.ts` | Geração de links (cache → HTTP → browser → fallback) |
 | `auth.ts` | Fluxo de login manual |
 
 ## Para o próximo agente
 
-Prioridades no board: validar endpoint `createLink` real via DevTools, ajustar seletores do link-builder, implementar paginação e retry com backoff.
+Prioridades no board: validar endpoint `createLink` real via DevTools, ajustar seletores do link-builder.

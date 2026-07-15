@@ -4,11 +4,11 @@ Bot automatizado: **Mercado Livre → ofertas → WhatsApp Channel**, com painel
 
 ## Escopo
 
-- Coletar produtos de categorias configuradas via **scraping híbrido** (HTTP + Playwright fallback).
+- Coletar produtos de categorias/URLs configuradas via **scraping híbrido** (HTTP + Playwright fallback).
 - Aplicar regras de negócio (score configurável, filtros, deduplicação).
 - Gerar links de afiliado encurtados com **sessão persistida** (estilo Baileys).
 - Publicar ofertas qualificadas em canal WhatsApp (template editável).
-- Gerenciar tudo via **manager** web (`/manager`).
+- Gerenciar tudo via **manager** web (`/manager`): settings, conexões, worker, logs.
 
 **Fora de escopo:** API Oficial do Mercado Livre para coleta ou geração de links de afiliado.
 
@@ -19,12 +19,13 @@ Bot automatizado: **Mercado Livre → ofertas → WhatsApp Channel**, com painel
 | Scraping híbrido (HTTP + Playwright) | ✅ Adotada |
 | Sessão de afiliado persistida em arquivos locais | ✅ Adotada |
 | Config runtime em tabela `settings` (editável pelo manager) | ✅ Adotada |
+| Worker gerenciado pelo painel (evita conflito WhatsApp) | ✅ Adotada |
 | API Oficial do Mercado Livre | ❌ Descartada |
 
 ### Dois subsistemas no domínio `mercado-livre/`
 
-1. **Coleta de produtos** — páginas públicas, sem login. HTTP primeiro; Playwright só em fallback.
-2. **Links de afiliado** — requer sessão autenticada. HTTP com cookies salvos; Playwright para login (`ml:login`) e fallback de geração.
+1. **Coleta de produtos** — páginas públicas, sem login. HTTP primeiro; Playwright só em fallback. Paginação implementada.
+2. **Links de afiliado** — requer sessão autenticada. HTTP com cookies salvos; Playwright para login e fallback de geração.
 
 ## Estrutura (por domínio)
 
@@ -37,7 +38,8 @@ Bot automatizado: **Mercado Livre → ofertas → WhatsApp Channel**, com painel
 | `env.ts` | Variáveis de ambiente (Zod) |
 | `score-config.ts` | Regras de pontuação (DB + fallback ENV) |
 | `brand-config.ts` | Nome/logo do painel |
-| `queue-config-store.ts` | Intervalos, horários, search limit |
+| `queue-config-store.ts` | Intervalos, horários, search limit, delays de afiliado |
+| `ml-sources-config.ts` | Fontes de coleta (.env + custom) |
 
 ### Módulo `mercado-livre/`
 
@@ -46,24 +48,24 @@ mercado-livre/
 ├── index.ts           → exports públicos
 ├── types.ts           → tipos internos
 ├── parser.ts          → parse HTML/JSON embutido
-├── http-scraper.ts    → coleta via fetch (principal)
+├── http-scraper.ts    → coleta via fetch (principal, com paginação)
 ├── browser-scraper.ts → coleta via Playwright (fallback)
-├── category-url.ts    → validação de categorias/URLs
+├── category-url.ts    → validação de categorias/URLs e paginação
 ├── session.ts         → persistência de sessão afiliado
-├── affiliate-link.ts  → geração de link (HTTP → browser → fallback)
+├── affiliate-link.ts  → geração de link (cache → HTTP → browser → fallback)
 └── auth.ts            → login manual via Playwright
 ```
 
 ### Manager (`manager/`)
 
-Painel MVC server-rendered: dashboard, ofertas, settings, template WhatsApp.
+Painel MVC server-rendered: dashboard, ofertas, settings (conexões + worker), template, logs.
 
 ## Fluxo da aplicação
 
 ```
-Categorias configuradas (ML_CATEGORIES)
+Fontes ML (.env + settings)
         ↓
-HTTP scrape — ou Playwright se bloqueado
+HTTP scrape — ou Playwright se bloqueado (com paginação)
         ↓
 Parse HTML/JSON → RawOffer
         ↓
@@ -75,7 +77,7 @@ Deduplicação (mercado_livre_id unique + title+price)
         ↓
 Persistência + enfileiramento (PostgreSQL + BullMQ)
         ↓
-Envio para canal WhatsApp (template + Baileys)
+Envio para canal WhatsApp (template + Baileys via worker)
 ```
 
 ## Processos
@@ -86,7 +88,7 @@ Envio para canal WhatsApp (template + Baileys)
 | `worker.ts` | `npm run worker` | Sender — conexão WhatsApp, processa fila `offer-sender` |
 | `ml-login.ts` | `npm run ml:login` | Login afiliado ML — salva sessão em `ML_AUTH_PATH` |
 | `manager/server.ts` | `npm run manager` | Painel web em `/manager` |
-| `scripts/up.ts` | `npm run up` | Sobe collector + worker + manager localmente |
+| `scripts/up.ts` | `npm run up` | Sobe collector + manager (worker via painel) |
 
 ## Integrações
 

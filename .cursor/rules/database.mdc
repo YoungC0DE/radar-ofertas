@@ -21,7 +21,7 @@ alwaysApply: false
 
 ## Chaves `settings` conhecidas
 
-`scoreConfig`, `brandSettings`, `messageTemplate`, `messageTemplatePlaceholders`, `whatsappChannelCache`, `senderDelayMinutes`, `collectorIntervalMinutes`, `operatingHoursStart`, `operatingHoursEnd`, `searchLimit`
+`scoreConfig`, `brandSettings`, `messageTemplate`, `messageTemplatePlaceholders`, `whatsappChannelCache`, `senderDelayMinutes`, `collectorIntervalMinutes`, `operatingHoursStart`, `operatingHoursEnd`, `searchLimit`, `affiliateLinkDelayMs`, `affiliateLinkBacklogDelayMinutes`, `affiliateLinkBacklogThreshold`, `mlCustomSources`, `mlEnvSourceFlags`
 
 ```bash
 npm run migrate        # dev

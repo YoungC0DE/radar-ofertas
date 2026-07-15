@@ -6,14 +6,17 @@ Conexão, eventos, reconexão e `sendOffer()` em `src/whatsapp/index.ts`.
 - Canal: `WHATSAPP_CHANNEL_ID`
 - Cache de canal: `whatsapp/channel-cache.ts` (nome, invite link)
 - Formatação: `offers/message-template.ts` (template editável no manager)
-- Apenas `worker.ts` instancia conexão Baileys
+- Apenas `worker.ts` mantém conexão Baileys ativa para envio
 
 ## Ferramentas de setup
 
-| Comando | Uso |
-|---------|-----|
-| `npm run wa:login` | Autenticar WhatsApp (QR code) |
-| `npm run wa:channel` | Obter `WHATSAPP_CHANNEL_ID` pelo link de convite do canal |
+| Comando / Painel | Uso |
+|------------------|-----|
+| Settings → Conectar WhatsApp | QR no painel (recomendado) |
+| `npm run wa:login` | Autenticar WhatsApp via CLI |
+| `npm run wa:channel` | Obter `WHATSAPP_CHANNEL_ID` pelo link de convite |
+
+> O painel salva credenciais e desconecta — o worker é iniciado separadamente em Settings → Worker de envio. Dois processos com socket ativo causam `connectionReplaced`.
 
 ## Template de mensagem
 
@@ -43,7 +46,7 @@ offer-sender queue → jobs/sender → formatOfferMessage → sendOffer → cana
 
 | Integração | Pasta de sessão | Setup |
 |------------|-----------------|-------|
-| WhatsApp | `./data/auth_info_baileys` | `npm run wa:login` |
-| ML Afiliado | `./data/ml_auth` | `npm run ml:login` |
+| WhatsApp | `./data/auth_info_baileys` | Painel ou `npm run wa:login` |
+| ML Afiliado | `./data/ml_auth` | Painel ou `npm run ml:login` |
 
 Ambas montadas em `./data` no Docker Compose.

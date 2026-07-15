@@ -13,6 +13,7 @@ src/
 ├── worker.ts           → entry: envio WhatsApp
 ├── ml-login.ts         → entry: login afiliado ML
 ├── config/             → ENV (Zod) + stores de runtime (settings DB)
+│   ├── score-config.ts, brand-config.ts, queue-config-store.ts, ml-sources-config.ts
 ├── whatsapp/           → Baileys (conexão + envio)
 ├── mercado-livre/      → scraping híbrido + sessão afiliado
 ├── offers/             → tipos, persistência, regras de negócio, template
@@ -36,6 +37,7 @@ manager/                → painel web (MVC server-rendered)
 - Regras de negócio de ofertas ficam em `offers/`, nunca em `whatsapp/`, `mercado-livre/` ou `manager/`.
 - Ofertas: acesso ao banco via `offers/repository.ts`.
 - Configuração runtime: `config/*-config*.ts` e `queue-config-store.ts` leem/escrevem tabela `settings` (fallback em ENV).
+- `npm run up` sobe collector + manager; worker iniciado pelo painel (evita conflito de sessão WhatsApp).
 - Processos pesados passam por `queue/` + `jobs/`.
 - `manager/` apenas orquestra UI — reutiliza `src/` para lógica de negócio.
 - Novas features: adicionar ao domínio correto, não criar camada nova.
