@@ -28,6 +28,9 @@ model Offer {
   rating         Float?
   soldQuantity   Int?      @map("sold_quantity")
   salesRank      String?   @map("sales_rank")
+  seller         String?
+  officialStore  Boolean   @default(false) @map("official_store")
+  bestSeller     Boolean   @default(false) @map("best_seller")
   score          Int       @default(0)
   sentAt         DateTime? @map("sent_at")
   createdAt      DateTime  @default(now()) @map("created_at")

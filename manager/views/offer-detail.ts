@@ -18,6 +18,8 @@ export function renderOfferDetail(offer: OfferRecord, messagePreview: string): s
         <dt>Avaliação</dt><dd>${offer.rating != null ? offer.rating.toFixed(1) : '—'}</dd>
         <dt>Vendidos</dt><dd>${offer.soldQuantity ?? '—'}</dd>
         <dt>Ranking</dt><dd>${offer.salesRank ? escapeHtml(offer.salesRank) : '—'}</dd>
+        <dt>Vendedor</dt><dd>${offer.seller ? escapeHtml(offer.seller) : '—'}${offer.officialStore ? ' ✅ Loja oficial' : ''}</dd>
+        <dt>Mais vendido</dt><dd>${offer.bestSeller ? '🏆 Sim' : '—'}</dd>
         <dt>Status</dt><dd>${statusBadge(offer.sentAt)}</dd>
         <dt>Salva em</dt><dd>${formatDate(offer.createdAt, env.APP_TIMEZONE)}</dd>
         <dt>Enviada em</dt><dd>${formatDate(offer.sentAt, env.APP_TIMEZONE)}</dd>

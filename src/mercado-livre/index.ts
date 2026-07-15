@@ -18,10 +18,14 @@ const CATEGORY_CONCURRENCY = 2;
 
 function mapToRawOffer(item: ScrapedItem): RawOffer {
   const oldPrice = item.originalPrice;
+  // O percentual anunciado no card ganha do calculado: o ML trunca a divisão e
+  // recalcular divergia em 1 ponto do que o cliente vê (41% virava 42%).
+  // O fallback também trunca, para seguir a mesma convenção quando não há pill.
   const discount =
-    oldPrice && oldPrice > item.price
-      ? Math.round(((oldPrice - item.price) / oldPrice) * 100)
-      : null;
+    item.discountPercent ??
+    (oldPrice && oldPrice > item.price
+      ? Math.floor(((oldPrice - item.price) / oldPrice) * 100)
+      : null);
 
   return {
     mercadoLivreId: item.id,
@@ -33,6 +37,9 @@ function mapToRawOffer(item: ScrapedItem): RawOffer {
     rating: item.rating,
     soldQuantity: item.soldQuantity,
     salesRank: item.salesRank,
+    seller: item.seller,
+    officialStore: item.officialStore,
+    bestSeller: item.bestSeller,
     permalink: item.permalink,
   };
 }

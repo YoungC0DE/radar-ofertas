@@ -184,6 +184,53 @@ function parseSoldQuantityFromCard(
   return resolveSoldQuantity(undefined, textSources);
 }
 
+/**
+ * O selo divide o mesmo slot (.poly-component__poly-label) com "OFERTA DO DIA" e
+ * "OFERTA IMPERDÍVEL", então filtramos pelo texto em vez de pegar o label cru.
+ */
+const BEST_SELLER_LABEL = /^mais\s+vendido$/i;
+
+function parseBestSellerFromCard(
+  $: cheerio.CheerioAPI,
+  card: cheerio.Cheerio<cheerio.AnyNode>,
+): boolean {
+  let found = false;
+  card.find('.poly-component__poly-label').each((_, element) => {
+    if (BEST_SELLER_LABEL.test($(element).text().trim())) found = true;
+  });
+  return found;
+}
+
+/**
+ * O ML trunca o percentual ("R$ 205,90 -> R$ 119,90" = 41,77% vira "41% OFF"),
+ * então preferimos o valor anunciado a recalcular — senão a mensagem diverge em
+ * 1 ponto do que o cliente vê na página. O pill também é usado para frete
+ * ("Chegará grátis amanhã"), daí o escopo em .poly-price__labels.
+ */
+function parseDiscountPercentFromCard(card: cheerio.Cheerio<cheerio.AnyNode>): number | null {
+  const pill = card.find('.poly-price__labels .polylabel-pill').first().text().trim();
+  const match = pill.match(/(\d{1,3})\s*%/);
+  if (!match?.[1]) return null;
+
+  const value = Number.parseInt(match[1], 10);
+  return Number.isFinite(value) && value > 0 && value <= 100 ? value : null;
+}
+
+function parseSellerFromCard(card: cheerio.Cheerio<cheerio.AnyNode>): {
+  seller: string | null;
+  officialStore: boolean;
+} {
+  const el = card.find('.poly-component__seller').first();
+  if (!el.length) return { seller: null, officialStore: false };
+
+  // O selo de loja oficial é um <svg aria-label="Loja oficial"> dentro do span;
+  // text() já o ignora, sobrando só o nome do vendedor.
+  const officialStore = el.find('svg[aria-label="Loja oficial"]').length > 0;
+  const seller = el.text().replace(/\s+/g, ' ').replace(/^por\s+/i, '').trim();
+
+  return { seller: seller || null, officialStore };
+}
+
 function extractSalesRankFromRecord(raw: Record<string, unknown>): string | null {
   for (const value of Object.values(raw)) {
     if (typeof value === 'string') {
@@ -267,6 +314,9 @@ function mapJsonItem(raw: Record<string, unknown>): ScrapedItem | null {
     parseSalesRankText(typeof raw.subtitle === 'string' ? raw.subtitle : undefined) ??
     extractSalesRankFromRecord(raw);
 
+  // seller/officialStore/bestSeller só têm origem conhecida no HTML do card
+  // (.poly-component__seller e .poly-component__poly-label). O formato dos blobs
+  // JSON do ML não foi verificado, então não chutamos nomes de chave aqui.
   return {
     id,
     title,
@@ -277,6 +327,10 @@ function mapJsonItem(raw: Record<string, unknown>): ScrapedItem | null {
     soldQuantity,
     salesRank,
     rating,
+    seller: null,
+    officialStore: false,
+    bestSeller: false,
+    discountPercent: null,
   };
 }
 
@@ -354,6 +408,9 @@ function parseWithCheerio(html: string): ScrapedItem[] {
     const soldQuantity = parseSoldQuantityFromCard($, card);
     const rating = parseRating(ratingEl.text().trim() || card.find('[aria-label*="estrela"]').attr('aria-label'));
     const salesRank = parseSalesRankFromCard($, card);
+    const { seller, officialStore } = parseSellerFromCard(card);
+    const bestSeller = parseBestSellerFromCard($, card);
+    const discountPercent = parseDiscountPercentFromCard(card);
 
     items.push({
       id,
@@ -365,6 +422,10 @@ function parseWithCheerio(html: string): ScrapedItem[] {
       soldQuantity,
       salesRank,
       rating,
+      seller,
+      officialStore,
+      bestSeller,
+      discountPercent,
     });
   });
 

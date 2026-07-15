@@ -18,10 +18,14 @@ const sampleOffer: OfferRecord = {
   oldPrice: 149.9,
   discount: 33,
   image: null,
+  permalink: 'https://www.mercadolivre.com.br/p/MLB123',
   affiliateLink: 'https://mercadolivre.com/sec/abc',
   rating: 4.5,
   soldQuantity: 200,
   salesRank: '4º em Mouses Gamer',
+  seller: 'Mega Mamute',
+  officialStore: true,
+  bestSeller: true,
   score: 80,
   sentAt: null,
   createdAt: new Date('2026-01-01'),
@@ -30,7 +34,7 @@ const sampleOffer: OfferRecord = {
 describe('message-template', () => {
   it('substitui todos os placeholders', () => {
     const template =
-      '{{store}}\n{{name}}\n{{price}}\n{{avalia}}\n{{qty_sold}}\n{{top_sold}}\n{{product_link}}';
+      '{{brand}}\n{{name}}\n{{price}}\n{{avalia}}\n{{qty_sold}}\n{{top_sold}}\n{{store}}\n{{best_seller}}\n{{product_link}}';
     const result = formatOfferMessageFromTemplate(template, sampleOffer);
 
     assert.match(result, /Mouse Gamer RGB/);
@@ -39,6 +43,41 @@ describe('message-template', () => {
     assert.match(result, /200 vendidos/);
     assert.match(result, /4º em Mouses Gamer/);
     assert.match(result, /https:\/\/mercadolivre\.com\/sec\/abc/);
+  });
+
+  it('{{store}} traz o vendedor do ML e {{brand}} a marca do canal', () => {
+    const result = formatOfferMessageFromTemplate('{{brand}} | {{store}}', sampleOffer);
+    assert.equal(result, 'Radar Ofertas | Mega Mamute ✅ Loja oficial');
+  });
+
+  it('{{store}} omite o selo quando não é loja oficial', () => {
+    const offer = { ...sampleOffer, officialStore: false };
+    assert.equal(formatOfferMessageFromTemplate('{{store}}', offer), 'Mega Mamute');
+  });
+
+  it('linha do vendedor some quando o card não traz seller', () => {
+    const offer = { ...sampleOffer, seller: null, officialStore: false };
+    const result = formatOfferMessageFromTemplate('{{name}}\n🏬 {{store}}\n{{price}}', offer);
+    assert.doesNotMatch(result, /🏬/);
+    assert.match(result, /Mouse Gamer RGB/);
+  });
+
+  it('{{discount}} traz o percentual anunciado pelo ML', () => {
+    assert.equal(formatOfferMessageFromTemplate('{{discount}}', sampleOffer), '33% OFF');
+  });
+
+  it('linha do desconto some quando a oferta não tem desconto', () => {
+    const semDesconto = { ...sampleOffer, discount: null };
+    const result = formatOfferMessageFromTemplate('{{name}}\n🏷️ {{discount}}\n{{price}}', semDesconto);
+    assert.doesNotMatch(result, /🏷️/);
+    assert.match(result, /Mouse Gamer RGB/);
+  });
+
+  it('{{best_seller}} só aparece com o selo MAIS VENDIDO', () => {
+    assert.equal(formatOfferMessageFromTemplate('{{best_seller}}', sampleOffer), '🏆 MAIS VENDIDO');
+
+    const semSelo = { ...sampleOffer, bestSeller: false };
+    assert.equal(formatOfferMessageFromTemplate('📦 {{qty_sold}}\n{{best_seller}}', semSelo), '📦 200 vendidos');
   });
 
   it('top_sold fica vazio sem ranking', () => {

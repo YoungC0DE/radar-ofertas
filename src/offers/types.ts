@@ -8,6 +8,9 @@ export interface RawOffer {
   rating: number | null;
   soldQuantity: number | null;
   salesRank: string | null;
+  seller: string | null;
+  officialStore: boolean;
+  bestSeller: boolean;
   permalink: string;
 }
 
@@ -29,6 +32,9 @@ export interface OfferRecord {
   rating: number | null;
   soldQuantity: number | null;
   salesRank: string | null;
+  seller: string | null;
+  officialStore: boolean;
+  bestSeller: boolean;
   score: number;
   sentAt: Date | null;
   createdAt: Date;
@@ -46,5 +52,8 @@ export interface CreateOfferInput {
   rating: number | null;
   soldQuantity: number | null;
   salesRank: string | null;
+  seller: string | null;
+  officialStore: boolean;
+  bestSeller: boolean;
   score: number;
 }

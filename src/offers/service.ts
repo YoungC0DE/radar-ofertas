@@ -3,7 +3,9 @@ import { getSearchLimit } from '../config/queue-config-store.js';
 import { calculateOfferScore, getRuntimeScoreConfig } from '../config/score-config.js';
 import { iterateScrapedPages } from '../mercado-livre/index.js';
 import { enqueueOfferSend, getSenderQueue, isRedisEnabled } from '../queue/index.js';
+import { runWithConcurrency } from '../utils/concurrency.js';
 import { logger } from '../utils/logger.js';
+import { allocateProportionalWithMin, shuffle } from './sampling.js';
 import { formatOfferMessageFromTemplate, loadMessageTemplate, loadPlaceholderVisibility } from './message-template.js';
 import {
   createOffer,
@@ -58,6 +60,9 @@ export async function processOffer(rawOffer: RawOffer): Promise<string | null> {
     rating: rawOffer.rating,
     soldQuantity: rawOffer.soldQuantity,
     salesRank: rawOffer.salesRank,
+    seller: rawOffer.seller,
+    officialStore: rawOffer.officialStore,
+    bestSeller: rawOffer.bestSeller,
     score,
   });
 
@@ -75,22 +80,77 @@ export async function processOffers(rawOffers: RawOffer[]): Promise<number> {
   return enqueued;
 }
 
+/** Páginas lidas por link ao montar o pool do sorteio. */
+const POOL_PAGES_PER_SOURCE = 2;
+const POOL_CONCURRENCY = 2;
+
+async function collectPool(category: string): Promise<RawOffer[]> {
+  const pool: RawOffer[] = [];
+  let pages = 0;
+
+  for await (const page of iterateScrapedPages(category)) {
+    pool.push(...page);
+    if (++pages >= POOL_PAGES_PER_SOURCE) break;
+  }
+
+  return pool;
+}
+
 export async function collectNewOffers(): Promise<{ total: number; enqueued: number }> {
   await hydrateMlSourcesCache();
   const target = getSearchLimit();
+  const categories = getActiveMlCategories();
+
+  if (categories.length === 0) {
+    logger.warn('No active ML sources configured — nothing to collect');
+    return { total: 0, enqueued: 0 };
+  }
+
+  // Buscamos o pool de todos os links ANTES de processar. Antes o laço parava no
+  // primeiro link que enchesse a cota, e os demais nunca eram lidos.
+  const pools = await runWithConcurrency(categories, POOL_CONCURRENCY, async (category) => {
+    try {
+      return { category, offers: shuffle(await collectPool(category)) };
+    } catch (error) {
+      logger.error({ category, error }, 'Failed to build pool for source');
+      return { category, offers: [] as RawOffer[] };
+    }
+  });
+
+  // Embaralhar a ordem dos pools importa: quando há menos vagas que links, o
+  // mínimo de 1 vai para os primeiros da lista.
+  const filled = shuffle(pools.filter((pool) => pool.offers.length > 0));
+  if (filled.length === 0) {
+    logger.warn({ sources: categories.length }, 'All sources returned empty — nothing to collect');
+    return { total: 0, enqueued: 0 };
+  }
+
+  const quotas = allocateProportionalWithMin(filled.map((pool) => pool.offers.length), target);
+
+  logger.info(
+    {
+      target,
+      sources: filled.map((pool, index) => ({
+        category: pool.category,
+        pool: pool.offers.length,
+        quota: quotas[index] ?? 0,
+      })),
+    },
+    'Offer pools built — drawing across all sources',
+  );
+
+  const drawn = filled.flatMap((pool, index) => pool.offers.slice(0, quotas[index] ?? 0));
+  // Reserva para repor sorteados que o processOffer recusar (score baixo, duplicado).
+  const backfill = shuffle(filled.flatMap((pool, index) => pool.offers.slice(quotas[index] ?? 0)));
+
   let total = 0;
   let enqueued = 0;
 
-  for (const category of getActiveMlCategories()) {
-    for await (const page of iterateScrapedPages(category)) {
-      for (const offer of page) {
-        total++;
-        const id = await processOffer(offer);
-        if (id) enqueued++;
-      }
-      if (enqueued >= target) break;
-    }
+  for (const offer of [...shuffle(drawn), ...backfill]) {
     if (enqueued >= target) break;
+    total++;
+    const id = await processOffer(offer);
+    if (id) enqueued++;
   }
 
   return { total, enqueued };

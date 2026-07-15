@@ -51,3 +51,30 @@ describe('parser — ofertas poly-card', () => {
     assert.equal(items[0]?.salesRank, '4º em Roçadeiras');
   });
 });
+
+describe('parser — card completo (vendedor, selo, desconto)', () => {
+  const html = readFileSync(join(fixtureDir, 'fixtures/ofertas-card-completo.html'), 'utf8');
+  const item = parseListingHtml(html, 10)[0];
+
+  it('extrai vendedor e loja oficial', () => {
+    assert.equal(item?.seller, 'Cetaphil');
+    assert.equal(item?.officialStore, true);
+  });
+
+  it('detecta o selo MAIS VENDIDO', () => {
+    assert.equal(item?.bestSeller, true);
+  });
+
+  it('usa o percentual anunciado pelo ML, que trunca em vez de arredondar', () => {
+    // 205,90 -> 119,90 = 41,77%: arredondar daria 42% e divergiria do card.
+    assert.equal(item?.discountPercent, 41);
+    assert.equal(item?.price, 119.9);
+    assert.equal(item?.originalPrice, 205.9);
+  });
+
+  it('não confunde o pill de frete com desconto', () => {
+    // "Chegará grátis amanhã" também é .polylabel-pill, mas fora de .poly-price__labels.
+    assert.notEqual(item?.discountPercent, null);
+    assert.ok((item?.discountPercent ?? 0) <= 100);
+  });
+});

@@ -8,6 +8,11 @@ export interface ScrapedItem {
   soldQuantity: number | null;
   salesRank: string | null;
   rating: number | null;
+  seller: string | null;
+  officialStore: boolean;
+  bestSeller: boolean;
+  /** Percentual anunciado pelo ML no card ("41% OFF"), quando existe. */
+  discountPercent: number | null;
 }
 
 export interface AffiliateLinkResult {

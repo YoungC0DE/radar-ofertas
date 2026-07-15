@@ -3,12 +3,15 @@ import { prisma } from '../database/client.js';
 import type { OfferRecord } from './types.js';
 
 export const MESSAGE_PLACEHOLDERS = [
-  { key: 'store', label: 'Nome da loja', example: 'Radar Ofertas' },
+  { key: 'brand', label: 'Nome do seu canal', example: 'Radar Ofertas' },
   { key: 'name', label: 'Nome do produto', example: 'Fone Bluetooth XYZ' },
   { key: 'price', label: 'Preço formatado', example: 'R$ 89,90 (de R$ 129,90)' },
+  { key: 'discount', label: 'Desconto anunciado', example: '41% OFF' },
   { key: 'avalia', label: 'Avaliação', example: '4.8 ⭐' },
   { key: 'qty_sold', label: 'Quantidade vendida', example: '1.234 vendidos' },
+  { key: 'best_seller', label: 'Selo de mais vendido', example: '🏆 MAIS VENDIDO' },
   { key: 'top_sold', label: 'Ranking de vendas', example: '4º em Impressoras' },
+  { key: 'store', label: 'Vendedor no Mercado Livre', example: 'Mega Mamute ✅ Loja oficial' },
   { key: 'product_link', label: 'Link de compra (afiliado)', example: 'https://mercadolivre.com/sec/abc123' },
 ] as const;
 
@@ -17,24 +20,31 @@ export type MessagePlaceholderKey = (typeof MESSAGE_PLACEHOLDERS)[number]['key']
 export type PlaceholderVisibility = Record<MessagePlaceholderKey, boolean>;
 
 export const DEFAULT_PLACEHOLDER_VISIBILITY: PlaceholderVisibility = {
-  store: true,
+  brand: true,
   name: true,
   price: true,
+  discount: true,
   avalia: true,
   qty_sold: true,
+  best_seller: true,
   top_sold: true,
+  store: true,
   product_link: true,
 };
 
-export const DEFAULT_MESSAGE_TEMPLATE = `🔥 OFERTA IMPERDÍVEL! - 🏪 {{store}}
+export const DEFAULT_MESSAGE_TEMPLATE = `🔥 OFERTA IMPERDÍVEL! - 🏪 {{brand}}
 
 {{name}}
 
-💰 {{price}}
+💰 {{price}}  🏷️ {{discount}}
 
 ⭐ {{avalia}}
 
 📦 {{qty_sold}}{{top_sold}}
+
+{{best_seller}}
+
+🏬 {{store}}
 
 🛒 Compre aqui:
 {{product_link}}`;
@@ -70,6 +80,23 @@ export function formatSoldQuantity(soldQuantity: number | null): string {
   return `${soldQuantity.toLocaleString('pt-BR')} vendidos`;
 }
 
+/** Percentual anunciado pelo ML ("41% OFF"). Vazio quando a oferta não tem desconto. */
+export function formatDiscount(discount: number | null): string {
+  if (discount === null || discount <= 0) return '';
+  return `${discount}% OFF`;
+}
+
+/** Vazio quando o card não traz vendedor — a linha some via cleanupRenderedMessage. */
+export function formatSeller(seller: string | null, officialStore = false): string {
+  const name = seller?.trim();
+  if (!name) return '';
+  return officialStore ? `${name} ✅ Loja oficial` : name;
+}
+
+export function formatBestSeller(bestSeller: boolean): string {
+  return bestSeller ? '🏆 MAIS VENDIDO' : '';
+}
+
 export function formatTopSoldLabel(salesRank: string | null): string {
   if (!salesRank?.trim()) return '';
 
@@ -99,23 +126,29 @@ export function formatTopSoldLabel(salesRank: string | null): string {
 }
 
 export interface MessageTemplateValues {
-  store: string;
+  brand: string;
   name: string;
   price: string;
+  discount: string;
   avalia: string;
   qty_sold: string;
+  best_seller: string;
   top_sold: string;
+  store: string;
   product_link: string;
 }
 
 export function buildTemplateValues(offer: OfferRecord): MessageTemplateValues {
   return {
-    store: getBrandName(),
+    brand: getBrandName(),
     name: offer.title,
     price: formatOfferPrice(offer),
+    discount: formatDiscount(offer.discount),
     avalia: formatOfferRating(offer.rating),
     qty_sold: formatSoldQuantity(offer.soldQuantity),
+    best_seller: formatBestSeller(offer.bestSeller),
     top_sold: formatTopSoldLabel(offer.salesRank),
+    store: formatSeller(offer.seller, offer.officialStore),
     product_link: offer.affiliateLink ?? '',
   };
 }
@@ -250,12 +283,15 @@ export async function hydrateTemplateCache(): Promise<void> {
 
 export function sampleTemplateValues(): MessageTemplateValues {
   return {
-    store: getBrandName(),
+    brand: getBrandName(),
     name: 'Fone Bluetooth XYZ Pro',
     price: 'R$ 89,90 (de R$ 129,90)',
+    discount: '31% OFF',
     avalia: '4.8 ⭐',
     qty_sold: '1.234 vendidos',
+    best_seller: '🏆 MAIS VENDIDO',
     top_sold: '4º em Impressoras',
+    store: 'Mega Mamute ✅ Loja oficial',
     product_link: 'https://mercadolivre.com/sec/exemplo123',
   };
 }
