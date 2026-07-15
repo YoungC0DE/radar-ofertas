@@ -1,6 +1,6 @@
 import { env } from '../config/env.js';
 import { prisma } from '../database/client.js';
-import { validateCategoryConfig } from '../mercado-livre/category-url.js';
+import { buildMlCategoryRows, hydrateMlSourcesCache } from '../config/ml-sources-config.js';
 import { hasValidSession, loadSessionMeta, loadStorageState } from '../mercado-livre/session.js';
 import { getCollectorQueue, isRedisEnabled } from '../queue/index.js';
 import { formatIsoInTimezone } from '../utils/datetime.js';
@@ -111,23 +111,26 @@ async function checkAffiliateTag(): Promise<PreflightItem> {
 }
 
 async function checkCategories(): Promise<PreflightItem> {
-  const invalid = env.ML_CATEGORIES
-    .map((category) => validateCategoryConfig(category))
-    .filter((c) => !c.valid);
+  await hydrateMlSourcesCache();
+  const rows = buildMlCategoryRows().filter((row) => row.enabled);
+  const invalid = rows.filter((row) => !row.valid);
 
   if (invalid.length > 0) {
     return {
       ok: false,
       label: 'Categorias ML',
       detail: `${invalid.length} inválida(s): ${invalid.map((c) => c.category).join(', ')}`,
-      fix: 'Ajuste ML_CATEGORIES no .env',
+      fix: 'Ajuste ML_CATEGORIES no .env ou remova links extras inválidos no painel',
     };
   }
+
+  const envCount = rows.filter((row) => row.fromEnv).length;
+  const customCount = rows.filter((row) => !row.fromEnv).length;
 
   return {
     ok: true,
     label: 'Categorias ML',
-    detail: `${env.ML_CATEGORIES.length} configurada(s)`,
+    detail: `${rows.length} ativa(s) — ${envCount} do .env, ${customCount} extra(s)`,
   };
 }
 

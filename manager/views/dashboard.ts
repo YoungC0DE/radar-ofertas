@@ -2,6 +2,8 @@ import type { DashboardData, DashboardOfferRow } from '../models/dashboard-model
 import { escapeHtml, formatCurrency, formatDate, statusBadge } from './helpers.js';
 import { renderLayout } from './layout.js';
 
+const TRASH_ICON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`;
+
 function sessionBadge(ok: boolean): string {
   return ok ? '<span class="badge ok">OK</span>' : '<span class="badge err">Atenção</span>';
 }
@@ -21,9 +23,14 @@ function renderOfferRow(row: DashboardOfferRow, timezone: string): string {
   const { offer, scheduleAt, isPending } = row;
   const scheduleLabel = isPending ? 'Previsão' : 'Enviada em';
   const actionCell = isPending
-    ? `<form method="post" action="/manager/offers/${escapeHtml(offer.id)}/send-now" class="inline-form">
-        <button type="submit" class="btn btn-sm primary">Enviar agora</button>
-      </form>`
+    ? `<div class="action-cell">
+        <form method="post" action="/manager/offers/${escapeHtml(offer.id)}/send-now" class="inline-form">
+          <button type="submit" class="btn btn-sm primary">Enviar agora</button>
+        </form>
+        <form method="post" action="/manager/offers/${escapeHtml(offer.id)}/delete" class="offer-delete-form">
+          <button type="button" class="btn-trash offer-delete-btn" title="Apagar oferta pendente" aria-label="Apagar oferta">${TRASH_ICON}</button>
+        </form>
+      </div>`
     : '—';
 
   return `<tr>
@@ -92,6 +99,9 @@ export function renderDashboard(data: DashboardData): string {
     : renderOffersTable(data.sentOffers, data.timezone, 'Nenhuma oferta enviada ainda.');
 
   const body = `
+    <style>
+      .action-cell { display: flex; align-items: center; gap: 8px; }
+    </style>
     ${
       !data.database.available
         ? `<section><p class="meta"><span class="badge err">PostgreSQL indisponível</span> — ${escapeHtml(data.database.error ?? 'erro de conexão')}. Confira <code>DATABASE_URL</code> no <code>.env</code> e rode <code>npm run migrate:deploy</code>.</p></section>`
@@ -160,7 +170,22 @@ export function renderDashboard(data: DashboardData): string {
         <thead><tr><th>ID</th><th>Título</th><th>Score</th><th>Preço</th><th>Status</th><th>Horário</th><th>Ação</th></tr></thead>
         <tbody>${sentRows}</tbody>
       </table>
-    </section>`;
+    </section>
+
+    <script>
+      document.querySelectorAll('.offer-delete-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          radarConfirm({
+            title: 'Apagar oferta',
+            message: 'Apagar esta oferta pendente? Ela não será enviada ao WhatsApp.',
+            confirmLabel: 'Apagar',
+            danger: true,
+          }).then((ok) => {
+            if (ok) btn.closest('form').submit();
+          });
+        });
+      });
+    </script>`;
 
   return renderLayout('Dashboard', body, 'dashboard');
 }

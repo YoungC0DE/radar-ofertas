@@ -4,8 +4,12 @@ import {
   getSenderDelayMinutesCached,
 } from '../config/queue-config-store.js';
 import { env } from '../config/env.js';
-import { isWithinOperatingHours, msUntilOperatingWindow } from '../utils/datetime.js';
-import { getSenderQueue, isRedisEnabled } from './index.js';
+import { findLastSentAt, findPendingOfferIds } from '../offers/repository.js';
+import {
+  isWithinOperatingHoursStored,
+  msUntilOperatingWindowStored,
+  nowInTimezone,
+} from '../utils/datetime.js';
 
 function getOperatingHours() {
   return {
@@ -14,70 +18,44 @@ function getOperatingHours() {
   };
 }
 
-function nextOperatingCursor(timezone: string, instantMs: number): number {
-  const instant = new Date(instantMs);
-  if (isWithinOperatingHours(timezone, getOperatingHours(), instant)) {
-    return instantMs;
+function nextOperatingCursor(cursorMs: number): number {
+  const hours = getOperatingHours();
+  const stored = new Date(cursorMs);
+  if (isWithinOperatingHoursStored(hours, stored)) {
+    return cursorMs;
   }
-  return instantMs + msUntilOperatingWindow(timezone, getOperatingHours(), instant);
+  return cursorMs + msUntilOperatingWindowStored(hours, stored);
 }
 
-export async function estimatePendingSendTimes(offerIds: string[]): Promise<Map<string, Date>> {
+function advanceCursor(cursorMs: number, senderDelayMs: number): number {
+  return nextOperatingCursor(cursorMs + senderDelayMs);
+}
+
+export async function estimatePendingSendTimes(offerIds?: string[]): Promise<Map<string, Date>> {
   const result = new Map<string, Date>();
-  if (offerIds.length === 0) return result;
+  const targets = offerIds && offerIds.length > 0 ? new Set(offerIds) : null;
 
-  const timezone = env.APP_TIMEZONE;
+  const pendingIds = await findPendingOfferIds();
+  if (pendingIds.length === 0) return result;
+
   const senderDelayMs = getSenderDelayMinutesCached() * 60 * 1000;
-  let cursor = nextOperatingCursor(timezone, Date.now());
+  const storedNowMs = nowInTimezone(env.APP_TIMEZONE).getTime();
 
-  if (!isRedisEnabled()) {
-    for (const offerId of offerIds) {
+  const lastSentAt = await findLastSentAt();
+  let cursor = lastSentAt
+    ? lastSentAt.getTime() + senderDelayMs
+    : storedNowMs;
+  cursor = Math.max(cursor, storedNowMs);
+  cursor = nextOperatingCursor(cursor);
+
+  for (let i = 0; i < pendingIds.length; i++) {
+    const offerId = pendingIds[i];
+    if (!targets || targets.has(offerId)) {
       result.set(offerId, new Date(cursor));
-      cursor += senderDelayMs;
     }
-    return result;
-  }
-
-  const queue = getSenderQueue();
-  const targets = new Set(offerIds);
-
-  try {
-    const [active, waiting, delayed] = await Promise.all([
-      queue.getActive(0, 50),
-      queue.getWaiting(0, 200),
-      queue.getDelayed(0, 200),
-    ]);
-
-    const delayedSorted = [...delayed].sort(
-      (a, b) => a.timestamp + a.delay - (b.timestamp + b.delay),
-    );
-    const ordered = [...active, ...waiting, ...delayedSorted];
-
-    for (const job of ordered) {
-      const offerId = job.data.offerId;
-      const state = await job.getState();
-
-      if (state === 'delayed') {
-        cursor = Math.max(cursor, Date.now() + Math.max(0, job.delay));
-        cursor = nextOperatingCursor(timezone, cursor);
-      }
-
-      if (targets.has(offerId)) {
-        result.set(offerId, new Date(cursor));
-      }
-
-      cursor += senderDelayMs;
-      cursor = nextOperatingCursor(timezone, cursor);
+    if (i < pendingIds.length - 1) {
+      cursor = advanceCursor(cursor, senderDelayMs);
     }
-  } finally {
-    await queue.close();
-  }
-
-  for (const offerId of offerIds) {
-    if (result.has(offerId)) continue;
-    result.set(offerId, new Date(cursor));
-    cursor += senderDelayMs;
-    cursor = nextOperatingCursor(timezone, cursor);
   }
 
   return result;

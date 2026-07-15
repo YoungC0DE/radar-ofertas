@@ -123,12 +123,19 @@ export async function findPendingOfferIds(): Promise<string[]> {
   const offers = await prisma.offer.findMany({
     where: { sentAt: null },
     select: { id: true },
+    orderBy: { createdAt: 'asc' },
   });
   return offers.map((offer) => offer.id);
 }
 
 export async function deletePendingOffers(): Promise<number> {
   const result = await prisma.offer.deleteMany({ where: { sentAt: null } });
+  return result.count;
+}
+
+/** Remove uma única oferta apenas se ela ainda estiver pendente (não enviada). */
+export async function deletePendingOfferById(id: string): Promise<number> {
+  const result = await prisma.offer.deleteMany({ where: { id, sentAt: null } });
   return result.count;
 }
 

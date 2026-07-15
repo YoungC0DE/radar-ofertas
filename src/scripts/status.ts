@@ -1,6 +1,7 @@
-import { validateCategoryConfig } from '../mercado-livre/category-url.js';
-import { env } from '../config/env.js';
+import { buildMlCategoryRows, hydrateMlSourcesCache } from '../config/ml-sources-config.js';
 import { prisma } from '../database/client.js';
+
+await hydrateMlSourcesCache();
 
 const total = await prisma.offer.count();
 const pending = await prisma.offer.count({ where: { sentAt: null } });
@@ -11,10 +12,7 @@ const latest = await prisma.offer.findMany({
   select: { title: true, score: true, sentAt: true, createdAt: true },
 });
 
-const categoryChecks = env.ML_CATEGORIES.map((category) => ({
-  category,
-  ...validateCategoryConfig(category),
-}));
+const categoryChecks = buildMlCategoryRows();
 
 console.log(
   JSON.stringify(

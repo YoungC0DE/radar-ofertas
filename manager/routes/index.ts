@@ -9,10 +9,10 @@ import { logger } from '../../src/utils/logger.js';
 
 import { handleCollectOffers, showDashboard } from '../controllers/dashboard-controller.js';
 
-import { showOfferDetail, showOffersList, handleDeleteAllPending, handleAffiliateDelaySave, handleSendOfferNow, handleSearchLimitSave } from '../controllers/offers-controller.js';
+import { showOfferDetail, showOffersList, handleDeleteAllPending, handleDeleteOffer, handleAffiliateDelaySave, handleSendOfferNow, handleSearchLimitSave } from '../controllers/offers-controller.js';
 
 import { handleTemplateSave, showTemplatePage } from '../controllers/template-controller.js';
-import { handleChannelLinkSave, handleBrandSave, handleOperatingHoursSave, handleScoreSave, handleSendIntervalSave, handleSenderDelaySave, showSettingsPage } from '../controllers/settings-controller.js';
+import { handleChannelLinkSave, handleBrandSave, handleMlSourceAdd, handleMlSourceRemove, handleMlSourcesSave, handleOperatingHoursSave, handleScoreSave, handleSendIntervalSave, handleSenderDelaySave, showSettingsPage } from '../controllers/settings-controller.js';
 import { getLogsJson, showLogsPage } from '../controllers/logs-controller.js';
 import {
   cancelMercadoLivreConnectJson,
@@ -233,6 +233,26 @@ export async function handleManagerRequest(
       return;
     }
 
+    if (path === '/manager/settings/ml-sources' && method === 'POST') {
+      const body = await readFormBody(req);
+      const form = parseFormUrlEncoded(body);
+      sendHtml(res, 200, await handleMlSourcesSave(form));
+      return;
+    }
+
+    if (path === '/manager/settings/ml-sources/add' && method === 'POST') {
+      const body = await readFormBody(req);
+      const form = parseFormUrlEncoded(body);
+      sendHtml(res, 200, await handleMlSourceAdd(form));
+      return;
+    }
+
+    const mlSourceRemoveMatch = path.match(/^\/manager\/settings\/ml-sources\/remove\/([^/]+)$/);
+    if (mlSourceRemoveMatch && method === 'POST') {
+      sendHtml(res, 200, await handleMlSourceRemove(decodeURIComponent(mlSourceRemoveMatch[1] ?? '')));
+      return;
+    }
+
     if (path === '/manager/settings/connect/wa/start' && method === 'POST') {
       sendJson(res, 200, startWhatsAppConnectJson());
       return;
@@ -335,6 +355,24 @@ export async function handleManagerRequest(
       return;
     }
 
+    const deleteOfferMatch = path.match(/^\/manager\/offers\/([^/]+)\/delete$/);
+    if (deleteOfferMatch && method === 'POST') {
+      const result = await handleDeleteOffer(decodeURIComponent(deleteOfferMatch[1]!));
+      // Volta para a página de origem (dashboard ou lista de ofertas).
+      const referer = req.headers.referer ?? '';
+      const fromDashboard = /\/manager(?:\?|$)/.test(referer);
+      if ('error' in result) {
+        if (fromDashboard) {
+          sendRedirect(res, `/manager?deleteError=${encodeURIComponent(result.error)}`);
+        } else {
+          sendHtml(res, 200, await showOffersList(new URLSearchParams({ status: 'pending', error: result.error })));
+        }
+        return;
+      }
+      sendRedirect(res, fromDashboard ? '/manager?deleted=1' : '/manager/offers?status=pending&cleared=1');
+      return;
+    }
+
     const sendNowMatch = path.match(/^\/manager\/offers\/([^/]+)\/send-now$/);
     if (sendNowMatch && method === 'POST') {
       const result = await handleSendOfferNow(sendNowMatch[1]!);
@@ -376,8 +414,12 @@ export async function handleManagerRequest(
         res,
         200,
         await showDashboard({
-          sendNowMessage: url.searchParams.get('sentNow') === '1' ? 'Envio imediato enfileirado — deve publicar em instantes.' : undefined,
-          sendNowError: url.searchParams.get('sendError') ?? undefined,
+          sendNowMessage: url.searchParams.get('sentNow') === '1'
+            ? 'Envio imediato enfileirado — deve publicar em instantes.'
+            : url.searchParams.get('deleted') === '1'
+              ? 'Oferta removida com sucesso.'
+              : undefined,
+          sendNowError: url.searchParams.get('sendError') ?? url.searchParams.get('deleteError') ?? undefined,
           collectMessage: url.searchParams.get('collectQueued') === '1' ? 'Busca de novos anúncios enfileirada.' : undefined,
           collectError: url.searchParams.get('collectError') ?? undefined,
         }),

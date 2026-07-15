@@ -8,6 +8,8 @@ function filterLink(filter: string, label: string, active: string): string {
   return `<a href="/manager/offers?status=${filter}"${cls}>${escapeHtml(label)}</a>`;
 }
 
+const TRASH_ICON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`;
+
 export function renderOffersPage(
   data: OffersPageData,
   clearedCount: number | null = null,
@@ -27,6 +29,12 @@ export function renderOffersPage(
                 ? formatDate(scheduleAt, env.APP_TIMEZONE)
                 : '—';
 
+              const deleteButton = o.sentAt
+                ? ''
+                : `<form method="post" action="/manager/offers/${escapeHtml(o.id)}/delete" class="offer-delete-form">
+                    <button type="button" class="btn-trash offer-delete-btn" title="Apagar oferta pendente" aria-label="Apagar oferta">${TRASH_ICON}</button>
+                  </form>`;
+
               return `<tr>
           <td><a class="link" href="/manager/offers/${escapeHtml(o.id)}">${escapeHtml(o.id.slice(0, 10))}…</a></td>
           <td>${escapeHtml(o.title.slice(0, 50))}${o.title.length > 50 ? '…' : ''}</td>
@@ -35,7 +43,12 @@ export function renderOffersPage(
           <td>${o.discount != null ? `${o.discount}%` : '—'}</td>
           <td>${statusBadge(o.sentAt)}</td>
           <td>${scheduleCell}</td>
-          <td>${formatDate(o.sentAt ?? o.createdAt, env.APP_TIMEZONE)}</td>
+          <td>
+            <div class="collected-cell">
+              <span>${formatDate(o.createdAt, env.APP_TIMEZONE)}</span>
+              ${deleteButton}
+            </div>
+          </td>
         </tr>`;
             },
           )
@@ -120,6 +133,12 @@ export function renderOffersPage(
         font-size: 0.875rem;
         text-align: center;
       }
+      .collected-cell {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
     </style>
     <section>
       <div class="section-header">
@@ -142,7 +161,7 @@ export function renderOffersPage(
       </div>
       <table>
         <thead>
-          <tr><th>ID</th><th>Título</th><th>Score</th><th>Preço</th><th>Desconto</th><th>Status</th><th>Previsão de envio</th><th>Data</th></tr>
+          <tr><th>ID</th><th>Título</th><th>Score</th><th>Preço</th><th>Desconto</th><th>Status</th><th>Previsão de envio</th><th>Coletada em</th></tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
@@ -257,6 +276,19 @@ export function renderOffersPage(
       });`
           : ''
       }
+
+      document.querySelectorAll('.offer-delete-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          radarConfirm({
+            title: 'Apagar oferta',
+            message: 'Apagar esta oferta pendente? Ela não será enviada ao WhatsApp.',
+            confirmLabel: 'Apagar',
+            danger: true,
+          }).then((ok) => {
+            if (ok) btn.closest('form').submit();
+          });
+        });
+      });
     </script>`;
 
   return renderLayout('Ofertas', body, 'offers');

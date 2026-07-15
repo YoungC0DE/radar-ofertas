@@ -11,7 +11,17 @@ describe('parser — sales rank', () => {
   it('extrai ranking do texto do produto', () => {
     assert.equal(parseSalesRankText('4º em Impressoras'), '4º em Impressoras');
     assert.equal(parseSalesRankText('MAIS VENDIDO 4º em Impressoras Novo'), '4º em Impressoras');
+    assert.equal(parseSalesRankText('MAIS VENDIDO 5º em Maquinas de Solda'), '5º em Maquinas de Solda');
     assert.equal(parseSalesRankText('sem ranking'), null);
+  });
+
+  it('ignora os centavos do preço parcelado ("em outros meios")', () => {
+    assert.equal(parseSalesRankText('ou R$ 577,30 em outros meios'), null);
+    assert.equal(parseSalesRankText('ou R$ 1.052,23 em outros meios'), null);
+  });
+
+  it('exige o marcador ordinal — não confunde número solto com ranking', () => {
+    assert.equal(parseSalesRankText('12 em estoque'), null);
   });
 });
 

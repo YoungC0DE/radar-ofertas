@@ -1,7 +1,7 @@
 import { saveAffiliateLinkDelaySettings, saveSearchLimit } from '../../src/config/queue-config-store.js';
 import { loadOfferDetail, loadOffersPage, parsePage, parseSentFilter } from '../models/offers-model.js';
 import { formatOfferMessageFromTemplate, loadMessageTemplate, loadPlaceholderVisibility, renderMessageTemplate, buildTemplateValues } from '../../src/offers/message-template.js';
-import { removeAllPendingOffers, sendOfferNow } from '../../src/offers/service.js';
+import { removeAllPendingOffers, removePendingOffer, sendOfferNow } from '../../src/offers/service.js';
 import { renderNotFound, renderOfferDetail } from '../views/offer-detail.js';
 import { renderOffersPage } from '../views/offers.js';
 
@@ -25,6 +25,16 @@ export async function handleDeleteAllPending(): Promise<{ count: number } | { er
     return { count };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Falha ao remover ofertas pendentes';
+    return { error: message };
+  }
+}
+
+export async function handleDeleteOffer(id: string): Promise<{ ok: true } | { error: string }> {
+  try {
+    await removePendingOffer(id);
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Falha ao remover oferta';
     return { error: message };
   }
 }

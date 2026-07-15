@@ -16,7 +16,14 @@ import {
   type ScoreConfig,
 } from '../../src/config/score-config.js';
 import { env } from '../../src/config/env.js';
-import { validateCategoryConfig, type CategoryValidation } from '../../src/mercado-livre/category-url.js';
+import {
+  addCustomMlSource,
+  buildMlCategoryRows,
+  hydrateMlSourcesCache,
+  removeCustomMlSource,
+  saveMlSourceFlagsFromForm,
+  type MlCategoryRow,
+} from '../../src/config/ml-sources-config.js';
 import { isWithinOperatingHours } from '../../src/utils/datetime.js';
 import { isRedisEnabled, rescheduleCollectorJob } from '../../src/queue/index.js';
 import {
@@ -39,7 +46,7 @@ import {
 } from './session-model.js';
 import { getWorkerState, type WorkerState } from './process-model.js';
 
-export type SettingsSaveType = 'channel' | 'interval' | 'brand' | 'score' | 'hours' | 'senderDelay' | null;
+export type SettingsSaveType = 'channel' | 'interval' | 'brand' | 'score' | 'hours' | 'senderDelay' | 'mlSources' | null;
 
 export interface SettingsData {
   timezone: string;
@@ -58,7 +65,7 @@ export interface SettingsData {
   brandSubtitle: string;
   brandLogoHref: string | null;
   brandInitial: string;
-  categories: CategoryValidation[];
+  categories: MlCategoryRow[];
   mlSession: SessionStatus;
   waSession: SessionStatus;
   workerState: WorkerState;
@@ -75,7 +82,7 @@ export async function loadSettingsData(
   saved: SettingsSaveType = null,
   error: string | null = null,
 ): Promise<SettingsData> {
-  await Promise.all([hydrateQueueConfigCache(), hydrateBrandCache()]);
+  await Promise.all([hydrateQueueConfigCache(), hydrateBrandCache(), hydrateMlSourcesCache()]);
   const scoreConfig = await getRuntimeScoreConfigAsync();
   const senderDelayMinutes = await getSenderDelayMinutesFromDb();
   const [mlSession, waSession] = await Promise.all([
@@ -118,7 +125,7 @@ export async function loadSettingsData(
     brandSubtitle: brand.subtitle,
     brandLogoHref: getBrandLogoHref(brand),
     brandInitial: getBrandInitial(brand.name),
-    categories: env.ML_CATEGORIES.map((category) => validateCategoryConfig(category)),
+    categories: buildMlCategoryRows(),
     mlSession,
     waSession,
     workerState: getWorkerState(),
@@ -205,6 +212,40 @@ export async function saveScoreSettings(
     return { ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Falha ao salvar regras de score';
+    return { ok: false, error: message };
+  }
+}
+
+export async function saveMlSourcesFlags(
+  form: Record<string, string>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    return await saveMlSourceFlagsFromForm(form);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Falha ao salvar fontes ML';
+    return { ok: false, error: message };
+  }
+}
+
+export async function addMlSource(
+  url: string,
+  label?: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    return await addCustomMlSource(url, label);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Falha ao adicionar link';
+    return { ok: false, error: message };
+  }
+}
+
+export async function deleteMlSource(
+  id: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    return await removeCustomMlSource(id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Falha ao remover link';
     return { ok: false, error: message };
   }
 }

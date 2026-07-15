@@ -129,3 +129,36 @@ export function msUntilOperatingWindow(
 
   return Math.max(60_000, Math.ceil(minutesToWait * 60 * 1000));
 }
+
+function storedLocalMinutesSinceMidnight(stored: Date): number {
+  return (
+    stored.getUTCHours() * 60 +
+    stored.getUTCMinutes() +
+    stored.getUTCSeconds() / 60
+  );
+}
+
+/** Janela operacional para datas gravadas via nowInTimezone (componentes no UTC do Date). */
+export function isWithinOperatingHoursStored(
+  hours: OperatingHours,
+  stored: Date,
+): boolean {
+  const current = storedLocalMinutesSinceMidnight(stored);
+  const start = hours.startHour * 60;
+  const end = endMinutes(hours.endHour);
+  return current >= start && current < end;
+}
+
+export function msUntilOperatingWindowStored(
+  hours: OperatingHours,
+  stored: Date,
+): number {
+  if (isWithinOperatingHoursStored(hours, stored)) return 0;
+
+  const current = storedLocalMinutesSinceMidnight(stored);
+  const start = hours.startHour * 60;
+  const minutesToWait =
+    current < start ? start - current : 24 * 60 - current + start;
+
+  return Math.max(60_000, Math.ceil(minutesToWait * 60 * 1000));
+}

@@ -1,4 +1,5 @@
-import { access, rm } from 'node:fs/promises';
+import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { hostname } from 'node:os';
 import path from 'node:path';
 import makeWASocket, {
   DisconnectReason,
@@ -21,6 +22,119 @@ let socket: WASocket | undefined;
 let isConnecting = false;
 let allowReconnect = true;
 let qrListener: ((qr: string) => void) | undefined;
+
+// --- Dono único da sessão (lock entre processos) -----------------------------
+// Só um processo pode manter o socket do WhatsApp aberto ao mesmo tempo; dois
+// sockets com as mesmas credenciais causam connectionReplaced em loop (ping-pong).
+// Como processos não compartilham memória, coordenamos via um arquivo de lock com
+// heartbeat na pasta de auth: quem está conectado renova o lock; quem for tentar
+// conectar e encontrar um lock recente de OUTRO processo apenas se recolhe e
+// reporta que já está logado em outro lugar, sem brigar pela sessão.
+const OWNER_LOCK_STALE_MS = 30_000;
+const OWNER_HEARTBEAT_MS = 10_000;
+let ownerHeartbeatTimer: NodeJS.Timeout | undefined;
+
+// Chamado quando detectamos que outro processo já é dono da sessão (no login) ou
+// quando perdemos a sessão para outro processo (connectionReplaced). O worker
+// registra aqui um handler que encerra o processo — assim, se já existe um dono,
+// o processo duplicado que estava tentando conectar simplesmente morre. O painel
+// não registra nada (não deve morrer nem virar dono).
+let onOwnerConflict: (() => void) | undefined;
+
+/** Registra o que fazer quando a sessão já pertence a outro processo. */
+export function setWhatsAppOwnerConflictHandler(handler: () => void): void {
+  onOwnerConflict = handler;
+}
+
+/** Lançado quando a sessão já está ativa em outro processo. */
+export class WhatsAppOwnedElsewhereError extends Error {
+  constructor() {
+    super('A sessão do WhatsApp já está ativa em outro processo.');
+    this.name = 'WhatsAppOwnedElsewhereError';
+  }
+}
+
+interface OwnerLock {
+  pid: number;
+  host: string;
+  heartbeat: string;
+}
+
+function ownerLockPath(): string {
+  return path.join(env.WHATSAPP_AUTH_PATH, 'owner.lock');
+}
+
+async function readOwnerLock(): Promise<OwnerLock | null> {
+  try {
+    const parsed = JSON.parse(await readFile(ownerLockPath(), 'utf8')) as OwnerLock;
+    if (typeof parsed?.pid === 'number' && typeof parsed?.heartbeat === 'string') return parsed;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function isOwnLock(lock: OwnerLock): boolean {
+  return lock.pid === process.pid && lock.host === hostname();
+}
+
+function isLockFresh(lock: OwnerLock): boolean {
+  const age = Date.now() - new Date(lock.heartbeat).getTime();
+  return Number.isFinite(age) && age >= 0 && age < OWNER_LOCK_STALE_MS;
+}
+
+/** O processo com esse PID (no mesmo host) ainda está rodando? */
+function isPidRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    // ESRCH = não existe; EPERM = existe mas sem permissão (consideramos vivo).
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/**
+ * Existe um lock de OUTRO processo que ainda está vivo? Além do heartbeat, no
+ * mesmo host confirmamos que o PID existe — assim um lock órfão de um worker
+ * morto à força (ex.: restart do painel via taskkill, ou tsx watch) não bloqueia
+ * o novo worker.
+ */
+async function anotherOwnerAlive(): Promise<boolean> {
+  const lock = await readOwnerLock();
+  if (!lock || isOwnLock(lock) || !isLockFresh(lock)) return false;
+  if (lock.host === hostname() && !isPidRunning(lock.pid)) return false;
+  return true;
+}
+
+async function writeOwnerLock(): Promise<void> {
+  const payload: OwnerLock = { pid: process.pid, host: hostname(), heartbeat: new Date().toISOString() };
+  await mkdir(env.WHATSAPP_AUTH_PATH, { recursive: true }).catch(() => {});
+  await writeFile(ownerLockPath(), JSON.stringify(payload)).catch(() => {});
+}
+
+function startOwnerHeartbeat(): void {
+  if (ownerHeartbeatTimer) return;
+  ownerHeartbeatTimer = setInterval(() => {
+    if (socket) void writeOwnerLock();
+  }, OWNER_HEARTBEAT_MS);
+  ownerHeartbeatTimer.unref?.();
+}
+
+function stopOwnerHeartbeat(): void {
+  if (ownerHeartbeatTimer) {
+    clearInterval(ownerHeartbeatTimer);
+    ownerHeartbeatTimer = undefined;
+  }
+}
+
+async function releaseOwnerLock(): Promise<void> {
+  stopOwnerHeartbeat();
+  const lock = await readOwnerLock();
+  if (lock && isOwnLock(lock)) {
+    await rm(ownerLockPath(), { force: true }).catch(() => {});
+  }
+}
 
 export interface ConnectWhatsAppOptions {
   onQr?: (qr: string) => void;
@@ -136,12 +250,15 @@ async function createSocket(
       socket = sock;
       isConnecting = false;
       qrListener = undefined;
+      void writeOwnerLock();
+      startOwnerHeartbeat();
       logger.info('WhatsApp connected');
     }
 
     if (connection === 'close') {
       socket = undefined;
       isConnecting = false;
+      stopOwnerHeartbeat();
 
       const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
 
@@ -149,23 +266,26 @@ async function createSocket(
         // Sessão morta. Sem apagar as credenciais, o Baileys nunca emite um novo
         // QR (ele insiste no creds.json inválido). Limpamos para permitir re-scan.
         logger.error('WhatsApp logged out — limpando credenciais para permitir novo QR');
+        void releaseOwnerLock();
         void clearWhatsAppCredentials();
         return;
       }
 
       if (statusCode === DisconnectReason.connectionReplaced) {
-        // Outro socket assumiu a sessão (mesma conta em outro processo).
-        // Reconectar só reinicia o ping-pong — então paramos aqui.
+        // Outra sessão (outro processo) assumiu a conexão. NÃO reconectamos —
+        // isso só reiniciaria o ping-pong. Avisamos o handler de conflito: no
+        // worker isso encerra este processo (não deve haver dois donos).
         allowReconnect = false;
-        logger.error(
-          'WhatsApp: outra sessão assumiu a conexão (connectionReplaced) — não vou reconectar. Rode apenas UM processo com WhatsApp por vez.',
+        logger.warn(
+          'WhatsApp: a sessão foi assumida por outro processo. Rode apenas UM processo com WhatsApp por vez.',
         );
+        onOwnerConflict?.();
         return;
       }
 
       if (allowReconnect) {
         logger.warn('WhatsApp disconnected, reconnecting in 3s...');
-        setTimeout(() => void connectWhatsApp(), 3000);
+        setTimeout(() => void connectWhatsApp().catch(() => {}), 3000);
       }
     }
   });
@@ -193,6 +313,15 @@ export async function connectWhatsApp(options?: ConnectWhatsAppOptions): Promise
       }, 500);
     });
     if (socket) return socket;
+  }
+
+  // Se outro processo já é dono da sessão, não abrimos um socket concorrente
+  // (evita o connectionReplaced em loop). Avisamos o chamador — o worker duplicado
+  // encerra a si mesmo; o painel apenas mostra que já está logado.
+  if (await anotherOwnerAlive()) {
+    logger.warn('WhatsApp já está conectado em outro processo — ignorando novo login e mantendo a sessão existente.');
+    allowReconnect = false;
+    throw new WhatsAppOwnedElsewhereError();
   }
 
   isConnecting = true;
@@ -229,6 +358,8 @@ export async function disconnectWhatsApp(): Promise<void> {
   socket = undefined;
   isConnecting = false;
 
+  await releaseOwnerLock();
+
   if (sock) {
     sock.ev.removeAllListeners('connection.update');
     sock.ev.removeAllListeners('creds.update');
@@ -236,6 +367,48 @@ export async function disconnectWhatsApp(): Promise<void> {
     await sock.ws.close();
     logger.info('WhatsApp disconnected');
   }
+}
+
+/** Socket vivo atual (ou undefined se desconectado). */
+export function getWhatsAppSocket(): WASocket | undefined {
+  return socket;
+}
+
+/**
+ * Devolve o socket vivo para o caminho de envio. Diferente de connectWhatsApp(),
+ * NÃO força uma reconexão concorrente quando a sessão pertence a outro processo —
+ * isso reiniciaria o ping-pong. Se outro processo é o dono, lança na hora para o
+ * BullMQ tentar o envio de novo mais tarde (o outro processo faz o envio). Numa
+ * queda normal, aguarda a reconexão central subir dentro do timeout.
+ */
+export async function requireWhatsAppSocket(timeoutMs = 45_000): Promise<WASocket> {
+  if (socket) return socket;
+
+  // A sessão é de outro processo: não brigamos, deixamos o dono enviar.
+  if (await anotherOwnerAlive()) {
+    throw new Error('WhatsApp conectado em outro processo — o envio será tentado novamente.');
+  }
+
+  if (allowReconnect && !isConnecting) {
+    void connectWhatsApp().catch(() => {});
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (socket) return socket;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (socket) return socket;
+    if (await anotherOwnerAlive()) {
+      throw new Error('WhatsApp conectado em outro processo — o envio será tentado novamente.');
+    }
+    if (allowReconnect && !isConnecting) {
+      void connectWhatsApp().catch(() => {});
+    }
+  }
+
+  throw new Error(
+    'WhatsApp indisponível: sem sessão ativa (reconectando). O envio será tentado novamente.',
+  );
 }
 
 export async function sendOffer(

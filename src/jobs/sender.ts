@@ -1,5 +1,4 @@
 import { DelayedError, Worker } from 'bullmq';
-import type { WASocket } from 'baileys';
 import { env } from '../config/env.js';
 import {
   getOperatingHoursStart,
@@ -13,7 +12,7 @@ import { buildAffiliateLink } from '../mercado-livre/index.js';
 import { getQueueConnection, QUEUE_NAMES, type SenderJobData } from '../queue/index.js';
 import { isWithinOperatingHours, msUntilOperatingWindow } from '../utils/datetime.js';
 import { logger } from '../utils/logger.js';
-import { sendOffer } from '../whatsapp/index.js';
+import { requireWhatsAppSocket, sendOffer } from '../whatsapp/index.js';
 
 // Tempo máximo para gerar o link de afiliado no envio antes de cair no fallback,
 // garantindo que uma sessão ML lenta nunca segure a fila de envio.
@@ -26,7 +25,7 @@ function getOperatingHours() {
   };
 }
 
-export function startSenderWorker(sock: WASocket): Worker<SenderJobData> {
+export function startSenderWorker(): Worker<SenderJobData> {
   const worker = new Worker<SenderJobData>(
     QUEUE_NAMES.OFFER_SENDER,
     async (job) => {
@@ -78,6 +77,12 @@ export function startSenderWorker(sock: WASocket): Worker<SenderJobData> {
       }
 
       const caption = await formatOfferMessage(offer);
+      // Obtemos o socket vivo a cada envio: a conexão do WhatsApp pode cair e
+      // reconectar (novo socket), então um socket capturado no start ficaria
+      // obsoleto e lançaria "Connection Closed". requireWhatsAppSocket() devolve
+      // o socket atual (ou aguarda a reconexão central) sem brigar por sessão
+      // quando outro processo a assumiu.
+      const sock = await requireWhatsAppSocket();
       await sendOffer(sock, env.WHATSAPP_CHANNEL_ID, offer.image, caption);
       await markOfferSent(offerId);
 

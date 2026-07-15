@@ -1,4 +1,4 @@
-import { connectWhatsApp } from './whatsapp/index.js';
+import { connectWhatsApp, WhatsAppOwnedElsewhereError } from './whatsapp/index.js';
 import { logger } from './utils/logger.js';
 
 async function main(): Promise<void> {
@@ -8,6 +8,10 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
+  if (error instanceof WhatsAppOwnedElsewhereError) {
+    logger.error('A sessão do WhatsApp já está ativa em outro processo. Pare o worker antes de parear novamente (npm run wa:login).');
+    process.exit(1);
+  }
   logger.error({ error }, 'Login WhatsApp falhou');
   process.exit(1);
 });

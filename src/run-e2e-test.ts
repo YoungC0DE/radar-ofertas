@@ -112,7 +112,7 @@ async function main(): Promise<void> {
   const sock = await connectWhatsApp();
   const target = await requireValidChannel(sock);
 
-  const worker = startSenderWorker(sock);
+  const worker = startSenderWorker();
   logger.info({ channel: target.label, jid: target.jid }, 'Worker sender iniciado para teste E2E');
 
   try {

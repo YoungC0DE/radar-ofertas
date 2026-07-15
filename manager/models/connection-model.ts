@@ -4,7 +4,7 @@ import {
   persistAffiliateSession,
   type AffiliateLoginSession,
 } from '../../src/mercado-livre/auth.js';
-import { connectWhatsApp, disconnectWhatsApp } from '../../src/whatsapp/index.js';
+import { connectWhatsApp, disconnectWhatsApp, WhatsAppOwnedElsewhereError } from '../../src/whatsapp/index.js';
 import { logger } from '../../src/utils/logger.js';
 
 // --- WhatsApp connection flow -------------------------------------------------
@@ -54,6 +54,15 @@ export function startWhatsAppConnection(): WhatsAppConnectState {
       await disconnectWhatsApp().catch(() => {});
     })
     .catch((error: unknown) => {
+      if (error instanceof WhatsAppOwnedElsewhereError) {
+        // O worker já está conectado com a sessão. Não tentamos parear de novo
+        // (isso brigaria com o worker) — apenas mostramos que já está logado.
+        waStatus = 'connected';
+        waQr = null;
+        waError = null;
+        logger.info('WhatsApp já conectado no worker — painel apenas confirma a sessão.');
+        return;
+      }
       waStatus = 'error';
       waQr = null;
       waError = error instanceof Error ? error.message : 'Falha ao conectar WhatsApp';

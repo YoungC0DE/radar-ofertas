@@ -1,6 +1,6 @@
 import readline from 'node:readline';
 import { stdin, stdout } from 'node:process';
-import { connectWhatsApp } from './whatsapp/index.js';
+import { connectWhatsApp, WhatsAppOwnedElsewhereError } from './whatsapp/index.js';
 import { logger } from './utils/logger.js';
 
 async function ask(prompt: string): Promise<string> {
@@ -47,6 +47,10 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
+  if (error instanceof WhatsAppOwnedElsewhereError) {
+    logger.error('A sessão do WhatsApp já está ativa em outro processo. Pare o worker antes de rodar npm run wa:channel.');
+    process.exit(1);
+  }
   logger.error({ error }, 'Falha ao consultar canal');
   process.exit(1);
 });

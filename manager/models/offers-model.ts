@@ -69,8 +69,7 @@ export async function loadOffersPage(filter: OfferSentFilter, page: number): Pro
   let scheduleByOfferId = new Map<string, Date>();
   const affiliateDelay = await loadAffiliateLinkDelaySettings();
   if (result.database.available && result.data.pendingCount > 0) {
-    const pendingOffers = await findOffers({ sent: 'pending', limit: result.data.pendingCount });
-    scheduleByOfferId = await estimatePendingSendTimes(pendingOffers.map((offer) => offer.id));
+    scheduleByOfferId = await estimatePendingSendTimes();
   }
 
   return {

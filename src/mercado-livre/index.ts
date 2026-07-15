@@ -1,4 +1,5 @@
 import { env } from '../config/env.js';
+import { getActiveMlCategories, hydrateMlSourcesCache } from '../config/ml-sources-config.js';
 import { runWithConcurrency } from '../utils/concurrency.js';
 import { logger } from '../utils/logger.js';
 import type { RawOffer } from '../offers/types.js';
@@ -131,7 +132,8 @@ export async function* iterateScrapedPages(category: string): AsyncGenerator<Raw
 }
 
 export async function searchConfiguredCategories(): Promise<RawOffer[]> {
-  const categories = env.ML_CATEGORIES.map((category) => {
+  await hydrateMlSourcesCache();
+  const categories = getActiveMlCategories().map((category) => {
     const validation = validateCategoryConfig(category);
     if (!validation.valid) {
       logger.error({ category, reason: validation.reason }, 'Invalid ML category config');

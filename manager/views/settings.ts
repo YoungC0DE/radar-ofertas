@@ -63,27 +63,99 @@ function renderOperatingHoursSection(data: SettingsData, statusBadge: string): s
   return configRow('Janela operacional', value, 'Horário em que o bot coleta e envia ofertas');
 }
 
+function listingKindLabel(kind: string): string {
+  return kind === 'offers' ? 'Ofertas' : 'Categoria';
+}
+
 function renderMlCategoriesSection(data: SettingsData): string {
-  const rows = data.categories.length === 0
-    ? '<tr><td colspan="3">Nenhuma categoria configurada.</td></tr>'
-    : data.categories
-        .map(
-          (category) =>
-            `<tr>
-              <td>${escapeHtml(category.category)}</td>
-              <td>${category.valid ? '<span class="badge ok">OK</span>' : '<span class="badge err">Inválida</span>'}</td>
-              <td>${escapeHtml(category.reason ?? category.listingKind)}</td>
-            </tr>`,
-        )
-        .join('');
+  const envRows = data.categories.filter((category) => category.fromEnv);
+  const customRows = data.categories.filter((category) => !category.fromEnv);
+
+  const renderRow = (category: SettingsData['categories'][number], options?: { removable?: boolean }): string => {
+    const status = category.valid
+      ? category.enabled
+        ? '<span class="badge ok">Ativa</span>'
+        : '<span class="badge warn">Inativa</span>'
+      : '<span class="badge err">Inválida</span>';
+    const origin = category.fromEnv
+      ? '<span class="badge">.env</span>'
+      : '<span class="badge">Extra</span>';
+    const enabledCell = `<label class="ml-source-flag">
+          <input type="checkbox" name="enabled_${escapeHtml(category.id)}" value="1"${category.enabled ? ' checked' : ''}>
+          Coletar
+        </label>`;
+    const removeCell = options?.removable
+      ? `<button type="submit" formaction="/manager/settings/ml-sources/remove/${encodeURIComponent(category.id)}" formmethod="post" class="btn btn-sm btn-danger" title="Remover link">Remover</button>`
+      : '';
+
+    return `<tr>
+      <td>${enabledCell}</td>
+      <td>
+        <div class="ml-source-label">${escapeHtml(category.label)}</div>
+        <div class="ml-source-url meta" title="${escapeHtml(category.category)}">${escapeHtml(category.category)}</div>
+      </td>
+      <td>${origin}</td>
+      <td><span class="badge">${listingKindLabel(category.listingKind)}</span></td>
+      <td>${status}</td>
+      <td>${escapeHtml(category.reason ?? listingKindLabel(category.listingKind))}</td>
+      <td>${removeCell}</td>
+    </tr>`;
+  };
+
+  const envTable = envRows.length === 0
+    ? '<tr><td colspan="7">Nenhuma categoria no .env.</td></tr>'
+    : envRows.map((category) => renderRow(category)).join('');
+
+  const customTable = customRows.length === 0
+    ? '<tr><td colspan="7">Nenhum link extra cadastrado.</td></tr>'
+    : customRows.map((category) => renderRow(category, { removable: true })).join('');
 
   return `
     <div class="config-categories">
-      <h3 class="subsection-title">Categorias ML</h3>
-      <table>
-        <thead><tr><th>Categoria / URL</th><th>Status</th><th>Info</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
+      <div class="config-categories-head">
+        <div>
+          <h3 class="subsection-title">Fontes ML</h3>
+          <p class="meta">O bot coleta ofertas apenas das fontes com a flag <strong>Coletar</strong> ativada — vale tanto para os links do <code>ML_CATEGORIES</code> no .env quanto para os links extras. Ative/desative e clique em <strong>Salvar flags</strong>.</p>
+        </div>
+        <button type="button" class="btn btn-sm" id="add-ml-source">Adicionar link</button>
+      </div>
+
+      <form method="post" action="/manager/settings/ml-sources">
+        <div class="ml-sources-custom-head">
+          <h4 class="ml-sources-group-title">Do .env</h4>
+          <button type="submit" class="btn btn-sm primary">Salvar flags</button>
+        </div>
+        <table class="ml-sources-table">
+          <thead>
+            <tr>
+              <th>Coletar</th>
+              <th>Nome / URL</th>
+              <th>Origem</th>
+              <th>Tipo</th>
+              <th>Status</th>
+              <th>Info</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${envTable}</tbody>
+        </table>
+
+        <h4 class="ml-sources-group-title">Links extras</h4>
+        <table class="ml-sources-table">
+          <thead>
+            <tr>
+              <th>Coletar</th>
+              <th>Nome / URL</th>
+              <th>Origem</th>
+              <th>Tipo</th>
+              <th>Status</th>
+              <th>Info</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${customTable}</tbody>
+        </table>
+      </form>
     </div>`;
 }
 
@@ -325,6 +397,8 @@ export function renderSettingsPage(data: SettingsData): string {
               ? '<p class="alert ok">Janela operacional atualizada com sucesso.</p>'
               : data.saved === 'senderDelay'
               ? '<p class="alert ok">Tempo entre envios atualizado com sucesso.</p>'
+              : data.saved === 'mlSources'
+                ? '<p class="alert ok">Fontes ML atualizadas com sucesso.</p>'
               : data.error
             ? `<p class="alert err">${escapeHtml(data.error)}</p>`
             : '';
@@ -532,6 +606,45 @@ export function renderSettingsPage(data: SettingsData): string {
       }
       .config-categories .subsection-title {
         margin-top: 0;
+      }
+      .config-categories-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+      .ml-sources-group-title {
+        margin: 20px 0 10px;
+        font-size: 0.95rem;
+      }
+      .ml-sources-custom-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .ml-sources-table {
+        width: 100%;
+      }
+      .ml-source-label {
+        font-weight: 600;
+      }
+      .ml-source-url {
+        max-width: 520px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .ml-source-flag {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .ml-source-remove-form {
+        margin: 0;
       }
       .connect-section {
         margin-top: 32px;
@@ -898,6 +1011,42 @@ export function renderSettingsPage(data: SettingsData): string {
       </div>
     </div>
 
+    <div id="ml-source-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="ml-source-modal-title">
+        <div class="modal-header">
+          <h3 id="ml-source-modal-title">Adicionar link de ofertas</h3>
+        </div>
+        <form method="post" action="/manager/settings/ml-sources/add">
+          <div class="modal-body">
+            <label for="modal-ml-source-label" class="modal-label">Nome (opcional)</label>
+            <input
+              type="text"
+              id="modal-ml-source-label"
+              name="label"
+              maxlength="80"
+              placeholder="Ex.: Ofertas relâmpago"
+              class="modal-input"
+            >
+            <label for="modal-ml-source-url" class="modal-label">Link do Mercado Livre</label>
+            <input
+              type="url"
+              id="modal-ml-source-url"
+              name="url"
+              required
+              placeholder="https://www.mercadolivre.com.br/ofertas?..."
+              spellcheck="false"
+              class="modal-input"
+            >
+            <p class="modal-help">Cole links de <code>/ofertas</code> ou IDs de categoria (<code>MLB1234</code>). O bot detecta automaticamente se é página de ofertas ou categoria.</p>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn modal-cancel" data-modal="ml-source-modal">Cancelar</button>
+            <button type="submit" class="btn primary">Adicionar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div id="brand-modal" class="modal-overlay hidden" aria-hidden="true">
       <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="brand-modal-title">
         <div class="modal-header">
@@ -956,6 +1105,7 @@ export function renderSettingsPage(data: SettingsData): string {
       const intervalModal = document.getElementById('send-interval-modal');
       const senderDelayModal = document.getElementById('sender-delay-modal');
       const scoreModal = document.getElementById('score-modal');
+      const mlSourceModal = document.getElementById('ml-source-modal');
       const brandModal = document.getElementById('brand-modal');
       const modalInviteInput = document.getElementById('modal-invite-link');
       const modalIntervalInput = document.getElementById('modal-interval-minutes');
@@ -1007,6 +1157,10 @@ export function renderSettingsPage(data: SettingsData): string {
 
       document.getElementById('edit-score')?.addEventListener('click', () => {
         openModal(scoreModal);
+      });
+
+      document.getElementById('add-ml-source')?.addEventListener('click', () => {
+        openModal(mlSourceModal);
       });
 
       document.getElementById('edit-brand')?.addEventListener('click', () => {
@@ -1064,7 +1218,7 @@ export function renderSettingsPage(data: SettingsData): string {
         });
       });
 
-      [channelModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, brandModal].forEach((modal) => {
+      [channelModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, mlSourceModal, brandModal].forEach((modal) => {
         modal?.addEventListener('click', (e) => {
           if (e.target === modal) closeModal(modal);
         });
@@ -1072,7 +1226,7 @@ export function renderSettingsPage(data: SettingsData): string {
 
       document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
-        [channelModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, brandModal].forEach((modal) => {
+        [channelModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, mlSourceModal, brandModal].forEach((modal) => {
           if (!modal.classList.contains('hidden')) closeModal(modal);
         });
       });

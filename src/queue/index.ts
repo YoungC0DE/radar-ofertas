@@ -91,6 +91,11 @@ export async function enqueueOfferSend(offerId: string): Promise<void> {
     { offerId },
     {
       jobId: `send-offer-${offerId}`,
+      // Sem retry, uma queda momentânea do WhatsApp (reconexão/cooldown) derrubava
+      // o envio de vez. Com backoff exponencial o envio é retentado ao longo de
+      // ~8 min, tempo de sobra para a sessão religar.
+      attempts: 5,
+      backoff: { type: 'exponential', delay: 30_000 },
       removeOnComplete: true,
       removeOnFail: 100,
     },

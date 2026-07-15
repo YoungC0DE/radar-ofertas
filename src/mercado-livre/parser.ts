@@ -122,7 +122,10 @@ function parseRating(raw: string | undefined): number | null {
 export function parseSalesRankText(raw: string | undefined): string | null {
   if (!raw) return null;
 
-  const match = raw.match(/(\d{1,3})\s*[ºª°o]?\s*em\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9\s/&+-]{1,48})/i);
+  // O marcador ordinal (º/ª/°/o) é obrigatório: rankings reais aparecem como
+  // "5º em Maquinas de Solda". Sem exigi-lo, os centavos do preço parcelado
+  // ("ou R$ 577,30 em outros meios") virariam um falso "30º em outros meios".
+  const match = raw.match(/(\d{1,3})\s*[ºª°o]\s*em\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9\s/&+-]{1,48})/i);
   if (!match?.[1] || !match[2]) return null;
 
   const category = match[2]
@@ -132,6 +135,8 @@ export function parseSalesRankText(raw: string | undefined): string | null {
     .trim();
 
   if (!category) return null;
+  // "outros meios" vem do texto de meios de pagamento, nunca é uma categoria.
+  if (/^outros\s+meios\b/i.test(category)) return null;
   return `${match[1]}º em ${category}`;
 }
 

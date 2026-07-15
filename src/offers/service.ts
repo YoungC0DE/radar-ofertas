@@ -1,4 +1,4 @@
-import { env } from '../config/env.js';
+import { getActiveMlCategories, hydrateMlSourcesCache } from '../config/ml-sources-config.js';
 import { getSearchLimit } from '../config/queue-config-store.js';
 import { calculateOfferScore, getRuntimeScoreConfig } from '../config/score-config.js';
 import { iterateScrapedPages } from '../mercado-livre/index.js';
@@ -7,6 +7,7 @@ import { logger } from '../utils/logger.js';
 import { formatOfferMessageFromTemplate, loadMessageTemplate, loadPlaceholderVisibility } from './message-template.js';
 import {
   createOffer,
+  deletePendingOfferById,
   deletePendingOffers,
   findOfferById,
   findPendingOfferIds,
@@ -75,11 +76,12 @@ export async function processOffers(rawOffers: RawOffer[]): Promise<number> {
 }
 
 export async function collectNewOffers(): Promise<{ total: number; enqueued: number }> {
+  await hydrateMlSourcesCache();
   const target = getSearchLimit();
   let total = 0;
   let enqueued = 0;
 
-  for (const category of env.ML_CATEGORIES) {
+  for (const category of getActiveMlCategories()) {
     for await (const page of iterateScrapedPages(category)) {
       for (const offer of page) {
         total++;
@@ -119,6 +121,34 @@ export async function removeAllPendingOffers(): Promise<number> {
   return deleted;
 }
 
+export async function removePendingOffer(offerId: string): Promise<void> {
+  const offer = await findOfferById(offerId);
+  if (!offer) {
+    throw new Error('Oferta não encontrada');
+  }
+  if (offer.sentAt) {
+    throw new Error('Oferta já foi enviada — não pode ser removida');
+  }
+
+  if (isRedisEnabled()) {
+    const queue = getSenderQueue();
+    try {
+      const job = await queue.getJob(`send-offer-${offerId}`);
+      if (job) await job.remove();
+    } catch (error) {
+      logger.warn({ offerId, error }, 'Failed to remove sender job');
+    } finally {
+      await queue.close();
+    }
+  }
+
+  const deleted = await deletePendingOfferById(offerId);
+  if (deleted === 0) {
+    throw new Error('Oferta não pôde ser removida (já foi enviada?)');
+  }
+  logger.info({ offerId }, 'Pending offer removed');
+}
+
 export async function sendOfferNow(offerId: string): Promise<void> {
   const offer = await findOfferById(offerId);
   if (!offer) {
@@ -150,6 +180,8 @@ export async function sendOfferNow(offerId: string): Promise<void> {
       {
         jobId,
         priority: 1,
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 30_000 },
         removeOnComplete: true,
         removeOnFail: 100,
       },

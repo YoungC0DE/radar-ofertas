@@ -347,6 +347,20 @@ export function renderLayout(title: string, body: string, activeNav?: string): s
     .section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
     .section-header h2 { margin: 0; }
     .danger-form { margin: 0; }
+    .offer-delete-form { margin: 0; display: inline-flex; }
+    .btn-trash {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 5px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: #dc2626;
+      cursor: pointer;
+      line-height: 0;
+    }
+    .btn-trash:hover { background: rgba(220, 38, 38, 0.1); border-color: rgba(220, 38, 38, 0.45); }
 
     .config-grid { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
     .config-row {

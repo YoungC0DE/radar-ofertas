@@ -1,5 +1,6 @@
 import { Worker } from 'bullmq';
 import { env } from '../config/env.js';
+import { hydrateMlSourcesCache } from '../config/ml-sources-config.js';
 import { getOperatingHoursStart, getOperatingHoursEnd, hydrateQueueConfigCache } from '../config/queue-config-store.js';
 import { collectNewOffers } from '../offers/service.js';
 import { getQueueConnection, QUEUE_NAMES, type CollectorJobData } from '../queue/index.js';
@@ -17,7 +18,7 @@ export function startCollectorWorker(): Worker<CollectorJobData> {
   const worker = new Worker<CollectorJobData>(
     QUEUE_NAMES.OFFER_COLLECTOR,
     async (job) => {
-      await hydrateQueueConfigCache();
+      await Promise.all([hydrateQueueConfigCache(), hydrateMlSourcesCache()]);
       const operatingHours = getOperatingHours();
 
       if (!isWithinOperatingHours(env.APP_TIMEZONE, operatingHours)) {

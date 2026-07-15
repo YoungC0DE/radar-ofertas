@@ -1,6 +1,7 @@
+import { hydrateBrandCache } from './config/brand-config.js';
+import { hydrateMlSourcesCache } from './config/ml-sources-config.js';
 import { hydrateQueueConfigCache } from './config/queue-config-store.js';
 import { hydrateScoreConfigCache } from './config/score-config.js';
-import { hydrateBrandCache } from './config/brand-config.js';
 import { scheduleCollectorJob } from './queue/index.js';
 import { startCollectorWorker } from './jobs/collector.js';
 import { logger } from './utils/logger.js';
@@ -8,7 +9,12 @@ import { logger } from './utils/logger.js';
 async function main(): Promise<void> {
   logger.info('Starting collector process');
 
-  await Promise.all([hydrateQueueConfigCache(), hydrateScoreConfigCache(), hydrateBrandCache()]);
+  await Promise.all([
+    hydrateQueueConfigCache(),
+    hydrateScoreConfigCache(),
+    hydrateBrandCache(),
+    hydrateMlSourcesCache(),
+  ]);
   await scheduleCollectorJob();
   const worker = startCollectorWorker();
 
