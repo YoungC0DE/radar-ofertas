@@ -6,22 +6,25 @@
 |---------|--------|-------|--------|
 | postgres | postgres:16-alpine | 5432 | Banco de dados |
 | redis | redis:7-alpine | 6379 | Filas BullMQ |
+| migrate | build local | — | Aplica migrations (one-shot) |
 | app | build local (bookworm + Chromium) | — | Collector (scraping + enfileira) |
 | worker | build local | — | WhatsApp + envio |
-
-> O **manager** não está no docker-compose — rodar separadamente com `npm run manager` (ou adicionar serviço futuro).
+| manager | build local | `MANAGER_PORT` (3000) | Painel admin |
 
 ## Primeiro deploy
 
 ```bash
 cp .env.example .env
-# Editar .env com valores reais
+# Editar .env com valores reais (WHATSAPP_CHANNEL_ID, AFFILIATE_CONFIG, etc.)
 
-docker compose up -d postgres redis
-npm run migrate:deploy
-docker compose up -d
-npm run manager   # opcional — painel admin
+docker compose up -d --build
 ```
+
+Migrations rodam automaticamente no serviço `migrate` antes de `app`, `worker` e `manager` subirem.
+
+Painel: `http://localhost:3000/manager`
+
+> No Docker, o **worker** já sobe como serviço separado. Não inicie outro worker pelo painel — use `docker compose restart worker` se precisar reiniciar.
 
 ## Autenticação WhatsApp
 

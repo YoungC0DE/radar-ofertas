@@ -61,9 +61,26 @@ npm run worker      # envio WhatsApp
 ## Docker (produção)
 
 ```bash
-docker compose up -d
-docker compose logs -f worker   # escanear QR na primeira execução
+cp .env.example .env
+# Editar .env com WHATSAPP_CHANNEL_ID, AFFILIATE_CONFIG, etc.
+
+docker compose up -d --build
 ```
+
+| Serviço | Função |
+|---------|--------|
+| `postgres` / `redis` | Infraestrutura |
+| `migrate` | Aplica migrations automaticamente |
+| `app` | Collector |
+| `worker` | Envio WhatsApp |
+| `manager` | Painel em `http://localhost:3000/manager` |
+
+```bash
+docker compose logs -f worker   # QR na primeira execução (se sessão não existir)
+docker compose restart worker   # reiniciar envio
+```
+
+Sessões persistidas em `./data` (volume montado nos containers).
 
 O manager não está no docker-compose — rode separadamente com `npm run manager` se precisar do painel.
 

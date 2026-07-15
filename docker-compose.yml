@@ -1,3 +1,28 @@
+x-app-environment: &app-environment
+  NODE_ENV: production
+  REDIS_ENABLED: "true"
+  DATABASE_URL: postgresql://${POSTGRES_USER:-radar}:${POSTGRES_PASSWORD:-radar_secret}@postgres:5432/${POSTGRES_DB:-radar_ofertas}
+  REDIS_URL: redis://redis:6379
+  WHATSAPP_AUTH_PATH: /app/data/auth_info_baileys
+  ML_AUTH_PATH: /app/data/ml_auth
+
+x-app-base: &app-base
+  build: .
+  restart: unless-stopped
+  env_file:
+    - .env
+  environment:
+    <<: *app-environment
+  volumes:
+    - ./data:/app/data
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -29,39 +54,41 @@ services:
       timeout: 5s
       retries: 5
 
-  app:
+  migrate:
     build: .
-    restart: unless-stopped
-    command: ["npx", "tsx", "watch", "src/app.ts"]
+    restart: "no"
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-radar}:${POSTGRES_PASSWORD:-radar_secret}@postgres:5432/${POSTGRES_DB:-radar_ofertas}
-      REDIS_URL: redis://redis:6379
+      <<: *app-environment
+    command: ["true"]
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./data:/app/data
+
+  app:
+    <<: *app-base
+    command: ["npx", "tsx", "src/app.ts"]
+    environment:
+      <<: *app-environment
+      SKIP_MIGRATIONS: "true"
 
   worker:
-    build: .
-    restart: unless-stopped
-    command: ["npx", "tsx", "watch", "src/worker.ts"]
-    env_file:
-      - .env
+    <<: *app-base
+    command: ["npx", "tsx", "src/worker.ts"]
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-radar}:${POSTGRES_PASSWORD:-radar_secret}@postgres:5432/${POSTGRES_DB:-radar_ofertas}
-      REDIS_URL: redis://redis:6379
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./data:/app/data
+      <<: *app-environment
+      SKIP_MIGRATIONS: "true"
+
+  manager:
+    <<: *app-base
+    command: ["npx", "tsx", "manager/server.ts"]
+    ports:
+      - "${MANAGER_PORT:-3000}:3000"
+    environment:
+      <<: *app-environment
+      MANAGER_PORT: "3000"
+      SKIP_MIGRATIONS: "true"
 
 volumes:
   postgres_data:

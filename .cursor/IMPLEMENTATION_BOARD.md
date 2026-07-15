@@ -23,7 +23,6 @@ Quadro de tarefas do projeto **Radar Ofertas**. Atualizar conforme o desenvolvim
 - [ ] Criar testes de integração do collector com HTTP mockado
 - [ ] Health check endpoints para app e worker (manager já tem `/manager/health`)
 - [ ] Documentar troubleshooting de sessão expirada e anti-bot
-- [ ] Adicionar serviço `manager` ao docker-compose
 
 ---
 
@@ -142,7 +141,6 @@ Quadro de tarefas do projeto **Radar Ofertas**. Atualizar conforme o desenvolvim
 - **Fila dedicada de links:** Separar geração de afiliado do collector para não bloquear coleta.
 - **Múltiplas tags de afiliado:** Selecionar tag por canal/categoria.
 - **Webhook de alerta:** Notificar quando sessão ML expirar (similar a QR WhatsApp).
-- **Manager no Docker:** Adicionar serviço ao docker-compose com porta exposta.
 
 ---
 
