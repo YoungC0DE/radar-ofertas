@@ -1,4 +1,5 @@
 import { DelayedError, Worker } from 'bullmq';
+import type { ChannelPublisher } from '../channels/types.js';
 import { env } from '../config/env.js';
 import {
   getOperatingHoursStart,
@@ -7,12 +8,17 @@ import {
   hydrateQueueConfigCache,
 } from '../config/queue-config-store.js';
 import { formatOfferMessage } from '../offers/service.js';
-import { findOfferById, markOfferSent, updateOfferAffiliateLink } from '../offers/repository.js';
+import {
+  findDelivery,
+  findOfferById,
+  markOfferDelivered,
+  markOfferDeliveryFailed,
+  updateOfferAffiliateLink,
+} from '../offers/repository.js';
 import { buildAffiliateLink } from '../mercado-livre/index.js';
-import { getQueueConnection, QUEUE_NAMES, type SenderJobData } from '../queue/index.js';
+import { getQueueConnection, getSenderQueueName, type SenderJobData } from '../queue/index.js';
 import { isWithinOperatingHours, msUntilOperatingWindow } from '../utils/datetime.js';
 import { logger } from '../utils/logger.js';
-import { requireWhatsAppSocket, sendOffer } from '../whatsapp/index.js';
 
 // Tempo máximo para gerar o link de afiliado no envio antes de cair no fallback,
 // garantindo que uma sessão ML lenta nunca segure a fila de envio.
@@ -25,9 +31,15 @@ function getOperatingHours() {
   };
 }
 
-export function startSenderWorker(): Worker<SenderJobData> {
+/**
+ * Worker de envio de um canal. Cada canal roda o seu, contra a sua própria fila:
+ * o publisher é a única parte específica do canal.
+ */
+export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJobData> {
+  const { channel } = publisher;
+
   const worker = new Worker<SenderJobData>(
-    QUEUE_NAMES.OFFER_SENDER,
+    getSenderQueueName(channel),
     async (job) => {
       await hydrateQueueConfigCache();
       const operatingHours = getOperatingHours();
@@ -37,13 +49,14 @@ export function startSenderWorker(): Worker<SenderJobData> {
         const delayMs = msUntilOperatingWindow(env.APP_TIMEZONE, operatingHours);
         logger.info(
           {
+            channel,
             jobId: job.id,
             offerId: job.data.offerId,
             delayMs,
             timezone: env.APP_TIMEZONE,
             operatingHours,
           },
-          'Outside operating hours — delaying WhatsApp send',
+          'Outside operating hours — delaying send',
         );
         await job.moveToDelayed(Date.now() + delayMs);
         throw new DelayedError();
@@ -53,12 +66,15 @@ export function startSenderWorker(): Worker<SenderJobData> {
 
       const offer = await findOfferById(offerId);
       if (!offer) {
-        logger.warn({ offerId }, 'Offer not found, skipping');
+        logger.warn({ channel, offerId }, 'Offer not found, skipping');
         return;
       }
 
-      if (offer.sentAt) {
-        logger.info({ offerId }, 'Offer already sent, skipping');
+      // O estado por canal vem da entrega, não de Offer.sentAt: uma oferta já
+      // publicada no WhatsApp continua pendente para o Telegram.
+      const delivery = await findDelivery(offerId, channel);
+      if (delivery?.sentAt) {
+        logger.info({ channel, offerId }, 'Offer already sent to this channel, skipping');
         return;
       }
 
@@ -73,20 +89,23 @@ export function startSenderWorker(): Worker<SenderJobData> {
         });
         await updateOfferAffiliateLink(offerId, affiliateLink);
         offer.affiliateLink = affiliateLink;
-        logger.info({ offerId }, 'Affiliate link gerado sob demanda no envio');
+        logger.info({ channel, offerId }, 'Affiliate link gerado sob demanda no envio');
       }
 
       const caption = await formatOfferMessage(offer);
-      // Obtemos o socket vivo a cada envio: a conexão do WhatsApp pode cair e
-      // reconectar (novo socket), então um socket capturado no start ficaria
-      // obsoleto e lançaria "Connection Closed". requireWhatsAppSocket() devolve
-      // o socket atual (ou aguarda a reconexão central) sem brigar por sessão
-      // quando outro processo a assumiu.
-      const sock = await requireWhatsAppSocket();
-      await sendOffer(sock, env.WHATSAPP_CHANNEL_ID, offer.image, caption);
-      await markOfferSent(offerId);
 
-      logger.info({ offerId, title: offer.title, force }, 'Offer published');
+      try {
+        const { messageId } = await publisher.publish(offer, caption);
+        await markOfferDelivered(offerId, channel, messageId);
+      } catch (error) {
+        // Guardamos o motivo antes de repropagar: o BullMQ ainda vai retentar,
+        // mas o painel precisa saber por que este canal está travado.
+        const message = error instanceof Error ? error.message : String(error);
+        await markOfferDeliveryFailed(offerId, channel, message).catch(() => {});
+        throw error;
+      }
+
+      logger.info({ channel, offerId, title: offer.title, force }, 'Offer published');
 
       if (!force) {
         const delayMs = getSenderDelayMinutesCached() * 60 * 1000;
@@ -102,7 +121,7 @@ export function startSenderWorker(): Worker<SenderJobData> {
   );
 
   worker.on('failed', (job, error) => {
-    logger.error({ jobId: job?.id, error }, 'Sender job failed');
+    logger.error({ channel, jobId: job?.id, error }, 'Sender job failed');
   });
 
   return worker;

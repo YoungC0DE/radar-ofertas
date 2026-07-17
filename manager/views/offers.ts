@@ -1,4 +1,6 @@
 import type { OffersPageData } from '../models/offers-model.js';
+import { CHANNEL_LABELS } from '../../src/channels/types.js';
+import type { DeliveryRecord } from '../../src/offers/types.js';
 import { env } from '../../src/config/env.js';
 import { escapeHtml, formatCurrency, formatDate, statusBadge } from './helpers.js';
 import { renderLayout } from './layout.js';
@@ -6,6 +8,25 @@ import { renderLayout } from './layout.js';
 function filterLink(filter: string, label: string, active: string): string {
   const cls = filter === active ? ' class="active"' : '';
   return `<a href="/manager/offers?status=${filter}"${cls}>${escapeHtml(label)}</a>`;
+}
+
+/** Badges de destino: um por canal que recebe a oferta, com o status da entrega. */
+function renderDestino(deliveries: DeliveryRecord[] | undefined): string {
+  if (!deliveries || deliveries.length === 0) {
+    return '<span class="meta">—</span>';
+  }
+
+  return deliveries
+    .map((delivery) => {
+      const label = CHANNEL_LABELS[delivery.channel] ?? delivery.channel;
+      const { cls, glyph, title } = delivery.sentAt
+        ? { cls: 'dest-sent', glyph: '✓', title: 'Enviado' }
+        : delivery.error
+          ? { cls: 'dest-failed', glyph: '✗', title: `Falhou: ${delivery.error}` }
+          : { cls: 'dest-pending', glyph: '•', title: 'Pendente' };
+      return `<span class="dest-badge ${cls}" title="${escapeHtml(title)}">${escapeHtml(label)} ${glyph}</span>`;
+    })
+    .join(' ');
 }
 
 const TRASH_ICON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`;
@@ -18,9 +39,9 @@ export function renderOffersPage(
 ): string {
   const rows =
     !data.database.available
-      ? `<tr><td colspan="8">${escapeHtml(data.database.error ?? 'Banco indisponível')}</td></tr>`
+      ? `<tr><td colspan="9">${escapeHtml(data.database.error ?? 'Banco indisponível')}</td></tr>`
       : data.offers.length === 0
-      ? `<tr><td colspan="8">Nenhuma oferta encontrada.</td></tr>`
+      ? `<tr><td colspan="9">Nenhuma oferta encontrada.</td></tr>`
       : data.offers
           .map(
             (o) => {
@@ -37,6 +58,7 @@ export function renderOffersPage(
 
               return `<tr>
           <td><a class="link" href="/manager/offers/${escapeHtml(o.id)}">${escapeHtml(o.id.slice(0, 10))}…</a></td>
+          <td><div class="dest-cell">${renderDestino(data.deliveriesByOfferId.get(o.id))}</div></td>
           <td>${escapeHtml(o.title.slice(0, 50))}${o.title.length > 50 ? '…' : ''}</td>
           <td>${o.score}</td>
           <td>${formatCurrency(o.price)}</td>
@@ -139,6 +161,22 @@ export function renderOffersPage(
         justify-content: space-between;
         gap: 10px;
       }
+      .dest-cell {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .dest-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 20px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .dest-sent { background: #dcfce7; color: #166534; }
+      .dest-pending { background: #fef9c3; color: #854d0e; }
+      .dest-failed { background: #fee2e2; color: #991b1b; }
     </style>
     <section>
       <div class="section-header">
@@ -161,7 +199,7 @@ export function renderOffersPage(
       </div>
       <table>
         <thead>
-          <tr><th>ID</th><th>Título</th><th>Score</th><th>Preço</th><th>Desconto</th><th>Status</th><th>Previsão de envio</th><th>Coletada em</th></tr>
+          <tr><th>ID</th><th>Destino</th><th>Título</th><th>Score</th><th>Preço</th><th>Desconto</th><th>Status</th><th>Previsão de envio</th><th>Coletada em</th></tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>

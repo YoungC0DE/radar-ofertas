@@ -1,6 +1,6 @@
 # Radar Ofertas
 
-Bot automatizado que coleta ofertas do Mercado Livre via scraping híbrido (HTTP + Playwright), pontua oportunidades, gera links de afiliado e publica em canal WhatsApp via Baileys. Inclui painel web **manager** para configurar score, template, horários, conexões e worker.
+Bot automatizado que coleta ofertas do Mercado Livre via scraping híbrido (HTTP + Playwright), pontua oportunidades, gera links de afiliado e publica em canal **WhatsApp** (Baileys) e **Telegram** (Bot API). Cada canal roda no seu próprio processo, com fila própria. Inclui painel web **manager** para configurar score, template, horários, conexões e workers.
 
 ## Stack
 
@@ -12,13 +12,16 @@ Node.js, TypeScript, Cheerio, Playwright, Baileys, PostgreSQL, Redis, BullMQ, Do
 src/
 ├── app.ts              → collector (coleta + enfileira)
 ├── worker.ts           → envio WhatsApp
+├── worker-telegram.ts  → envio Telegram
 ├── ml-login.ts         → login afiliado ML (CLI)
 ├── wa-login.ts         → login WhatsApp (CLI)
 ├── config/             → ENV (Zod) + settings DB
+├── channels/           → contrato de canal + publishers
 ├── whatsapp/           → Baileys + channel-cache
+├── telegram/           → Bot API (fetch)
 ├── mercado-livre/      → scraping + sessão afiliado
 ├── offers/             → domínio de ofertas + template
-├── jobs/               → workers BullMQ
+├── jobs/               → workers BullMQ (sender genérico por canal)
 ├── queue/              → filas Redis + agendamento
 ├── database/           → Prisma
 ├── scripts/            → preflight, up
@@ -46,17 +49,34 @@ npm run up
 Abra `http://localhost:3000/manager` e configure:
 
 1. **Conexões** — WhatsApp (QR) e Mercado Livre (login afiliado no navegador).
-2. **Worker de envio** — iniciar/reiniciar o processo que publica no canal.
+2. **Workers de envio** — iniciar/reiniciar os processos que publicam nos canais.
 3. **Score, template, horários** — regras operacionais (persistidas no banco).
 
 Alternativa via CLI (sem painel):
 
 ```bash
-npm run ml:login    # sessão afiliado ML
-npm run wa:login    # sessão WhatsApp
-npm run dev         # collector
-npm run worker      # envio WhatsApp
+npm run ml:login         # sessão afiliado ML
+npm run wa:login         # sessão WhatsApp
+npm run dev              # collector
+npm run worker           # envio WhatsApp
+npm run worker:telegram  # envio Telegram (se TELEGRAM_ENABLED=true)
 ```
+
+### Telegram (opcional)
+
+O Telegram é um canal separado, desligado por padrão. Para ligar:
+
+1. Crie o bot no [@BotFather](https://t.me/BotFather) e copie o token
+2. Adicione o bot como **administrador** do seu canal, com permissão de publicar
+3. No `.env`:
+
+```bash
+TELEGRAM_ENABLED=true
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
+TELEGRAM_CHAT_ID=@meucanal      # ou o id -100... de canal privado
+```
+
+`npm run check` valida token, canal e permissão de admin. Com `TELEGRAM_ENABLED=false`, nada é enfileirado para o Telegram e o worker encerra no boot.
 
 ## Docker (produção)
 
@@ -73,12 +93,16 @@ docker compose up -d --build
 | `migrate` | Aplica migrations automaticamente |
 | `app` | Collector |
 | `worker` | Envio WhatsApp |
+| `worker-telegram` | Envio Telegram (encerra sozinho se `TELEGRAM_ENABLED=false`) |
 | `manager` | Painel em `http://localhost:3000/manager` |
 
 ```bash
-docker compose logs -f worker   # QR na primeira execução (se sessão não existir)
-docker compose restart worker   # reiniciar envio
+docker compose logs -f worker            # QR na primeira execução (se sessão não existir)
+docker compose restart worker            # reiniciar envio WhatsApp
+docker compose logs -f worker-telegram   # envios no Telegram
 ```
+
+Não escale o `worker` além de uma réplica — a sessão do WhatsApp só admite um dono. O `worker-telegram` é stateless e pode ter várias.
 
 Sessões persistidas em `./data` (volume montado nos containers).
 
@@ -89,10 +113,11 @@ O manager não está no docker-compose — rode separadamente com `npm run manag
 | Comando | Descrição |
 |---------|-----------|
 | `npm run up` | Collector + manager (preflight automático) |
-| `npm run check` | Valida ambiente (DB, Redis, sessões, canal) |
+| `npm run check` | Valida ambiente (DB, Redis, sessões, canais) |
 | `npm run setup` | Preflight + guia de setup |
 | `npm run dev` | Processo collector (coleta + fila) |
 | `npm run worker` | Processo worker (WhatsApp + envio) |
+| `npm run worker:telegram` | Processo worker (Telegram + envio) |
 | `npm run manager` | Painel web admin em `/manager` |
 | `npm run ml:login` | Login afiliado ML (salva sessão) |
 | `npm run wa:login` | Autentica WhatsApp (QR code) |
@@ -105,7 +130,7 @@ O manager não está no docker-compose — rode separadamente com `npm run manag
 
 ## Documentação
 
-Consulte `.cursor/docs/` para arquitetura, filas, banco, WhatsApp, Mercado Livre, manager e deploy.
+Consulte `.cursor/docs/` para arquitetura, canais de envio, filas, banco, WhatsApp, Telegram, Mercado Livre, manager e deploy.
 
 | Doc | Conteúdo |
 |-----|----------|

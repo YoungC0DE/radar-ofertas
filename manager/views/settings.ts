@@ -63,100 +63,20 @@ function renderOperatingHoursSection(data: SettingsData, statusBadge: string): s
   return configRow('Janela operacional', value, 'Horário em que o bot coleta e envia ofertas');
 }
 
-function listingKindLabel(kind: string): string {
-  return kind === 'offers' ? 'Ofertas' : 'Categoria';
-}
+// As fontes de coleta migraram para páginas próprias por canal (menu lateral →
+// Fontes de coleta), já que cada canal tem sua própria seleção. Aqui só apontamos
+// para elas.
+function renderSourcesPointer(data: SettingsData): string {
+  const links = [
+    `<a class="link" href="/manager/sources/whatsapp">Fontes do WhatsApp</a>`,
+    ...(data.telegramEnabled ? [`<a class="link" href="/manager/sources/telegram">Fontes do Telegram</a>`] : []),
+  ].join(' · ');
 
-function renderMlCategoriesSection(data: SettingsData): string {
-  const envRows = data.categories.filter((category) => category.fromEnv);
-  const customRows = data.categories.filter((category) => !category.fromEnv);
-
-  const renderRow = (category: SettingsData['categories'][number], options?: { removable?: boolean }): string => {
-    const status = category.valid
-      ? category.enabled
-        ? '<span class="badge ok">Ativa</span>'
-        : '<span class="badge warn">Inativa</span>'
-      : '<span class="badge err">Inválida</span>';
-    const origin = category.fromEnv
-      ? '<span class="badge">.env</span>'
-      : '<span class="badge">Extra</span>';
-    const enabledCell = `<label class="ml-source-flag">
-          <input type="checkbox" name="enabled_${escapeHtml(category.id)}" value="1"${category.enabled ? ' checked' : ''}>
-          Coletar
-        </label>`;
-    const removeCell = options?.removable
-      ? `<button type="submit" formaction="/manager/settings/ml-sources/remove/${encodeURIComponent(category.id)}" formmethod="post" class="btn btn-sm btn-danger" title="Remover link">Remover</button>`
-      : '';
-
-    return `<tr>
-      <td>${enabledCell}</td>
-      <td>
-        <div class="ml-source-label">${escapeHtml(category.label)}</div>
-        <div class="ml-source-url meta" title="${escapeHtml(category.category)}">${escapeHtml(category.category)}</div>
-      </td>
-      <td>${origin}</td>
-      <td><span class="badge">${listingKindLabel(category.listingKind)}</span></td>
-      <td>${status}</td>
-      <td>${escapeHtml(category.reason ?? listingKindLabel(category.listingKind))}</td>
-      <td>${removeCell}</td>
-    </tr>`;
-  };
-
-  const envTable = envRows.length === 0
-    ? '<tr><td colspan="7">Nenhuma categoria no .env.</td></tr>'
-    : envRows.map((category) => renderRow(category)).join('');
-
-  const customTable = customRows.length === 0
-    ? '<tr><td colspan="7">Nenhum link extra cadastrado.</td></tr>'
-    : customRows.map((category) => renderRow(category, { removable: true })).join('');
-
-  return `
-    <div class="config-categories">
-      <div class="config-categories-head">
-        <div>
-          <h3 class="subsection-title">Fontes ML</h3>
-          <p class="meta">O bot coleta ofertas apenas das fontes com a flag <strong>Coletar</strong> ativada — vale tanto para os links do <code>ML_CATEGORIES</code> no .env quanto para os links extras. Ative/desative e clique em <strong>Salvar flags</strong>.</p>
-        </div>
-        <button type="button" class="btn btn-sm" id="add-ml-source">Adicionar link</button>
-      </div>
-
-      <form method="post" action="/manager/settings/ml-sources">
-        <div class="ml-sources-custom-head">
-          <h4 class="ml-sources-group-title">Do .env</h4>
-          <button type="submit" class="btn btn-sm primary">Salvar flags</button>
-        </div>
-        <table class="ml-sources-table">
-          <thead>
-            <tr>
-              <th>Coletar</th>
-              <th>Nome / URL</th>
-              <th>Origem</th>
-              <th>Tipo</th>
-              <th>Status</th>
-              <th>Info</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>${envTable}</tbody>
-        </table>
-
-        <h4 class="ml-sources-group-title">Links extras</h4>
-        <table class="ml-sources-table">
-          <thead>
-            <tr>
-              <th>Coletar</th>
-              <th>Nome / URL</th>
-              <th>Origem</th>
-              <th>Tipo</th>
-              <th>Status</th>
-              <th>Info</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>${customTable}</tbody>
-        </table>
-      </form>
-    </div>`;
+  return configRow(
+    'Fontes de coleta',
+    `<div class="config-value">${links}</div>`,
+    'Cada canal tem sua própria seleção de fontes — configure em páginas separadas',
+  );
 }
 
 function renderBrandSection(data: SettingsData): string {
@@ -289,6 +209,40 @@ function renderConnectCard(
   </div>`;
 }
 
+// O Telegram não tem fluxo interativo como WhatsApp (QR) ou ML (login no
+// navegador): o bot é configurado no .env (@BotFather) e adicionado como admin do
+// canal. Aqui só mostramos o status do bot/canal e um botão para reverificar.
+function renderTelegramConnectCard(data: SettingsData): string {
+  const badge = !data.telegramEnabled
+    ? '<span class="badge warn">Desativado</span>'
+    : data.tgSession?.ok
+      ? '<span class="badge ok">Conectado</span>'
+      : '<span class="badge warn">Desconectado</span>';
+
+  const detail = !data.telegramEnabled
+    ? 'Defina TELEGRAM_ENABLED=true no .env e reinicie o painel'
+    : (data.tgSession?.detail ?? 'Verificando…');
+
+  const chatLine = data.telegramEnabled && data.telegramChatId
+    ? `<div class="connect-detail meta">Canal: ${escapeHtml(data.telegramChatId)}</div>`
+    : '';
+
+  return `<div class="connect-card">
+    <div class="connect-card-head">
+      <span class="connect-icon connect-icon-telegram">${TELEGRAM_ICON}</span>
+      <div class="connect-card-text">
+        <div class="connect-name">Telegram</div>
+        <div class="connect-detail meta" id="telegram-connect-detail">${escapeHtml(detail)}</div>
+        ${chatLine}
+      </div>
+      <span id="telegram-connect-badge">${badge}</span>
+    </div>
+    <button type="button" class="btn primary connect-btn" id="connect-telegram"${data.telegramEnabled ? '' : ' disabled'}>
+      Verificar conexão
+    </button>
+  </div>`;
+}
+
 function renderConnectionsSection(data: SettingsData): string {
   return `
     <section class="connect-section">
@@ -297,18 +251,50 @@ function renderConnectionsSection(data: SettingsData): string {
       <div class="connect-grid">
         ${renderConnectCard('ml', 'Mercado Livre', ML_ICON, data.mlSession)}
         ${renderConnectCard('wa', 'WhatsApp', WA_ICON, data.waSession)}
+        ${renderTelegramConnectCard(data)}
       </div>
     </section>`;
 }
 
 const WORKER_ICON = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`;
 const PRISMA_ICON = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.8 15.4 13.6 2.7a1.6 1.6 0 0 0-2.9.4L4.1 18.6a1.6 1.6 0 0 0 1 2l8.6 2.3a1.6 1.6 0 0 0 2-1.9z"/><path d="M9 4 7 19l8 2"/></svg>`;
+const TELEGRAM_ICON = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 4.3 2.9 11.4a.6.6 0 0 0 .05 1.13l4.6 1.5 1.75 5.3a.6.6 0 0 0 1 .24l2.6-2.5 4.7 3.45a.6.6 0 0 0 .95-.36l3.2-15a.6.6 0 0 0-.8-.7z"/><path d="m7.55 14.03 11-7.2-8.2 8.6"/></svg>`;
 
 function workerStatusBadge(status: string): string {
   if (status === 'running') return '<span class="badge ok">Rodando</span>';
   if (status === 'starting') return '<span class="badge warn">Iniciando…</span>';
   if (status === 'error') return '<span class="badge err">Erro</span>';
   return '<span class="badge warn">Parado</span>';
+}
+
+function renderTelegramWorkerCard(data: SettingsData): string {
+  // O card só existe com TELEGRAM_ENABLED=true: sem isso o worker encerraria no
+  // boot e os botões não teriam o que controlar.
+  if (!data.telegramEnabled) return '';
+
+  const worker = data.telegramWorkerState;
+  const running = worker.status === 'running' || worker.status === 'starting';
+  const detail =
+    worker.detail ??
+    data.tgSession?.detail ??
+    (running ? 'Processo de envio em execução' : 'Processo de envio parado');
+
+  return `
+        <div class="connect-card">
+          <div class="connect-card-head">
+            <span class="connect-icon connect-icon-worker">${TELEGRAM_ICON}</span>
+            <div class="connect-card-text">
+              <div class="connect-name">Worker de envio — Telegram</div>
+              <div class="connect-detail meta" id="worker-tg-detail">${escapeHtml(detail)}</div>
+            </div>
+            <span id="worker-tg-badge">${workerStatusBadge(worker.status)}</span>
+          </div>
+          <div class="op-actions">
+            <button type="button" class="btn primary" id="worker-tg-start"${running ? ' disabled' : ''}>Iniciar</button>
+            <button type="button" class="btn" id="worker-tg-restart">Reiniciar</button>
+            <button type="button" class="btn btn-danger" id="worker-tg-stop"${running ? '' : ' disabled'}>Parar</button>
+          </div>
+        </div>`;
 }
 
 function renderOperationsSection(data: SettingsData): string {
@@ -319,13 +305,13 @@ function renderOperationsSection(data: SettingsData): string {
   return `
     <section class="connect-section">
       <h2>Operações</h2>
-      <p class="meta">Controle os processos do bot direto pelo painel. O worker aqui é gerenciado por este painel — não rode um <code>npm run worker</code> no terminal ao mesmo tempo.</p>
+      <p class="meta">Controle os processos do bot direto pelo painel. Os workers aqui são gerenciados por este painel — não rode um <code>npm run worker</code> no terminal ao mesmo tempo. Cada canal tem seu próprio worker: parar um não afeta o outro.</p>
       <div class="connect-grid">
         <div class="connect-card">
           <div class="connect-card-head">
             <span class="connect-icon connect-icon-worker">${WORKER_ICON}</span>
             <div class="connect-card-text">
-              <div class="connect-name">Worker de envio</div>
+              <div class="connect-name">Worker de envio — WhatsApp</div>
               <div class="connect-detail meta" id="worker-detail">${escapeHtml(workerDetail)}</div>
             </div>
             <span id="worker-badge">${workerStatusBadge(worker.status)}</span>
@@ -336,6 +322,7 @@ function renderOperationsSection(data: SettingsData): string {
             <button type="button" class="btn btn-danger" id="worker-stop"${running ? '' : ' disabled'}>Parar</button>
           </div>
         </div>
+        ${renderTelegramWorkerCard(data)}
         <div class="connect-card">
           <div class="connect-card-head">
             <span class="connect-icon connect-icon-prisma">${PRISMA_ICON}</span>
@@ -698,6 +685,9 @@ export function renderSettingsPage(data: SettingsData): string {
       .connect-icon-worker {
         background: linear-gradient(135deg, #6366f1, #4338ca);
       }
+      .connect-icon-telegram {
+        background: linear-gradient(135deg, #2aabee, #229ed9);
+      }
       .connect-icon-prisma {
         background: linear-gradient(135deg, #4f46e5, #0f172a);
       }
@@ -795,8 +785,8 @@ export function renderSettingsPage(data: SettingsData): string {
           'Intervalo entre cada mensagem enviada no WhatsApp',
         )}
         ${renderChannelSection(data)}
+        ${renderSourcesPointer(data)}
       </div>
-      ${renderMlCategoriesSection(data)}
     </section>
 
     ${renderConnectionsSection(data)}
@@ -1011,42 +1001,6 @@ export function renderSettingsPage(data: SettingsData): string {
       </div>
     </div>
 
-    <div id="ml-source-modal" class="modal-overlay hidden" aria-hidden="true">
-      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="ml-source-modal-title">
-        <div class="modal-header">
-          <h3 id="ml-source-modal-title">Adicionar link de ofertas</h3>
-        </div>
-        <form method="post" action="/manager/settings/ml-sources/add">
-          <div class="modal-body">
-            <label for="modal-ml-source-label" class="modal-label">Nome (opcional)</label>
-            <input
-              type="text"
-              id="modal-ml-source-label"
-              name="label"
-              maxlength="80"
-              placeholder="Ex.: Ofertas relâmpago"
-              class="modal-input"
-            >
-            <label for="modal-ml-source-url" class="modal-label">Link do Mercado Livre</label>
-            <input
-              type="url"
-              id="modal-ml-source-url"
-              name="url"
-              required
-              placeholder="https://www.mercadolivre.com.br/ofertas?..."
-              spellcheck="false"
-              class="modal-input"
-            >
-            <p class="modal-help">Cole links de <code>/ofertas</code> ou IDs de categoria (<code>MLB1234</code>). O bot detecta automaticamente se é página de ofertas ou categoria.</p>
-          </div>
-          <div class="modal-actions">
-            <button type="button" class="btn modal-cancel" data-modal="ml-source-modal">Cancelar</button>
-            <button type="submit" class="btn primary">Adicionar</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
     <div id="brand-modal" class="modal-overlay hidden" aria-hidden="true">
       <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="brand-modal-title">
         <div class="modal-header">
@@ -1105,7 +1059,6 @@ export function renderSettingsPage(data: SettingsData): string {
       const intervalModal = document.getElementById('send-interval-modal');
       const senderDelayModal = document.getElementById('sender-delay-modal');
       const scoreModal = document.getElementById('score-modal');
-      const mlSourceModal = document.getElementById('ml-source-modal');
       const brandModal = document.getElementById('brand-modal');
       const modalInviteInput = document.getElementById('modal-invite-link');
       const modalIntervalInput = document.getElementById('modal-interval-minutes');
@@ -1157,10 +1110,6 @@ export function renderSettingsPage(data: SettingsData): string {
 
       document.getElementById('edit-score')?.addEventListener('click', () => {
         openModal(scoreModal);
-      });
-
-      document.getElementById('add-ml-source')?.addEventListener('click', () => {
-        openModal(mlSourceModal);
       });
 
       document.getElementById('edit-brand')?.addEventListener('click', () => {
@@ -1218,7 +1167,7 @@ export function renderSettingsPage(data: SettingsData): string {
         });
       });
 
-      [channelModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, mlSourceModal, brandModal].forEach((modal) => {
+      [channelModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, brandModal].forEach((modal) => {
         modal?.addEventListener('click', (e) => {
           if (e.target === modal) closeModal(modal);
         });
@@ -1226,7 +1175,7 @@ export function renderSettingsPage(data: SettingsData): string {
 
       document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
-        [channelModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, mlSourceModal, brandModal].forEach((modal) => {
+        [channelModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, brandModal].forEach((modal) => {
           if (!modal.classList.contains('hidden')) closeModal(modal);
         });
       });
@@ -1406,14 +1355,32 @@ export function renderSettingsPage(data: SettingsData): string {
       waCloseBtn?.addEventListener('click', () => { stopWaPoll(); closeModal(waModal); });
       waModal?.addEventListener('click', (e) => { if (e.target === waModal) { stopWaPoll(); closeModal(waModal); } });
 
-      // --- Operações: Worker ---
-      const workerStartBtn = document.getElementById('worker-start');
-      const workerRestartBtn = document.getElementById('worker-restart');
-      const workerStopBtn = document.getElementById('worker-stop');
-      const workerBadge = document.getElementById('worker-badge');
-      const workerDetail = document.getElementById('worker-detail');
-      let workerPollTimer = null;
+      // --- Conectar com: Telegram (só reverifica; config é do .env) ---
+      const tgConnectBtn = document.getElementById('connect-telegram');
+      const tgConnectBadge = document.getElementById('telegram-connect-badge');
+      const tgConnectDetail = document.getElementById('telegram-connect-detail');
 
+      tgConnectBtn?.addEventListener('click', async () => {
+        tgConnectBtn.disabled = true;
+        tgConnectDetail.textContent = 'Verificando conexão com o Telegram…';
+        try {
+          const res = await fetch('/manager/settings/connect/telegram/status');
+          if (res.ok) {
+            const state = await res.json();
+            tgConnectBadge.innerHTML = state.ok
+              ? '<span class="badge ok">Conectado</span>'
+              : '<span class="badge warn">Desconectado</span>';
+            tgConnectDetail.textContent = state.detail;
+          } else {
+            tgConnectDetail.textContent = 'Não foi possível verificar agora.';
+          }
+        } catch (_) {
+          tgConnectDetail.textContent = 'Não foi possível verificar agora.';
+        }
+        tgConnectBtn.disabled = false;
+      });
+
+      // --- Operações: Workers de envio (um card por canal) ---
       function workerBadgeHtml(status) {
         if (status === 'running') return '<span class="badge ok">Rodando</span>';
         if (status === 'starting') return '<span class="badge warn">Iniciando…</span>';
@@ -1421,42 +1388,60 @@ export function renderSettingsPage(data: SettingsData): string {
         return '<span class="badge warn">Parado</span>';
       }
 
-      function renderWorkerState(state) {
-        const running = state.status === 'running' || state.status === 'starting';
-        workerBadge.innerHTML = workerBadgeHtml(state.status);
-        if (state.detail) workerDetail.textContent = state.detail;
-        else workerDetail.textContent = running ? 'Processo de envio em execução' : 'Processo de envio parado';
-        workerStartBtn.disabled = running;
-        workerStopBtn.disabled = !running;
+      // Cada canal tem seu card, seus botões e seu polling — o ?channel= diz ao
+      // painel qual processo controlar. O card do Telegram só existe quando o
+      // canal está ligado, então saímos fora se os elementos não estiverem lá.
+      function setupWorkerCard(prefix, channel) {
+        const startBtn = document.getElementById(prefix + '-start');
+        const restartBtn = document.getElementById(prefix + '-restart');
+        const stopBtn = document.getElementById(prefix + '-stop');
+        const badge = document.getElementById(prefix + '-badge');
+        const detail = document.getElementById(prefix + '-detail');
+        if (!startBtn || !badge || !detail) return;
+
+        const query = channel ? '?channel=' + channel : '';
+        let pollTimer = null;
+
+        function render(state) {
+          const running = state.status === 'running' || state.status === 'starting';
+          badge.innerHTML = workerBadgeHtml(state.status);
+          if (state.detail) detail.textContent = state.detail;
+          else detail.textContent = running ? 'Processo de envio em execução' : 'Processo de envio parado';
+          startBtn.disabled = running;
+          if (stopBtn) stopBtn.disabled = !running;
+        }
+
+        async function poll() {
+          try {
+            const res = await fetch('/manager/settings/worker/status' + query);
+            if (res.ok) render(await res.json());
+          } catch (_) {}
+        }
+
+        function ensurePoll() {
+          if (pollTimer) return;
+          pollTimer = setInterval(poll, 2500);
+        }
+
+        async function action(endpoint, pending) {
+          [startBtn, restartBtn, stopBtn].forEach((b) => { if (b) b.disabled = true; });
+          detail.textContent = pending;
+          try {
+            const res = await fetch(endpoint + query, { method: 'POST' });
+            if (res.ok) render(await res.json());
+          } catch (_) {}
+          ensurePoll();
+          setTimeout(poll, 600);
+        }
+
+        startBtn.addEventListener('click', () => action('/manager/settings/worker/start', 'Iniciando worker…'));
+        restartBtn?.addEventListener('click', () => action('/manager/settings/worker/restart', 'Reiniciando worker…'));
+        stopBtn?.addEventListener('click', () => action('/manager/settings/worker/stop', 'Parando worker…'));
+        ensurePoll();
       }
 
-      async function pollWorker() {
-        try {
-          const res = await fetch('/manager/settings/worker/status');
-          if (res.ok) renderWorkerState(await res.json());
-        } catch (_) {}
-      }
-
-      function ensureWorkerPoll() {
-        if (workerPollTimer) return;
-        workerPollTimer = setInterval(pollWorker, 2500);
-      }
-
-      async function workerAction(endpoint, pending) {
-        [workerStartBtn, workerRestartBtn, workerStopBtn].forEach((b) => { if (b) b.disabled = true; });
-        workerDetail.textContent = pending;
-        try {
-          const res = await fetch(endpoint, { method: 'POST' });
-          if (res.ok) renderWorkerState(await res.json());
-        } catch (_) {}
-        ensureWorkerPoll();
-        setTimeout(pollWorker, 600);
-      }
-
-      workerStartBtn?.addEventListener('click', () => workerAction('/manager/settings/worker/start', 'Iniciando worker…'));
-      workerRestartBtn?.addEventListener('click', () => workerAction('/manager/settings/worker/restart', 'Reiniciando worker…'));
-      workerStopBtn?.addEventListener('click', () => workerAction('/manager/settings/worker/stop', 'Parando worker…'));
-      ensureWorkerPoll();
+      setupWorkerCard('worker', 'whatsapp');
+      setupWorkerCard('worker-tg', 'telegram');
 
       // --- Operações: Prisma generate ---
       const prismaBtn = document.getElementById('prisma-generate');

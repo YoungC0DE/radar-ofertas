@@ -1,5 +1,8 @@
+import { getEnabledChannels } from '../../src/channels/index.js';
+import { CHANNEL_LABELS, type Channel } from '../../src/channels/types.js';
 import { getCollectorQueue, getSenderQueue, isRedisEnabled } from '../../src/queue/index.js';
 import { logger } from '../../src/utils/logger.js';
+
 export interface QueueCounts {
   waiting: number;
   active: number;
@@ -8,11 +11,18 @@ export interface QueueCounts {
   completed: number;
 }
 
+/** Fila de envio de um canal — uma linha por canal ligado no painel. */
+export interface SenderQueueSnapshot {
+  channel: Channel;
+  label: string;
+  counts: QueueCounts;
+}
+
 export interface QueuesSnapshot {
   available: boolean;
   error?: string;
   collector: QueueCounts;
-  sender: QueueCounts;
+  senders: SenderQueueSnapshot[];
 }
 
 const emptyCounts = (): QueueCounts => ({
@@ -23,9 +33,7 @@ const emptyCounts = (): QueueCounts => ({
   completed: 0,
 });
 
-async function readCounts(
-  queue: ReturnType<typeof getCollectorQueue>,
-): Promise<QueueCounts> {
+async function readCounts(queue: ReturnType<typeof getCollectorQueue>): Promise<QueueCounts> {
   const counts = await queue.getJobCounts('waiting', 'active', 'delayed', 'failed', 'completed');
   return {
     waiting: counts.waiting ?? 0,
@@ -42,15 +50,21 @@ export async function getQueuesSnapshot(): Promise<QueuesSnapshot> {
       available: false,
       error: 'Redis desabilitado (REDIS_ENABLED=false)',
       collector: emptyCounts(),
-      sender: emptyCounts(),
+      senders: [],
     };
   }
 
-  try {    const [collector, sender] = await Promise.all([
-      readCounts(getCollectorQueue()),
-      readCounts(getSenderQueue()),
-    ]);
-    return { available: true, collector, sender };
+  try {
+    const collector = await readCounts(getCollectorQueue());
+    const senders = await Promise.all(
+      getEnabledChannels().map(async (channel) => ({
+        channel,
+        label: CHANNEL_LABELS[channel],
+        counts: await readCounts(getSenderQueue(channel)),
+      })),
+    );
+
+    return { available: true, collector, senders };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.warn({ error }, 'Redis indisponível — filas não carregadas no manager');
@@ -58,7 +72,7 @@ export async function getQueuesSnapshot(): Promise<QueuesSnapshot> {
       available: false,
       error: message,
       collector: emptyCounts(),
-      sender: emptyCounts(),
+      senders: [],
     };
   }
 }

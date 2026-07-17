@@ -1,11 +1,27 @@
 import { Queue } from 'bullmq';
 import { getCollectorIntervalMinutes } from '../config/queue-config-store.js';
 import { env } from '../config/env.js';
+import type { Channel } from '../channels/types.js';
 
 export const QUEUE_NAMES = {
   OFFER_COLLECTOR: 'offer-collector',
   OFFER_SENDER: 'offer-sender',
 } as const;
+
+/**
+ * Uma fila por canal: cada worker tem seu próprio ritmo, sua janela e suas
+ * falhas isoladas — se o WhatsApp cai, o Telegram continua publicando. O nome da
+ * fila do WhatsApp é o histórico ('offer-sender') para não órfãos os jobs em voo
+ * no deploy desta mudança.
+ */
+const SENDER_QUEUE_NAMES: Record<Channel, string> = {
+  whatsapp: QUEUE_NAMES.OFFER_SENDER,
+  telegram: 'offer-sender-telegram',
+};
+
+export function getSenderQueueName(channel: Channel): string {
+  return SENDER_QUEUE_NAMES[channel];
+}
 
 export interface CollectorJobData {
   triggeredAt: string;
@@ -14,6 +30,11 @@ export interface CollectorJobData {
 export interface SenderJobData {
   offerId: string;
   force?: boolean;
+}
+
+/** Job id determinístico: garante um envio por oferta por canal. */
+export function senderJobId(channel: Channel, offerId: string): string {
+  return `send-offer-${channel}-${offerId}`;
 }
 
 const connection = {
@@ -36,9 +57,9 @@ export function getCollectorQueue(): Queue<CollectorJobData> {
   return new Queue<CollectorJobData>(QUEUE_NAMES.OFFER_COLLECTOR, { connection });
 }
 
-export function getSenderQueue(): Queue<SenderJobData> {
+export function getSenderQueue(channel: Channel): Queue<SenderJobData> {
   assertRedisEnabled('filas de envio');
-  return new Queue<SenderJobData>(QUEUE_NAMES.OFFER_SENDER, { connection });
+  return new Queue<SenderJobData>(getSenderQueueName(channel), { connection });
 }
 
 export async function scheduleCollectorJob(): Promise<void> {
@@ -84,22 +105,25 @@ export async function rescheduleCollectorJob(): Promise<void> {
   await scheduleCollectorJob();
 }
 
-export async function enqueueOfferSend(offerId: string): Promise<void> {
+/** Opções de retry compartilhadas: uma queda momentânea de um canal não pode
+ * derrubar o envio de vez. Com backoff exponencial o envio é retentado ao longo
+ * de ~8 min, tempo de sobra para a sessão religar (WhatsApp) ou o flood control
+ * passar (Telegram). */
+export const SENDER_JOB_OPTIONS = {
+  attempts: 5,
+  backoff: { type: 'exponential', delay: 30_000 },
+  removeOnComplete: true,
+  removeOnFail: 100,
+} as const;
+
+export async function enqueueOfferSend(channel: Channel, offerId: string): Promise<void> {
   assertRedisEnabled('enfileiramento de envio');
-  await getSenderQueue().add(
-    'send',
-    { offerId },
-    {
-      jobId: `send-offer-${offerId}`,
-      // Sem retry, uma queda momentânea do WhatsApp (reconexão/cooldown) derrubava
-      // o envio de vez. Com backoff exponencial o envio é retentado ao longo de
-      // ~8 min, tempo de sobra para a sessão religar.
-      attempts: 5,
-      backoff: { type: 'exponential', delay: 30_000 },
-      removeOnComplete: true,
-      removeOnFail: 100,
-    },
-  );
+  const queue = getSenderQueue(channel);
+  try {
+    await queue.add('send', { offerId }, { jobId: senderJobId(channel, offerId), ...SENDER_JOB_OPTIONS });
+  } finally {
+    await queue.close();
+  }
 }
 
 export function getQueueConnection() {

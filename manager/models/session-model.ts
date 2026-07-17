@@ -1,5 +1,6 @@
 import { access } from 'node:fs/promises';
 import path from 'node:path';
+import { telegramPublisher } from '../../src/channels/telegram-publisher.js';
 import { env } from '../../src/config/env.js';
 import { loadSessionMeta, loadStorageState, hasValidSession } from '../../src/mercado-livre/session.js';
 import { formatIsoInTimezone } from '../../src/utils/datetime.js';
@@ -48,4 +49,18 @@ export async function getWhatsAppSessionStatus(): Promise<SessionStatus> {
   }
 
   return { label: 'WhatsApp', ok: true, detail: `Auth em ${env.WHATSAPP_AUTH_PATH}` };
+}
+
+/**
+ * Diferente do WhatsApp e do ML, não há sessão em disco: o Telegram é stateless
+ * e a "conexão" é o token falando com a Bot API. Por isso conferimos de fato com
+ * a API — é a única forma de saber se o bot ainda é admin do canal.
+ */
+export async function getTelegramSessionStatus(): Promise<SessionStatus> {
+  if (!env.TELEGRAM_ENABLED) {
+    return { label: 'Telegram', ok: false, detail: 'Desabilitado (TELEGRAM_ENABLED=false)' };
+  }
+
+  const result = await telegramPublisher.verify();
+  return { label: 'Telegram', ok: result.ok, detail: result.detail };
 }

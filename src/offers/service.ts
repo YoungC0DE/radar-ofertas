@@ -1,8 +1,20 @@
-import { getActiveMlCategories, hydrateMlSourcesCache } from '../config/ml-sources-config.js';
+import { getEnabledChannels, isChannelEnabled } from '../channels/index.js';
+import type { Channel } from '../channels/types.js';
+import {
+  getActiveMlCategoriesForChannel,
+  getChannelsForCategory,
+  hydrateMlSourcesCache,
+} from '../config/ml-sources-config.js';
 import { getSearchLimit } from '../config/queue-config-store.js';
 import { calculateOfferScore, getRuntimeScoreConfig } from '../config/score-config.js';
 import { iterateScrapedPages } from '../mercado-livre/index.js';
-import { enqueueOfferSend, getSenderQueue, isRedisEnabled } from '../queue/index.js';
+import {
+  enqueueOfferSend,
+  getSenderQueue,
+  isRedisEnabled,
+  SENDER_JOB_OPTIONS,
+  senderJobId,
+} from '../queue/index.js';
 import { runWithConcurrency } from '../utils/concurrency.js';
 import { logger } from '../utils/logger.js';
 import { allocateProportionalWithMin, shuffle } from './sampling.js';
@@ -11,9 +23,12 @@ import {
   createOffer,
   deletePendingOfferById,
   deletePendingOffers,
+  findDelivery,
+  findExistingDeliveryChannels,
   findOfferById,
+  findOfferIdByMercadoLivreId,
   findPendingOfferIds,
-  offerExists,
+  openOfferDelivery,
   sentOfferExistsByTitleAndPrice,
 } from './repository.js';
 import type { OfferRecord, RawOffer } from './types.js';
@@ -35,9 +50,25 @@ export async function processOffer(rawOffer: RawOffer): Promise<string | null> {
     return null;
   }
 
-  if (await offerExists(rawOffer.mercadoLivreId)) {
-    logger.debug({ mercadoLivreId: rawOffer.mercadoLivreId }, 'Offer already exists');
+  const targetChannels = resolveOfferChannels(rawOffer);
+  if (targetChannels.length === 0) {
     return null;
+  }
+
+  // Se a oferta já existe (mesmo produto coletado na passada de outro canal),
+  // não descartamos: apenas garantimos a entrega para os canais que ainda faltam.
+  // Assim uma fonte compartilhada chega aos dois canais sem duplicar a oferta.
+  const existingId = await findOfferIdByMercadoLivreId(rawOffer.mercadoLivreId);
+  if (existingId) {
+    const already = await findExistingDeliveryChannels(existingId);
+    const missing = targetChannels.filter((channel) => !already.includes(channel));
+    if (missing.length === 0) {
+      logger.debug({ mercadoLivreId: rawOffer.mercadoLivreId }, 'Offer already dispatched to its channels');
+      return null;
+    }
+    await dispatchOffer(existingId, missing);
+    logger.info({ offerId: existingId, channels: missing }, 'Existing offer dispatched to missing channels');
+    return existingId;
   }
 
   if (await sentOfferExistsByTitleAndPrice(rawOffer.title, rawOffer.price)) {
@@ -66,10 +97,47 @@ export async function processOffer(rawOffer: RawOffer): Promise<string | null> {
     score,
   });
 
-  await enqueueOfferSend(offer.id);
+  const channels = await dispatchOffer(offer.id, targetChannels);
 
-  logger.info({ offerId: offer.id, score: offer.score }, 'Offer saved and enqueued');
+  logger.info({ offerId: offer.id, score: offer.score, channels }, 'Offer saved and enqueued');
   return offer.id;
+}
+
+/**
+ * Canais que devem receber uma oferta: os que a fonte dela alimenta, cruzados com
+ * os canais efetivamente ligados. Sem fonte conhecida (ex.: caminho e2e), cai no
+ * fan-out para todos os ligados.
+ */
+function resolveOfferChannels(rawOffer: RawOffer): Channel[] {
+  const enabled = getEnabledChannels();
+  if (!rawOffer.sourceCategory) return enabled;
+  const sourceChannels = getChannelsForCategory(rawOffer.sourceCategory);
+  return enabled.filter((channel) => sourceChannels.includes(channel));
+}
+
+/**
+ * Fan-out da oferta para os canais indicados (default: todos os ligados). Abrimos
+ * a entrega ANTES de enfileirar: se o processo morrer entre as duas coisas, a
+ * oferta aparece como pendente no painel em vez de sumir sem rastro.
+ *
+ * Cada canal falha por conta própria — um Redis recusando o job do Telegram não
+ * pode impedir o WhatsApp de receber o seu.
+ */
+export async function dispatchOffer(offerId: string, channels?: Channel[]): Promise<Channel[]> {
+  const targets = (channels ?? getEnabledChannels()).filter((channel) => isChannelEnabled(channel));
+  const dispatched: Channel[] = [];
+
+  for (const channel of targets) {
+    try {
+      await openOfferDelivery(offerId, channel);
+      await enqueueOfferSend(channel, offerId);
+      dispatched.push(channel);
+    } catch (error) {
+      logger.error({ offerId, channel, error }, 'Falha ao enfileirar envio do canal');
+    }
+  }
+
+  return dispatched;
 }
 
 export async function processOffers(rawOffers: RawOffer[]): Promise<number> {
@@ -89,6 +157,9 @@ async function collectPool(category: string): Promise<RawOffer[]> {
   let pages = 0;
 
   for await (const page of iterateScrapedPages(category)) {
+    // Marcamos a fonte em cada oferta para o dispatch saber a quais canais ela
+    // pertence, mesmo depois de os pools serem embaralhados juntos no sorteio.
+    for (const offer of page) offer.sourceCategory = category;
     pool.push(...page);
     if (++pages >= POOL_PAGES_PER_SOURCE) break;
   }
@@ -96,32 +167,59 @@ async function collectPool(category: string): Promise<RawOffer[]> {
   return pool;
 }
 
+/**
+ * Coleta independente por canal: cada canal ligado puxa até seu próprio
+ * searchLimit a partir das SUAS fontes. Assim "Telegram = /ofertas" recebe a cota
+ * cheia mesmo que o WhatsApp tenha muitas fontes — antes uma cota global era
+ * repartida entre as fontes de todos os canais e o canal com menos fontes ficava
+ * sub-representado.
+ *
+ * Uma oferta de fonte compartilhada é criada uma vez e entregue nos dois canais;
+ * na passada do segundo canal, processOffer vê que as entregas já existem e não a
+ * reconta (ver dedup por canal em processOffer).
+ */
 export async function collectNewOffers(): Promise<{ total: number; enqueued: number }> {
   await hydrateMlSourcesCache();
   const target = getSearchLimit();
-  const categories = getActiveMlCategories();
+  const channels = getEnabledChannels();
 
+  let total = 0;
+  let enqueued = 0;
+
+  for (const channel of channels) {
+    const result = await collectForChannel(channel, target);
+    total += result.total;
+    enqueued += result.enqueued;
+  }
+
+  return { total, enqueued };
+}
+
+async function collectForChannel(
+  channel: Channel,
+  target: number,
+): Promise<{ total: number; enqueued: number }> {
+  const categories = getActiveMlCategoriesForChannel(channel);
   if (categories.length === 0) {
-    logger.warn('No active ML sources configured — nothing to collect');
+    logger.info({ channel }, 'Nenhuma fonte ativa para o canal — nada a coletar');
     return { total: 0, enqueued: 0 };
   }
 
-  // Buscamos o pool de todos os links ANTES de processar. Antes o laço parava no
-  // primeiro link que enchesse a cota, e os demais nunca eram lidos.
+  // Buscamos o pool de todas as fontes do canal ANTES de processar, para o
+  // sorteio ver todas — senão a primeira fonte encheria a cota e as demais nunca
+  // seriam lidas.
   const pools = await runWithConcurrency(categories, POOL_CONCURRENCY, async (category) => {
     try {
       return { category, offers: shuffle(await collectPool(category)) };
     } catch (error) {
-      logger.error({ category, error }, 'Failed to build pool for source');
+      logger.error({ channel, category, error }, 'Failed to build pool for source');
       return { category, offers: [] as RawOffer[] };
     }
   });
 
-  // Embaralhar a ordem dos pools importa: quando há menos vagas que links, o
-  // mínimo de 1 vai para os primeiros da lista.
   const filled = shuffle(pools.filter((pool) => pool.offers.length > 0));
   if (filled.length === 0) {
-    logger.warn({ sources: categories.length }, 'All sources returned empty — nothing to collect');
+    logger.warn({ channel, sources: categories.length }, 'All sources returned empty for channel');
     return { total: 0, enqueued: 0 };
   }
 
@@ -129,6 +227,7 @@ export async function collectNewOffers(): Promise<{ total: number; enqueued: num
 
   logger.info(
     {
+      channel,
       target,
       sources: filled.map((pool, index) => ({
         category: pool.category,
@@ -136,7 +235,7 @@ export async function collectNewOffers(): Promise<{ total: number; enqueued: num
         quota: quotas[index] ?? 0,
       })),
     },
-    'Offer pools built — drawing across all sources',
+    'Offer pools built for channel — drawing',
   );
 
   const drawn = filled.flatMap((pool, index) => pool.offers.slice(0, quotas[index] ?? 0));
@@ -156,26 +255,34 @@ export async function collectNewOffers(): Promise<{ total: number; enqueued: num
   return { total, enqueued };
 }
 
-export async function removeAllPendingOffers(): Promise<number> {
-  const ids = await findPendingOfferIds();
-  if (ids.length === 0) return 0;
+/** Remove os jobs de envio de uma oferta em todos os canais ligados. */
+async function removeSenderJobs(offerIds: string[]): Promise<void> {
+  if (!isRedisEnabled() || offerIds.length === 0) return;
 
-  if (isRedisEnabled()) {
-    const queue = getSenderQueue();
+  for (const channel of getEnabledChannels()) {
+    const queue = getSenderQueue(channel);
     try {
-      for (const id of ids) {
+      for (const offerId of offerIds) {
         try {
-          const job = await queue.getJob(`send-offer-${id}`);
+          const job = await queue.getJob(senderJobId(channel, offerId));
           if (job) await job.remove();
         } catch (error) {
-          logger.warn({ offerId: id, error }, 'Failed to remove sender job');
+          logger.warn({ offerId, channel, error }, 'Failed to remove sender job');
         }
       }
     } finally {
       await queue.close();
     }
   }
+}
 
+export async function removeAllPendingOffers(): Promise<number> {
+  const ids = await findPendingOfferIds();
+  if (ids.length === 0) return 0;
+
+  await removeSenderJobs(ids);
+
+  // As entregas somem junto por cascade (OfferDelivery.offer onDelete: Cascade).
   const deleted = await deletePendingOffers();
   logger.info({ deleted }, 'Pending offers removed');
   return deleted;
@@ -190,17 +297,7 @@ export async function removePendingOffer(offerId: string): Promise<void> {
     throw new Error('Oferta já foi enviada — não pode ser removida');
   }
 
-  if (isRedisEnabled()) {
-    const queue = getSenderQueue();
-    try {
-      const job = await queue.getJob(`send-offer-${offerId}`);
-      if (job) await job.remove();
-    } catch (error) {
-      logger.warn({ offerId, error }, 'Failed to remove sender job');
-    } finally {
-      await queue.close();
-    }
-  }
+  await removeSenderJobs([offerId]);
 
   const deleted = await deletePendingOfferById(offerId);
   if (deleted === 0) {
@@ -209,44 +306,53 @@ export async function removePendingOffer(offerId: string): Promise<void> {
   logger.info({ offerId }, 'Pending offer removed');
 }
 
-export async function sendOfferNow(offerId: string): Promise<void> {
+/**
+ * Enfileira o envio imediato (force: pula a janela operacional e o delay).
+ * Sem canal, dispara em todos os ligados que ainda não receberam a oferta.
+ */
+export async function sendOfferNow(offerId: string, channel?: Channel): Promise<void> {
   const offer = await findOfferById(offerId);
   if (!offer) {
     throw new Error('Oferta não encontrada');
-  }
-  if (offer.sentAt) {
-    throw new Error('Oferta já foi enviada');
   }
   if (!isRedisEnabled()) {
     throw new Error('Redis desabilitado — não é possível enfileirar envio');
   }
 
-  const queue = getSenderQueue();
-  const jobId = `send-offer-${offerId}`;
+  const targets = channel ? [channel] : getEnabledChannels();
+  if (targets.length === 0) {
+    throw new Error('Nenhum canal habilitado — ligue o WhatsApp ou o Telegram');
+  }
 
-  try {
-    const existing = await queue.getJob(jobId);
-    if (existing) {
-      const state = await existing.getState();
-      if (state === 'active') {
-        return;
-      }
-      await existing.remove();
-    }
+  const pending: Channel[] = [];
+  for (const target of targets) {
+    const delivery = await findDelivery(offerId, target);
+    if (!delivery?.sentAt) pending.push(target);
+  }
 
-    await queue.add(
-      'send',
-      { offerId, force: true },
-      {
-        jobId,
-        priority: 1,
-        attempts: 5,
-        backoff: { type: 'exponential', delay: 30_000 },
-        removeOnComplete: true,
-        removeOnFail: 100,
-      },
+  if (pending.length === 0) {
+    throw new Error(
+      channel ? 'Oferta já foi enviada neste canal' : 'Oferta já foi enviada em todos os canais',
     );
-  } finally {
-    await queue.close();
+  }
+
+  for (const target of pending) {
+    await openOfferDelivery(offerId, target);
+    const queue = getSenderQueue(target);
+    const jobId = senderJobId(target, offerId);
+
+    try {
+      const existing = await queue.getJob(jobId);
+      if (existing) {
+        const state = await existing.getState();
+        // Um job já rodando vai concluir sozinho — removê-lo agora perderia o envio.
+        if (state === 'active') continue;
+        await existing.remove();
+      }
+
+      await queue.add('send', { offerId, force: true }, { jobId, priority: 1, ...SENDER_JOB_OPTIONS });
+    } finally {
+      await queue.close();
+    }
   }
 }

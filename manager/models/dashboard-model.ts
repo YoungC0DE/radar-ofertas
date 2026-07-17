@@ -15,7 +15,12 @@ import { estimatePendingSendTimes } from '../../src/queue/sender-schedule.js';
 import { isWithinOperatingHours } from '../../src/utils/datetime.js';
 import { type DatabaseSnapshot, withDatabase } from './db-model.js';
 import { getQueuesSnapshot, type QueuesSnapshot } from './queue-model.js';
-import { getMercadoLivreSessionStatus, getWhatsAppSessionStatus, type SessionStatus } from './session-model.js';
+import {
+  getMercadoLivreSessionStatus,
+  getTelegramSessionStatus,
+  getWhatsAppSessionStatus,
+  type SessionStatus,
+} from './session-model.js';
 
 const emptyStats: OfferStats = { total: 0, pending: 0, sent: 0 };
 
@@ -92,10 +97,11 @@ export async function loadDashboardData(options: {
     }));
   }
 
-  const [queues, mlSession, waSession] = await Promise.all([
+  const [queues, mlSession, waSession, tgSession] = await Promise.all([
     getQueuesSnapshot(),
     getMercadoLivreSessionStatus(),
     getWhatsAppSessionStatus(),
+    getTelegramSessionStatus(),
   ]);
 
   return {
@@ -104,7 +110,9 @@ export async function loadDashboardData(options: {
     pendingOffers: pendingRows,
     sentOffers: sentRows,
     queues,
-    sessions: [mlSession, waSession],
+    // O Telegram só aparece quando ligado: quem não usa o canal não deve ver um
+    // status vermelho permanente de algo que escolheu não ter.
+    sessions: env.TELEGRAM_ENABLED ? [mlSession, waSession, tgSession] : [mlSession, waSession],
     withinOperatingHours: isWithinOperatingHours(env.APP_TIMEZONE, {
       startHour: operatingHours.start,
       endHour: operatingHours.end,

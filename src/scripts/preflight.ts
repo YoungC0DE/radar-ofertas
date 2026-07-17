@@ -1,3 +1,4 @@
+import { telegramPublisher } from '../channels/telegram-publisher.js';
 import { env } from '../config/env.js';
 import { prisma } from '../database/client.js';
 import { buildMlCategoryRows, hydrateMlSourcesCache } from '../config/ml-sources-config.js';
@@ -5,7 +6,7 @@ import { hasValidSession, loadSessionMeta, loadStorageState } from '../mercado-l
 import { getCollectorQueue, isRedisEnabled } from '../queue/index.js';
 import { formatIsoInTimezone } from '../utils/datetime.js';
 
-export type PreflightProfile = 'all' | 'collector' | 'worker' | 'manager';
+export type PreflightProfile = 'all' | 'collector' | 'worker' | 'worker-telegram' | 'manager';
 
 export interface PreflightItem {
   ok: boolean;
@@ -97,6 +98,28 @@ async function checkMercadoLivre(): Promise<PreflightItem> {
   };
 }
 
+async function checkTelegram(): Promise<PreflightItem> {
+  if (!env.TELEGRAM_ENABLED) {
+    return {
+      ok: true,
+      label: 'Telegram',
+      detail: 'Desabilitado (TELEGRAM_ENABLED=false) — nada será enviado ao Telegram',
+    };
+  }
+
+  const result = await telegramPublisher.verify();
+  if (!result.ok) {
+    return {
+      ok: false,
+      label: 'Telegram',
+      detail: result.detail,
+      fix: 'Crie o bot no @BotFather, adicione-o como admin do canal e preencha TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID no .env',
+    };
+  }
+
+  return { ok: true, label: 'Telegram', detail: result.detail };
+}
+
 async function checkAffiliateTag(): Promise<PreflightItem> {
   const tag = env.AFFILIATE_CONFIG.tag;
   if (!tag) {
@@ -112,7 +135,8 @@ async function checkAffiliateTag(): Promise<PreflightItem> {
 
 async function checkCategories(): Promise<PreflightItem> {
   await hydrateMlSourcesCache();
-  const rows = buildMlCategoryRows().filter((row) => row.enabled);
+  // Ativa = alimenta ao menos um canal.
+  const rows = buildMlCategoryRows().filter((row) => row.channels.length > 0);
   const invalid = rows.filter((row) => !row.valid);
 
   if (invalid.length > 0) {
@@ -139,12 +163,16 @@ async function runChecks(profile: PreflightProfile): Promise<PreflightItem[]> {
 
   items.push(await checkDatabase());
 
-  if (profile === 'all' || profile === 'collector' || profile === 'worker') {
+  if (profile === 'all' || profile === 'collector' || profile === 'worker' || profile === 'worker-telegram') {
     items.push(await checkRedis());
   }
 
   if (profile === 'all' || profile === 'collector' || profile === 'manager') {
     items.push(await checkCategories());
+  }
+
+  if (profile === 'all' || profile === 'worker-telegram') {
+    items.push(await checkTelegram());
   }
 
   if (profile === 'all' || profile === 'collector') {
@@ -181,6 +209,8 @@ export function printSetupGuide(): void {
   console.log('  npm run wa:channel -- "https://whatsapp.com/channel/..."');
   console.log('  npm run check             # verificar tudo');
   console.log('  npm run up                # subir collector + worker + manager\n');
+  console.log('Telegram (opcional): crie o bot no @BotFather, adicione-o como admin do');
+  console.log('canal e defina TELEGRAM_ENABLED/TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID no .env.\n');
 }
 
 export async function runPreflight(profile: PreflightProfile = 'all'): Promise<PreflightResult> {
@@ -192,7 +222,9 @@ export async function runPreflight(profile: PreflightProfile = 'all'): Promise<P
 function parseProfile(argv: string[]): PreflightProfile {
   const arg = argv.find((a) => a.startsWith('--profile='));
   const value = arg?.split('=')[1];
-  if (value === 'collector' || value === 'worker' || value === 'manager') return value;
+  if (value === 'collector' || value === 'worker' || value === 'worker-telegram' || value === 'manager') {
+    return value;
+  }
   return 'all';
 }
 

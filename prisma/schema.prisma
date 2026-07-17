@@ -32,8 +32,32 @@ model Offer {
   officialStore  Boolean   @default(false) @map("official_store")
   bestSeller     Boolean   @default(false) @map("best_seller")
   score          Int       @default(0)
+  /// Primeiro envio bem-sucedido em QUALQUER canal (denormalizado a partir de
+  /// OfferDelivery). Mantido para dedup e visões globais; o estado por canal
+  /// é sempre lido de OfferDelivery, nunca daqui.
   sentAt         DateTime? @map("sent_at")
   createdAt      DateTime  @default(now()) @map("created_at")
 
+  deliveries     OfferDelivery[]
+
   @@map("offers")
+}
+
+/// Um registro por (oferta, canal): fonte da verdade de quem já recebeu o quê.
+/// A linha nasce quando o envio é enfileirado (sentAt nulo = pendente) e é
+/// fechada pelo worker do canal com sentAt/messageId ou com error.
+model OfferDelivery {
+  id        String    @id @default(cuid())
+  offerId   String    @map("offer_id")
+  channel   String
+  sentAt    DateTime? @map("sent_at")
+  messageId String?   @map("message_id")
+  error     String?
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  offer     Offer     @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@unique([offerId, channel])
+  @@index([channel, sentAt])
+  @@map("offer_deliveries")
 }

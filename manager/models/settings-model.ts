@@ -16,14 +16,6 @@ import {
   type ScoreConfig,
 } from '../../src/config/score-config.js';
 import { env } from '../../src/config/env.js';
-import {
-  addCustomMlSource,
-  buildMlCategoryRows,
-  hydrateMlSourcesCache,
-  removeCustomMlSource,
-  saveMlSourceFlagsFromForm,
-  type MlCategoryRow,
-} from '../../src/config/ml-sources-config.js';
 import { isWithinOperatingHours } from '../../src/utils/datetime.js';
 import { isRedisEnabled, rescheduleCollectorJob } from '../../src/queue/index.js';
 import {
@@ -41,6 +33,7 @@ import {
 import { isPlaceholderChannelId } from '../../src/whatsapp/index.js';
 import {
   getMercadoLivreSessionStatus,
+  getTelegramSessionStatus,
   getWhatsAppSessionStatus,
   type SessionStatus,
 } from './session-model.js';
@@ -65,10 +58,13 @@ export interface SettingsData {
   brandSubtitle: string;
   brandLogoHref: string | null;
   brandInitial: string;
-  categories: MlCategoryRow[];
   mlSession: SessionStatus;
   waSession: SessionStatus;
+  telegramEnabled: boolean;
+  telegramChatId: string;
+  tgSession: SessionStatus | null;
   workerState: WorkerState;
+  telegramWorkerState: WorkerState;
   saved: SettingsSaveType;
   error: string | null;
 }
@@ -82,12 +78,13 @@ export async function loadSettingsData(
   saved: SettingsSaveType = null,
   error: string | null = null,
 ): Promise<SettingsData> {
-  await Promise.all([hydrateQueueConfigCache(), hydrateBrandCache(), hydrateMlSourcesCache()]);
+  await Promise.all([hydrateQueueConfigCache(), hydrateBrandCache()]);
   const scoreConfig = await getRuntimeScoreConfigAsync();
   const senderDelayMinutes = await getSenderDelayMinutesFromDb();
-  const [mlSession, waSession] = await Promise.all([
+  const [mlSession, waSession, tgSession] = await Promise.all([
     getMercadoLivreSessionStatus(),
     getWhatsAppSessionStatus(),
+    env.TELEGRAM_ENABLED ? getTelegramSessionStatus() : Promise.resolve(null),
   ]);
   const operatingHours = {
     start: getOperatingHoursStart(),
@@ -125,10 +122,13 @@ export async function loadSettingsData(
     brandSubtitle: brand.subtitle,
     brandLogoHref: getBrandLogoHref(brand),
     brandInitial: getBrandInitial(brand.name),
-    categories: buildMlCategoryRows(),
     mlSession,
     waSession,
-    workerState: getWorkerState(),
+    telegramEnabled: env.TELEGRAM_ENABLED,
+    telegramChatId: env.TELEGRAM_CHAT_ID,
+    tgSession,
+    workerState: getWorkerState('whatsapp'),
+    telegramWorkerState: getWorkerState('telegram'),
     saved,
     error,
   };
@@ -216,36 +216,3 @@ export async function saveScoreSettings(
   }
 }
 
-export async function saveMlSourcesFlags(
-  form: Record<string, string>,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  try {
-    return await saveMlSourceFlagsFromForm(form);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Falha ao salvar fontes ML';
-    return { ok: false, error: message };
-  }
-}
-
-export async function addMlSource(
-  url: string,
-  label?: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  try {
-    return await addCustomMlSource(url, label);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Falha ao adicionar link';
-    return { ok: false, error: message };
-  }
-}
-
-export async function deleteMlSource(
-  id: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  try {
-    return await removeCustomMlSource(id);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Falha ao remover link';
-    return { ok: false, error: message };
-  }
-}

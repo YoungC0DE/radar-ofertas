@@ -4,6 +4,8 @@ import {
   getBrandLogoHref,
   getBrandSettings,
 } from '../models/brand-model.js';
+import { getEnabledChannels } from '../../src/channels/index.js';
+import { CHANNEL_LABELS } from '../../src/channels/types.js';
 
 const NAV_ICONS: Record<string, string> = {
   dashboard: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
@@ -11,6 +13,7 @@ const NAV_ICONS: Record<string, string> = {
   template: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
   settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>`,
   logs: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h8M8 9h2"/></svg>`,
+  sources: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>`,
 };
 
 export function renderLayout(title: string, body: string, activeNav?: string): string {
@@ -20,11 +23,14 @@ export function renderLayout(title: string, body: string, activeNav?: string): s
     ? `<img src="${escapeHtml(brandLogo)}" alt="${escapeHtml(brand.name)}">`
     : escapeHtml(getBrandInitial(brand.name));
 
-  const nav = (href: string, label: string, key: string) => {
+  const navWithIcon = (href: string, label: string, key: string, iconKey: string) => {
     const cls = activeNav === key ? 'nav-item active' : 'nav-item';
-    const icon = NAV_ICONS[key] ?? '';
+    const icon = NAV_ICONS[iconKey] ?? '';
     return `<a href="${href}" class="${cls}"><span class="nav-icon">${icon}</span><span class="nav-label">${escapeHtml(label)}</span></a>`;
   };
+
+  // A key de destaque e a key do ícone coincidem para os itens principais.
+  const nav = (href: string, label: string, key: string) => navWithIcon(href, label, key, key);
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -526,6 +532,12 @@ export function renderLayout(title: string, body: string, activeNav?: string): s
         ${nav('/manager/template', 'Mensagem', 'template')}
         ${nav('/manager/settings', 'Configuração', 'settings')}
         ${nav('/manager/logs', 'Log', 'logs')}
+        <div class="nav-section">Fontes de coleta</div>
+        ${getEnabledChannels()
+          .map((channel) =>
+            navWithIcon(`/manager/sources/${channel}`, CHANNEL_LABELS[channel], `sources-${channel}`, 'sources'),
+          )
+          .join('')}
       </nav>
       <div class="sidebar-footer">v1.0 · Bot WhatsApp</div>
     </aside>

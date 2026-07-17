@@ -12,12 +12,20 @@ import { handleCollectOffers, showDashboard } from '../controllers/dashboard-con
 import { showOfferDetail, showOffersList, handleDeleteAllPending, handleDeleteOffer, handleAffiliateDelaySave, handleSendOfferNow, handleSearchLimitSave } from '../controllers/offers-controller.js';
 
 import { handleTemplateSave, showTemplatePage } from '../controllers/template-controller.js';
-import { handleChannelLinkSave, handleBrandSave, handleMlSourceAdd, handleMlSourceRemove, handleMlSourcesSave, handleOperatingHoursSave, handleScoreSave, handleSendIntervalSave, handleSenderDelaySave, showSettingsPage } from '../controllers/settings-controller.js';
+import { handleChannelLinkSave, handleBrandSave, handleOperatingHoursSave, handleScoreSave, handleSendIntervalSave, handleSenderDelaySave, showSettingsPage } from '../controllers/settings-controller.js';
 import { getLogsJson, showLogsPage } from '../controllers/logs-controller.js';
+import {
+  handleSourceAdd,
+  handleSourceFlagsSave,
+  handleSourceRemove,
+  parseSourcesChannel,
+  showSourcesPage,
+} from '../controllers/sources-controller.js';
 import {
   cancelMercadoLivreConnectJson,
   finishMercadoLivreConnectJson,
   getMercadoLivreConnectJson,
+  getTelegramConnectJson,
   getWhatsAppConnectJson,
   startMercadoLivreConnectJson,
   startWhatsAppConnectJson,
@@ -25,6 +33,7 @@ import {
 import {
   getPrismaJson,
   getWorkerJson,
+  parseChannelParam,
   restartWorkerJson,
   runPrismaGenerateJson,
   startWorkerJson,
@@ -181,6 +190,36 @@ export async function handleManagerRequest(
       return;
     }
 
+    // Fontes de coleta por canal (páginas separadas no menu lateral).
+    const sourcesPageMatch = path.match(/^\/manager\/sources\/([^/]+)$/);
+    if (sourcesPageMatch && method === 'GET') {
+      const channel = parseSourcesChannel(sourcesPageMatch[1]);
+      sendHtml(res, 200, await showSourcesPage(channel));
+      return;
+    }
+
+    if (sourcesPageMatch && method === 'POST') {
+      const channel = parseSourcesChannel(sourcesPageMatch[1]);
+      const form = parseFormUrlEncoded(await readFormBody(req));
+      sendHtml(res, 200, await handleSourceFlagsSave(channel, form));
+      return;
+    }
+
+    const sourcesAddMatch = path.match(/^\/manager\/sources\/([^/]+)\/add$/);
+    if (sourcesAddMatch && method === 'POST') {
+      const channel = parseSourcesChannel(sourcesAddMatch[1]);
+      const form = parseFormUrlEncoded(await readFormBody(req));
+      sendHtml(res, 200, await handleSourceAdd(channel, form));
+      return;
+    }
+
+    const sourcesRemoveMatch = path.match(/^\/manager\/sources\/([^/]+)\/remove\/([^/]+)$/);
+    if (sourcesRemoveMatch && method === 'POST') {
+      const channel = parseSourcesChannel(sourcesRemoveMatch[1]);
+      sendHtml(res, 200, await handleSourceRemove(channel, decodeURIComponent(sourcesRemoveMatch[2] ?? '')));
+      return;
+    }
+
     if (path === '/manager/logs' && method === 'GET') {
       sendHtml(res, 200, await showLogsPage(url.searchParams));
       return;
@@ -233,25 +272,6 @@ export async function handleManagerRequest(
       return;
     }
 
-    if (path === '/manager/settings/ml-sources' && method === 'POST') {
-      const body = await readFormBody(req);
-      const form = parseFormUrlEncoded(body);
-      sendHtml(res, 200, await handleMlSourcesSave(form));
-      return;
-    }
-
-    if (path === '/manager/settings/ml-sources/add' && method === 'POST') {
-      const body = await readFormBody(req);
-      const form = parseFormUrlEncoded(body);
-      sendHtml(res, 200, await handleMlSourceAdd(form));
-      return;
-    }
-
-    const mlSourceRemoveMatch = path.match(/^\/manager\/settings\/ml-sources\/remove\/([^/]+)$/);
-    if (mlSourceRemoveMatch && method === 'POST') {
-      sendHtml(res, 200, await handleMlSourceRemove(decodeURIComponent(mlSourceRemoveMatch[1] ?? '')));
-      return;
-    }
 
     if (path === '/manager/settings/connect/wa/start' && method === 'POST') {
       sendJson(res, 200, startWhatsAppConnectJson());
@@ -283,23 +303,29 @@ export async function handleManagerRequest(
       return;
     }
 
+    if (path === '/manager/settings/connect/telegram/status' && method === 'GET') {
+      sendJson(res, 200, await getTelegramConnectJson());
+      return;
+    }
+
+    // ?channel=telegram controla o worker do Telegram; sem o parâmetro, WhatsApp.
     if (path === '/manager/settings/worker/start' && method === 'POST') {
-      sendJson(res, 200, startWorkerJson());
+      sendJson(res, 200, startWorkerJson(parseChannelParam(url.searchParams.get('channel'))));
       return;
     }
 
     if (path === '/manager/settings/worker/restart' && method === 'POST') {
-      sendJson(res, 200, await restartWorkerJson());
+      sendJson(res, 200, await restartWorkerJson(parseChannelParam(url.searchParams.get('channel'))));
       return;
     }
 
     if (path === '/manager/settings/worker/stop' && method === 'POST') {
-      sendJson(res, 200, await stopWorkerJson());
+      sendJson(res, 200, await stopWorkerJson(parseChannelParam(url.searchParams.get('channel'))));
       return;
     }
 
     if (path === '/manager/settings/worker/status' && method === 'GET') {
-      sendJson(res, 200, getWorkerJson());
+      sendJson(res, 200, getWorkerJson(parseChannelParam(url.searchParams.get('channel'))));
       return;
     }
 

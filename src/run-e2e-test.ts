@@ -1,3 +1,4 @@
+import { whatsappPublisher } from './channels/whatsapp-publisher.js';
 import { env } from './config/env.js';
 import { prisma } from './database/client.js';
 import { startSenderWorker } from './jobs/sender.js';
@@ -36,7 +37,7 @@ async function requireValidChannel(sock: Awaited<ReturnType<typeof connectWhatsA
 }
 
 async function waitForQueueDrain(timeoutMs = 120_000): Promise<void> {
-  const queue = getSenderQueue();
+  const queue = getSenderQueue('whatsapp');
   const started = Date.now();
 
   while (Date.now() - started < timeoutMs) {
@@ -112,7 +113,8 @@ async function main(): Promise<void> {
   const sock = await connectWhatsApp();
   const target = await requireValidChannel(sock);
 
-  const worker = startSenderWorker();
+  // O E2E exercita só o caminho do WhatsApp — o Telegram tem seu próprio worker.
+  const worker = startSenderWorker(whatsappPublisher);
   logger.info({ channel: target.label, jid: target.jid }, 'Worker sender iniciado para teste E2E');
 
   try {

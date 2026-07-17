@@ -144,7 +144,9 @@ export function renderDashboard(data: DashboardData): string {
         <thead><tr><th>Fila</th><th>Aguardando</th><th>Em execução</th><th>Agendados</th><th>Falhas</th><th>Concluídos</th></tr></thead>
         <tbody>
           ${queueRow('Coletor de ofertas', data.queues.collector)}
-          ${queueRow('Envio de ofertas', data.queues.sender)}
+          ${data.queues.senders
+            .map((sender) => queueRow(`Envio de ofertas — ${sender.label}`, sender.counts))
+            .join('')}
         </tbody>
       </table>`
           : `<p class="meta"><span class="badge warn">Filas indisponíveis</span> — ${escapeHtml(data.queues.error ?? 'Redis offline')}</p>`

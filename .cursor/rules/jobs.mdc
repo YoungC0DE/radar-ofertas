@@ -11,11 +11,15 @@ alwaysApply: false
 - Collector consulta Mercado Livre via scraping híbrido (`mercado-livre/`); sender publica — nunca enviar direto após coleta.
 - Jobs idempotentes: verificar estado antes de agir.
 - Intervalos e janela operacional: `queue-config-store.ts` (DB → cache → fallback ENV).
+- `jobs/sender.ts` é genérico por canal (recebe um `ChannelPublisher`) — ver `.cursor/rules/channels.mdc`.
 
 ## Filas
 
 - `offer-collector` — repeatable, processo `app.ts`.
-- `offer-sender` — standard, processo `worker.ts`.
+- `offer-sender` — standard, processo `worker.ts` (WhatsApp).
+- `offer-sender-telegram` — standard, processo `worker-telegram.ts`.
+
+Uma fila por canal. Job id `send-offer-{canal}-{offerId}`; estado do envio em `OfferDelivery`, não em `Offer.sentAt`.
 
 ## Janela operacional
 

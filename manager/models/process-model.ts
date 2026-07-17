@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import type { Channel } from '../../src/channels/types.js';
 import { logger } from '../../src/utils/logger.js';
 
 const isWindows = process.platform === 'win32';
@@ -21,7 +22,9 @@ function killProcessTree(proc: ChildProcess): void {
   }
 }
 
-// --- Worker process -----------------------------------------------------------
+// --- Worker processes (um por canal) ------------------------------------------
+// Cada canal tem seu próprio processo de envio, controlado de forma independente
+// pelo painel: parar o WhatsApp não afeta o Telegram.
 
 export type WorkerStatus = 'stopped' | 'starting' | 'running' | 'error';
 
@@ -31,64 +34,87 @@ export interface WorkerState {
   detail: string | null;
 }
 
-let workerProc: ChildProcess | undefined;
-let workerStatus: WorkerStatus = 'stopped';
-let workerStartedAt: string | null = null;
-let workerDetail: string | null = null;
+const WORKER_SCRIPTS: Record<Channel, string> = {
+  whatsapp: 'src/worker.ts',
+  telegram: 'src/worker-telegram.ts',
+};
 
-export function getWorkerState(): WorkerState {
-  return { status: workerStatus, startedAt: workerStartedAt, detail: workerDetail };
+interface WorkerSlot {
+  proc?: ChildProcess;
+  status: WorkerStatus;
+  startedAt: string | null;
+  detail: string | null;
 }
 
-export function isWorkerRunning(): boolean {
-  return workerStatus === 'running' || workerStatus === 'starting';
+const workers = new Map<Channel, WorkerSlot>();
+
+function slot(channel: Channel): WorkerSlot {
+  let current = workers.get(channel);
+  if (!current) {
+    current = { status: 'stopped', startedAt: null, detail: null };
+    workers.set(channel, current);
+  }
+  return current;
 }
 
-export function startWorker(): WorkerState {
-  if (isWorkerRunning()) return getWorkerState();
+export function getWorkerState(channel: Channel = 'whatsapp'): WorkerState {
+  const current = slot(channel);
+  return { status: current.status, startedAt: current.startedAt, detail: current.detail };
+}
 
-  workerStatus = 'starting';
-  workerDetail = null;
-  workerStartedAt = new Date().toISOString();
+export function isWorkerRunning(channel: Channel = 'whatsapp'): boolean {
+  const { status } = slot(channel);
+  return status === 'running' || status === 'starting';
+}
 
-  const proc = spawn('npx', ['tsx', '--env-file=.env', 'src/worker.ts'], {
+export function startWorker(channel: Channel = 'whatsapp'): WorkerState {
+  if (isWorkerRunning(channel)) return getWorkerState(channel);
+
+  const current = slot(channel);
+  current.status = 'starting';
+  current.detail = null;
+  current.startedAt = new Date().toISOString();
+
+  const proc = spawn('npx', ['tsx', '--env-file=.env', WORKER_SCRIPTS[channel]], {
     cwd: process.cwd(),
     env: process.env,
     shell: isWindows,
     detached: !isWindows,
     stdio: 'inherit',
   });
-  workerProc = proc;
+  current.proc = proc;
 
   proc.on('spawn', () => {
-    if (workerProc === proc) workerStatus = 'running';
-    logger.info({ pid: proc.pid }, 'Worker iniciado pelo painel');
+    if (current.proc === proc) current.status = 'running';
+    logger.info({ channel, pid: proc.pid }, 'Worker iniciado pelo painel');
   });
 
   proc.on('error', (error) => {
-    if (workerProc !== proc) return;
-    workerStatus = 'error';
-    workerDetail = error.message;
-    workerProc = undefined;
-    logger.error({ error }, 'Falha ao iniciar worker pelo painel');
+    if (current.proc !== proc) return;
+    current.status = 'error';
+    current.detail = error.message;
+    current.proc = undefined;
+    logger.error({ channel, error }, 'Falha ao iniciar worker pelo painel');
   });
 
   proc.on('exit', (code, signal) => {
-    if (workerProc === proc) workerProc = undefined;
-    workerStatus = 'stopped';
-    workerDetail = `Encerrado (code=${code ?? '—'}, signal=${signal ?? '—'})`;
-    logger.info({ code, signal }, 'Worker encerrado');
+    if (current.proc === proc) current.proc = undefined;
+    current.status = 'stopped';
+    current.detail = `Encerrado (code=${code ?? '—'}, signal=${signal ?? '—'})`;
+    logger.info({ channel, code, signal }, 'Worker encerrado');
   });
 
-  return getWorkerState();
+  return getWorkerState(channel);
 }
 
-export function stopWorker(): Promise<WorkerState> {
+export function stopWorker(channel: Channel = 'whatsapp'): Promise<WorkerState> {
   return new Promise((resolve) => {
-    const proc = workerProc;
+    const current = slot(channel);
+    const proc = current.proc;
+
     if (!proc) {
-      workerStatus = 'stopped';
-      resolve(getWorkerState());
+      current.status = 'stopped';
+      resolve(getWorkerState(channel));
       return;
     }
 
@@ -96,7 +122,7 @@ export function stopWorker(): Promise<WorkerState> {
     const finish = (): void => {
       if (settled) return;
       settled = true;
-      resolve(getWorkerState());
+      resolve(getWorkerState(channel));
     };
 
     proc.once('exit', finish);
@@ -105,10 +131,10 @@ export function stopWorker(): Promise<WorkerState> {
   });
 }
 
-export async function restartWorker(): Promise<WorkerState> {
-  await stopWorker();
+export async function restartWorker(channel: Channel = 'whatsapp'): Promise<WorkerState> {
+  await stopWorker(channel);
   await new Promise((resolve) => setTimeout(resolve, 500));
-  return startWorker();
+  return startWorker(channel);
 }
 
 // --- Prisma generate (run and finish) ----------------------------------------

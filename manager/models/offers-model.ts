@@ -5,8 +5,15 @@ import {
   getSearchLimit,
   hydrateQueueConfigCache,
 } from '../../src/config/queue-config-store.js';
-import { countOffers, findOfferById, findOffers, getOfferStats, type OfferSentFilter } from '../../src/offers/repository.js';
-import type { OfferRecord } from '../../src/offers/types.js';
+import {
+  countOffers,
+  findDeliveriesByOfferIds,
+  findOfferById,
+  findOffers,
+  getOfferStats,
+  type OfferSentFilter,
+} from '../../src/offers/repository.js';
+import type { DeliveryRecord, OfferRecord } from '../../src/offers/types.js';
 import { estimatePendingSendTimes } from '../../src/queue/sender-schedule.js';
 import { type DatabaseSnapshot, withDatabase } from './db-model.js';
 
@@ -22,6 +29,8 @@ export interface OffersPageData {
   database: DatabaseSnapshot;
   offers: OfferRecord[];
   scheduleByOfferId: Map<string, Date>;
+  /** Entregas por oferta (destino/canais). Vazio se o canal não recebe a oferta. */
+  deliveriesByOfferId: Map<string, DeliveryRecord[]>;
   filter: OfferSentFilter;
   page: number;
   pageSize: number;
@@ -67,15 +76,20 @@ export async function loadOffersPage(filter: OfferSentFilter, page: number): Pro
   );
 
   let scheduleByOfferId = new Map<string, Date>();
+  let deliveriesByOfferId = new Map<string, DeliveryRecord[]>();
   const affiliateDelay = await loadAffiliateLinkDelaySettings();
-  if (result.database.available && result.data.pendingCount > 0) {
-    scheduleByOfferId = await estimatePendingSendTimes();
+  if (result.database.available) {
+    if (result.data.pendingCount > 0) {
+      scheduleByOfferId = await estimatePendingSendTimes();
+    }
+    deliveriesByOfferId = await findDeliveriesByOfferIds(result.data.offers.map((o) => o.id));
   }
 
   return {
     database: result.database,
     offers: result.data.offers,
     scheduleByOfferId,
+    deliveriesByOfferId,
     filter,
     page: result.data.page,
     pageSize: PAGE_SIZE,

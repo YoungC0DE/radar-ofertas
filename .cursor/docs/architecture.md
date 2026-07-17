@@ -7,7 +7,8 @@ Sistema em processos separados, organizado por domínio. Integração com Mercad
 ```
 src/
 ├── app.ts              → collector (coleta + enfileira)
-├── worker.ts           → WhatsApp + envio
+├── worker.ts           → envio WhatsApp
+├── worker-telegram.ts  → envio Telegram
 ├── ml-login.ts         → login afiliado ML (setup manual / CLI)
 ├── wa-login.ts         → login WhatsApp (CLI)
 ├── config/             → ENV (Zod) + stores de runtime
@@ -16,10 +17,12 @@ src/
 │   ├── brand-config.ts
 │   ├── ml-sources-config.ts
 │   └── queue-config-store.ts
+├── channels/           → contrato de canal + publishers + worker-runner
 ├── whatsapp/           → Baileys + channel-cache
+├── telegram/           → Bot API (fetch)
 ├── mercado-livre/      → scraping + sessão afiliado
 ├── offers/             → domínio de ofertas + message-template
-├── jobs/               → workers BullMQ
+├── jobs/               → workers BullMQ (sender genérico por canal)
 ├── queue/              → filas Redis + sender-schedule
 ├── database/           → Prisma
 ├── scripts/            → preflight, up
@@ -56,11 +59,16 @@ Parâmetros operacionais (score, intervalos, horários, template, brand, fontes 
 | Processo | Entry | Função |
 |----------|-------|--------|
 | Collector | `app.ts` | Coleta periódica + enfileiramento |
-| Sender | `worker.ts` | Envio WhatsApp com janela operacional |
-| Manager | `manager/server.ts` | Painel admin + conexões + controle do worker |
+| Sender WhatsApp | `worker.ts` | Envio WhatsApp com janela operacional |
+| Sender Telegram | `worker-telegram.ts` | Envio Telegram com janela operacional |
+| Manager | `manager/server.ts` | Painel admin + conexões + controle dos workers |
 | ML Login | `ml-login.ts` | Setup manual de sessão afiliado (CLI) |
 
-O `npm run up` sobe collector + manager. O worker é iniciado pelo painel para evitar conflito de sessão WhatsApp.
+O `npm run up` sobe collector + manager. Os workers são iniciados pelo painel para evitar conflito de sessão WhatsApp.
+
+### Um canal, um processo
+
+Cada canal de envio roda no seu próprio processo, com fila própria, e implementa o contrato `ChannelPublisher`. Falha isolada: uma queda do WhatsApp não impede o Telegram de publicar. O estado de envio é por canal (`OfferDelivery`), não por oferta — ver [Canais](./channels.md).
 
 ## Fluxo completo
 
@@ -79,10 +87,13 @@ flowchart TD
     I --> J
     J --> K{Deduplicação}
     K -->|nova| L[(PostgreSQL)]
-    L --> M[offer-sender]
-    M --> N[message-template + whatsapp/]
+    L --> M[dispatchOffer — fan-out por canal]
+    M --> N[offer-sender → worker.ts]
+    M --> P[offer-sender-telegram → worker-telegram.ts]
+    N --> Q[message-template + whatsapp/]
+    P --> R[message-template + telegram/]
     O[manager/] -.->|edita settings + conexões| L
-    O -.->|inicia worker| M
+    O -.->|inicia workers| M
 ```
 
 ## Princípios
@@ -92,6 +103,7 @@ flowchart TD
 - Regras de negócio apenas em `offers/` e `config/score-config.ts`.
 - Manager apenas orquestra UI — reutiliza `src/`.
 - Um único processo mantém conexão WhatsApp ativa (worker).
+- Um canal, um processo — o envio de um canal nunca derruba o outro.
 - Playwright não roda em cada ciclo de coleta — apenas fallback.
 
 ## Documentação relacionada
@@ -99,7 +111,9 @@ flowchart TD
 - [Mercado Livre — Scraping](./mercado-livre.md)
 - [Filas](./queues.md)
 - [Database](./database.md)
+- [Canais de envio](./channels.md)
 - [WhatsApp](./whatsapp.md)
+- [Telegram](./telegram.md)
 - [Manager](./manager.md)
 - [Deployment](./deployment.md)
 - [Implementation Board](../IMPLEMENTATION_BOARD.md)

@@ -1,12 +1,13 @@
 # WhatsApp — Baileys
 
-Conexão, eventos, reconexão e `sendOffer()` em `src/whatsapp/index.ts`.
+Conexão, eventos, reconexão e `sendOffer()` em `src/whatsapp/index.ts`; publisher em `src/channels/whatsapp-publisher.ts`.
 
 - Sessão: `WHATSAPP_AUTH_PATH`
 - Canal: `WHATSAPP_CHANNEL_ID`
 - Cache de canal: `whatsapp/channel-cache.ts` (nome, invite link)
 - Formatação: `offers/message-template.ts` (template editável no manager)
 - Apenas `worker.ts` mantém conexão Baileys ativa para envio
+- Consome a fila `offer-sender` — o Telegram tem a sua ([Canais](./channels.md))
 
 ## Ferramentas de setup
 

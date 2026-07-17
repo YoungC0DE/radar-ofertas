@@ -33,6 +33,14 @@ const envSchema = z.object({
   REDIS_URL: z.string().min(1),
   WHATSAPP_CHANNEL_ID: z.string().min(1),
   WHATSAPP_AUTH_PATH: z.string().default('./data/auth_info_baileys'),
+  TELEGRAM_ENABLED: z
+    .string()
+    .default('false')
+    .transform((val) => val === 'true' || val === '1'),
+  TELEGRAM_BOT_TOKEN: z.string().default(''),
+  /** @meucanal, -100... (supergrupo/canal) ou id numérico do chat */
+  TELEGRAM_CHAT_ID: z.string().default(''),
+  TELEGRAM_API_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
   ML_AUTH_PATH: z.string().default('./data/ml_auth'),
   ML_CATEGORIES: z
     .string()
@@ -83,7 +91,28 @@ const envSchema = z.object({
     .transform((val) => val === 'true' || val === '1'),
   MANAGER_PORT: z.coerce.number().int().positive().default(3000),
   MANAGER_TOKEN: z.string().optional(),
-});
+})
+  // Só exigimos as credenciais do Telegram quando o canal está ligado: quem roda
+  // apenas o WhatsApp não precisa preencher nada no .env.
+  .superRefine((value, ctx) => {
+    if (!value.TELEGRAM_ENABLED) return;
+
+    if (!value.TELEGRAM_BOT_TOKEN) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['TELEGRAM_BOT_TOKEN'],
+        message: 'TELEGRAM_BOT_TOKEN é obrigatório quando TELEGRAM_ENABLED=true — pegue o token com o @BotFather',
+      });
+    }
+
+    if (!value.TELEGRAM_CHAT_ID) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['TELEGRAM_CHAT_ID'],
+        message: 'TELEGRAM_CHAT_ID é obrigatório quando TELEGRAM_ENABLED=true — use @seucanal ou o id numérico',
+      });
+    }
+  });
 
 const envParse = envSchema.safeParse(process.env);
 

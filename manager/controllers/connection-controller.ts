@@ -6,6 +6,7 @@ import {
   startMercadoLivreConnection,
   startWhatsAppConnection,
 } from '../models/connection-model.js';
+import { getTelegramSessionStatus } from '../models/session-model.js';
 
 export function startWhatsAppConnectJson(): string {
   return JSON.stringify(startWhatsAppConnection());
@@ -30,4 +31,13 @@ export function getMercadoLivreConnectJson(): string {
 export async function cancelMercadoLivreConnectJson(): Promise<string> {
   await cancelMercadoLivreConnection();
   return JSON.stringify(getMercadoLivreConnectionState());
+}
+
+/**
+ * Reverifica o Telegram contra a Bot API (bot válido + admin do canal). Não há
+ * fluxo de "conectar": a config é do .env, então isto só confere e devolve o
+ * status atualizado para o card.
+ */
+export async function getTelegramConnectJson(): Promise<string> {
+  return JSON.stringify(await getTelegramSessionStatus());
 }

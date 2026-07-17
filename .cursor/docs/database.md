@@ -18,8 +18,24 @@
 | sold_quantity | int? | Quantidade vendida |
 | sales_rank | string? | Ranking de vendas (ex: "4º em Impressoras") |
 | score | int | Pontuação calculada |
-| sent_at | datetime? | Quando foi publicado no WhatsApp |
+| sent_at | datetime? | Primeiro envio em **qualquer** canal (denormalizado de `offer_deliveries`) |
 | created_at | datetime | Quando foi coletado |
+
+### Tabela `offer_deliveries`
+
+Uma linha por `(oferta, canal)` — fonte da verdade de quem já recebeu o quê.
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| id | cuid | PK |
+| offer_id | string | FK → `offers.id` (`ON DELETE CASCADE`) |
+| channel | string | `whatsapp` \| `telegram` |
+| sent_at | datetime? | Quando publicou; nulo = ainda pendente |
+| message_id | string? | ID da mensagem no canal |
+| error | string? | Motivo da última falha (o BullMQ ainda retenta) |
+| created_at | datetime | Quando foi enfileirada |
+
+Unique em `(offer_id, channel)`. Ver [Canais](./channels.md).
 
 ### Tabela `settings` (key-value)
 
@@ -55,7 +71,7 @@ npx prisma studio        # UI visual (não há script npm dedicado)
 
 | Domínio | Módulo |
 |---------|--------|
-| Ofertas | `offers/repository.ts` |
+| Ofertas e entregas | `offers/repository.ts` |
 | Settings (score, brand, filas, template) | `config/*-config*.ts`, `queue-config-store.ts`, `offers/message-template.ts`, `whatsapp/channel-cache.ts` |
 | Fontes ML | `config/ml-sources-config.ts` |
 
@@ -64,7 +80,8 @@ Nunca chamar `prisma` diretamente de jobs ou módulos de scraping.
 ## Regras
 
 - `mercado_livre_id` é unique — impede duplicatas.
-- `sent_at IS NULL` indica oferta pendente de envio.
+- `offers.sent_at IS NULL` indica oferta ainda não publicada em nenhum canal — use apenas para dedup e visões globais.
+- Estado **por canal** vem sempre de `offer_deliveries`, nunca de `offers.sent_at`.
 - Settings: upsert por chave; cache em memória hidratado no startup.
 - Migrations versionadas em `prisma/migrations/`.
 

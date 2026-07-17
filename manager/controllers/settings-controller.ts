@@ -1,4 +1,4 @@
-import { loadSettingsData, saveBrandIdentity, saveChannelInviteLink, saveMlSourcesFlags, addMlSource, deleteMlSource, saveOperatingHoursSettings, saveScoreSettings, saveSendIntervalMinutes, saveSenderDelay } from '../models/settings-model.js';
+import { loadSettingsData, saveBrandIdentity, saveChannelInviteLink, saveOperatingHoursSettings, saveScoreSettings, saveSendIntervalMinutes, saveSenderDelay } from '../models/settings-model.js';
 import type { SettingsSaveType } from '../models/settings-model.js';
 import { renderSettingsPage } from '../views/settings.js';
 
@@ -65,26 +65,3 @@ export async function handleOperatingHoursSave(form: Record<string, string>): Pr
   return showSettingsPage('hours', null);
 }
 
-export async function handleMlSourcesSave(form: Record<string, string>): Promise<string> {
-  const result = await saveMlSourcesFlags(form);
-  if (!result.ok) {
-    return showSettingsPage(null, result.error);
-  }
-  return showSettingsPage('mlSources', null);
-}
-
-export async function handleMlSourceAdd(form: Record<string, string>): Promise<string> {
-  const result = await addMlSource(form.url ?? '', form.label);
-  if (!result.ok) {
-    return showSettingsPage(null, result.error);
-  }
-  return showSettingsPage('mlSources', null);
-}
-
-export async function handleMlSourceRemove(id: string): Promise<string> {
-  const result = await deleteMlSource(id);
-  if (!result.ok) {
-    return showSettingsPage(null, result.error);
-  }
-  return showSettingsPage('mlSources', null);
-}

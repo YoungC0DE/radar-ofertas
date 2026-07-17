@@ -73,9 +73,19 @@ services:
       <<: *app-environment
       SKIP_MIGRATIONS: "true"
 
+  # Envio no WhatsApp. Uma única réplica: a sessão Baileys só admite um dono.
   worker:
     <<: *app-base
     command: ["npx", "tsx", "src/worker.ts"]
+    environment:
+      <<: *app-environment
+      SKIP_MIGRATIONS: "true"
+
+  # Envio no Telegram — processo separado, fila própria. Encerra sozinho (exit 0)
+  # se TELEGRAM_ENABLED não estiver ligado no .env.
+  worker-telegram:
+    <<: *app-base
+    command: ["npx", "tsx", "src/worker-telegram.ts"]
     environment:
       <<: *app-environment
       SKIP_MIGRATIONS: "true"

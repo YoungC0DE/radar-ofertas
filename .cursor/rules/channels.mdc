@@ -1,0 +1,29 @@
+---
+description: Regras dos canais de envio (WhatsApp, Telegram)
+globs: src/channels/**,src/telegram/**,src/worker.ts,src/worker-telegram.ts
+alwaysApply: false
+---
+
+# Canais de envio
+
+- Um canal = um processo = uma fila. Falha de um canal nunca derruba o outro.
+- `channels/types.ts` define o contrato `ChannelPublisher`; `channels/index.ts` registra os publishers.
+- `jobs/sender.ts` é genérico — recebe um publisher. Nunca colocar `if (channel === ...)` nele.
+- Publisher não tem regra de negócio: só conecta, valida e publica.
+- Boot dos workers em `channels/worker-runner.ts` — entries (`worker*.ts`) só passam o publisher.
+- Canal desligado (`isEnabled() === false`): não enfileira e o worker encerra com exit 0.
+
+## Estado de envio
+
+- Fonte da verdade por canal: `OfferDelivery` (`offers/repository.ts`).
+- `Offer.sentAt` é denormalizado (primeiro envio em qualquer canal) — só para dedup e visões globais.
+- Nunca decidir "já enviei?" por `Offer.sentAt` num caminho de canal.
+- Abrir a entrega antes de enfileirar (`dispatchOffer`).
+
+## Adicionar canal
+
+1. `ChannelPublisher` em `channels/<canal>-publisher.ts`
+2. Registrar em `CHANNELS` + `PUBLISHERS`
+3. Fila em `SENDER_QUEUE_NAMES` (`queue/index.ts`)
+4. Entry `worker-<canal>.ts` com `runChannelWorker(publisher)`
+5. Serviço no `docker-compose.yml` + script no `package.json`

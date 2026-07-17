@@ -8,6 +8,9 @@ Configuração em `src/queue/index.ts`. Agendamento de envio em `src/queue/sende
 |------|------|----------|-----------|
 | `offer-collector` | Repeatable | `app.ts` | Coleta periódica via scraping ML |
 | `offer-sender` | Standard | `worker.ts` | Envio individual ao WhatsApp |
+| `offer-sender-telegram` | Standard | `worker-telegram.ts` | Envio individual ao Telegram |
+
+Uma fila por canal — cada worker tem seu ritmo e suas falhas isoladas. Ver [Canais](./channels.md).
 
 ## Config runtime
 
@@ -37,11 +40,13 @@ mercado-livre/          → HTTP scrape → (Playwright fallback)
     ↓
 score-config + offers/service → score, link afiliado, dedup
     ↓
-PostgreSQL + offer-sender queue
-    ↓
-jobs/sender             → respeita janela operacional
-    ↓
-message-template + whatsapp/ → canal WhatsApp
+PostgreSQL + dispatchOffer (fan-out por canal ligado)
+    ↓                              ↓
+offer-sender               offer-sender-telegram
+    ↓                              ↓
+jobs/sender (whatsapp)     jobs/sender (telegram)   → respeitam janela operacional
+    ↓                              ↓
+canal WhatsApp                canal Telegram
 ```
 
 ## Collector (`offer-collector`)
@@ -52,14 +57,17 @@ message-template + whatsapp/ → canal WhatsApp
 4. Retorna `{ total, enqueued }`.
 5. Reagendamento via `rescheduleCollectorJob()` quando intervalo muda no manager.
 
-## Sender (`offer-sender`)
+## Sender (um por canal)
 
-1. Recebe `{ offerId }` da fila.
-2. Verifica se oferta existe e `sent_at IS NULL`.
+O mesmo código (`jobs/sender.ts`) roda para todos os canais — muda só o `ChannelPublisher`:
+
+1. Recebe `{ offerId }` da fila **daquele canal**.
+2. Verifica se a oferta existe e se a entrega **deste canal** ainda não foi concluída.
 3. Gera link afiliado se ainda não existir.
-4. Formata mensagem via `message-template` e publica via Baileys.
-5. Marca `sent_at` e aplica delay entre envios.
+4. Formata mensagem via `message-template` e publica pelo publisher do canal.
+5. Fecha a `OfferDelivery` com `sent_at` + `message_id` e aplica delay entre envios.
 6. Fora da janela operacional (`APP_TIMEZONE`): job fica delayed até horário válido.
+7. Em falha, grava o motivo na entrega e repropaga — o BullMQ retenta (5x, backoff).
 
 ## Desabilitar Redis
 
@@ -67,4 +75,4 @@ message-template + whatsapp/ → canal WhatsApp
 
 ## Idempotência
 
-`mercado_livre_id` unique + check de `sent_at` + dedup por title+price em ofertas já enviadas.
+`mercado_livre_id` unique + dedup por title+price em ofertas já enviadas + `OfferDelivery` unique em `(offer_id, channel)`. O job id `send-offer-{canal}-{offerId}` garante um envio por oferta por canal.

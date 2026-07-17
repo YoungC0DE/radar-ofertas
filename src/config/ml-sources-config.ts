@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { CHANNELS, type Channel } from '../channels/types.js';
 import { env } from './env.js';
 import { prisma } from '../database/client.js';
 import {
@@ -12,14 +13,15 @@ export interface MlCustomSource {
   id: string;
   label: string;
   url: string;
-  enabled: boolean;
+  /** Canais que esta fonte alimenta. Vazio = fonte inativa (não é coletada). */
+  channels: Channel[];
 }
 
 export interface MlCategoryRow {
   id: string;
   label: string;
   category: string;
-  enabled: boolean;
+  channels: Channel[];
   fromEnv: boolean;
   valid: boolean;
   type: CategoryValidation['type'];
@@ -30,15 +32,39 @@ export interface MlCategoryRow {
 const SETTING_KEY = 'mlCustomSources';
 const ENV_FLAGS_KEY = 'mlEnvSourceFlags';
 let sourcesCache: MlCustomSource[] | null = null;
-let envFlagsCache: Record<string, boolean> | null = null;
+let envFlagsCache: Record<string, Channel[]> | null = null;
 
-function parseEnvFlagsFromJson(raw: string): Record<string, boolean> {
+/** Só canais conhecidos, na ordem canônica (evita lixo salvo no settings). */
+function sanitizeChannels(values: readonly unknown[]): Channel[] {
+  return CHANNELS.filter((channel) => values.includes(channel));
+}
+
+/** Adiciona/remove um canal preservando a ordem canônica. */
+function withChannel(channels: readonly Channel[], channel: Channel, include: boolean): Channel[] {
+  const set = new Set(channels);
+  if (include) set.add(channel);
+  else set.delete(channel);
+  return CHANNELS.filter((c) => set.has(c));
+}
+
+/**
+ * Converte o valor salvo em uma lista de canais, aceitando o formato antigo
+ * (`enabled: boolean` / flag booleana): true → todos os canais, false → nenhum.
+ * Assim configs gravadas antes da separação por canal continuam válidas.
+ */
+function coerceChannels(value: unknown): Channel[] {
+  if (Array.isArray(value)) return sanitizeChannels(value);
+  // Formato legado: booleano. undefined também cai aqui e vira "todos" (default ativo).
+  return value === false ? [] : [...CHANNELS];
+}
+
+function parseEnvFlagsFromJson(raw: string): Record<string, Channel[]> {
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-    const flags: Record<string, boolean> = {};
+    const flags: Record<string, Channel[]> = {};
     for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-      flags[key] = value !== false;
+      flags[key] = coerceChannels(value);
     }
     return flags;
   } catch {
@@ -46,9 +72,10 @@ function parseEnvFlagsFromJson(raw: string): Record<string, boolean> {
   }
 }
 
-/** Uma categoria do .env está ativa por padrão; só fica inativa se salva como false. */
-function isEnvCategoryEnabled(category: string): boolean {
-  return (envFlagsCache ?? {})[category] !== false;
+/** Canais de uma categoria do .env. Sem flag salva, alimenta todos por padrão. */
+function getEnvCategoryChannels(category: string): Channel[] {
+  const flags = envFlagsCache ?? {};
+  return category in flags ? flags[category]! : [...CHANNELS];
 }
 
 function parseSourcesFromJson(raw: string): MlCustomSource[] {
@@ -62,11 +89,14 @@ function parseSourcesFromJson(raw: string): MlCustomSource[] {
     const url = typeof row.url === 'string' ? row.url.trim() : '';
     if (!url) continue;
 
+    // channels novo tem precedência; senão cai no enabled legado.
+    const channels = 'channels' in row ? coerceChannels(row.channels) : coerceChannels(row.enabled);
+
     sources.push({
       id: typeof row.id === 'string' && row.id.trim() ? row.id.trim() : randomUUID(),
       label: typeof row.label === 'string' && row.label.trim() ? row.label.trim() : deriveLabel(url),
       url,
-      enabled: row.enabled !== false,
+      channels,
     });
   }
 
@@ -104,12 +134,48 @@ export function getEnvMlCategories(): string[] {
   return env.ML_CATEGORIES;
 }
 
+/** Fontes que alimentam pelo menos um canal — o que o collector precisa raspar. */
 export function getActiveMlCategories(): string[] {
-  const envActive = env.ML_CATEGORIES.filter((category) => isEnvCategoryEnabled(category));
+  const envActive = env.ML_CATEGORIES.filter((category) => getEnvCategoryChannels(category).length > 0);
   const custom = getCustomMlSources()
-    .filter((source) => source.enabled)
+    .filter((source) => source.channels.length > 0)
     .map((source) => source.url.trim());
   return [...envActive, ...custom];
+}
+
+/** Fontes que alimentam um canal específico. */
+export function getActiveMlCategoriesForChannel(channel: Channel): string[] {
+  const envActive = env.ML_CATEGORIES.filter((category) => getEnvCategoryChannels(category).includes(channel));
+  const custom = getCustomMlSources()
+    .filter((source) => source.channels.includes(channel))
+    .map((source) => source.url.trim());
+  return [...envActive, ...custom];
+}
+
+/** União das fontes ativas nos canais dados — evita raspar fonte de canal desligado. */
+export function getActiveMlCategoriesForChannels(channels: readonly Channel[]): string[] {
+  const seen = new Set<string>();
+  for (const channel of channels) {
+    for (const category of getActiveMlCategoriesForChannel(channel)) {
+      seen.add(category);
+    }
+  }
+  return [...seen];
+}
+
+/**
+ * Canais que uma categoria alimenta — usado no dispatch para saber para onde
+ * enviar cada oferta com base na fonte de onde ela veio.
+ */
+export function getChannelsForCategory(category: string): Channel[] {
+  const key = normalizeCategoryKey(category);
+
+  for (const envCategory of env.ML_CATEGORIES) {
+    if (normalizeCategoryKey(envCategory) === key) return getEnvCategoryChannels(envCategory);
+  }
+
+  const custom = getCustomMlSources().find((source) => normalizeCategoryKey(source.url) === key);
+  return custom ? custom.channels : [];
 }
 
 export function buildMlCategoryRows(): MlCategoryRow[] {
@@ -119,7 +185,7 @@ export function buildMlCategoryRows(): MlCategoryRow[] {
       id: `env:${index}`,
       label: category,
       category,
-      enabled: isEnvCategoryEnabled(category),
+      channels: getEnvCategoryChannels(category),
       fromEnv: true,
       valid: validation.valid,
       type: validation.type,
@@ -134,7 +200,7 @@ export function buildMlCategoryRows(): MlCategoryRow[] {
       id: source.id,
       label: source.label,
       category: source.url,
-      enabled: source.enabled,
+      channels: source.channels,
       fromEnv: false,
       valid: validation.valid,
       type: validation.type,
@@ -170,7 +236,7 @@ async function persistCustomSources(sources: MlCustomSource[]): Promise<void> {
   sourcesCache = sources;
 }
 
-async function persistEnvFlags(flags: Record<string, boolean>): Promise<void> {
+async function persistEnvFlags(flags: Record<string, Channel[]>): Promise<void> {
   const json = JSON.stringify(flags);
   await prisma.setting.upsert({
     where: { key: ENV_FLAGS_KEY },
@@ -183,6 +249,7 @@ async function persistEnvFlags(flags: Record<string, boolean>): Promise<void> {
 export async function addCustomMlSource(
   url: string,
   label?: string,
+  channels: Channel[] = [...CHANNELS],
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const trimmed = url.trim();
   if (!trimmed) {
@@ -210,7 +277,7 @@ export async function addCustomMlSource(
     id: randomUUID(),
     label: label?.trim() || deriveLabel(trimmed),
     url: normalized,
-    enabled: true,
+    channels: sanitizeChannels(channels),
   });
 
   await persistCustomSources(sources);
@@ -228,20 +295,27 @@ export async function removeCustomMlSource(id: string): Promise<{ ok: true } | {
   return { ok: true };
 }
 
-export async function saveMlSourceFlagsFromForm(
+/**
+ * Salva a seleção de fontes de UM canal (página por canal). Só mexe na
+ * pertinência daquele canal — a seleção dos outros canais é preservada, tanto
+ * nas fontes extras quanto nas categorias do .env.
+ */
+export async function saveMlSourceChannelsFromForm(
+  channel: Channel,
   form: Record<string, string>,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const sources = getCustomMlSources().map((source) => ({
     ...source,
-    enabled: form[`enabled_${source.id}`] === '1',
+    channels: withChannel(source.channels, channel, form[`coletar_${source.id}`] === '1'),
   }));
 
-  const envFlags: Record<string, boolean> = {};
+  const flags: Record<string, Channel[]> = { ...(envFlagsCache ?? {}) };
   env.ML_CATEGORIES.forEach((category, index) => {
-    envFlags[category] = form[`enabled_env:${index}`] === '1';
+    const current = category in flags ? flags[category]! : [...CHANNELS];
+    flags[category] = withChannel(current, channel, form[`coletar_env:${index}`] === '1');
   });
 
-  await Promise.all([persistCustomSources(sources), persistEnvFlags(envFlags)]);
+  await Promise.all([persistCustomSources(sources), persistEnvFlags(flags)]);
   return { ok: true };
 }
 
@@ -251,6 +325,6 @@ export function setMlSourcesCacheForTest(sources: MlCustomSource[] | null): void
 }
 
 /** Apenas para testes unitários. */
-export function setEnvFlagsCacheForTest(flags: Record<string, boolean> | null): void {
+export function setEnvFlagsCacheForTest(flags: Record<string, Channel[]> | null): void {
   envFlagsCache = flags;
 }
