@@ -15,10 +15,60 @@ export interface CouponsPageData {
 }
 
 const COUPONS_CACHE_KEY = 'couponsLastScrape';
+const STORE_LINK_OVERRIDES_KEY = 'couponStoreLinkOverrides';
 
 let lastScrape: CouponScrapeResult | null = null;
 let cacheHydrated = false;
-let storeUrlRefreshAttempted = false;
+let storeLinkOverridesCache: Record<string, string> | null = null;
+
+function couponLookupKey(couponId: string, code?: string | null): string {
+  return `${couponId}|${code ?? ''}`;
+}
+
+function matchesCoupon(coupon: MlCoupon, couponId: string, code?: string | null): boolean {
+  if (coupon.id !== couponId) return false;
+  if (code) return coupon.code === code;
+  return true;
+}
+
+function applyStoreLinkOverrides(coupons: MlCoupon[], overrides: Record<string, string>): MlCoupon[] {
+  return coupons.map((coupon) => {
+    const override =
+      overrides[couponLookupKey(coupon.id, coupon.code)] ??
+      overrides[couponLookupKey(coupon.id, null)];
+    if (!override?.trim()) return coupon;
+    return { ...coupon, storeUrl: override.trim() };
+  });
+}
+
+async function loadStoreLinkOverrides(): Promise<Record<string, string>> {
+  if (storeLinkOverridesCache) return storeLinkOverridesCache;
+
+  try {
+    const row = await prisma.setting.findUnique({ where: { key: STORE_LINK_OVERRIDES_KEY } });
+    if (row?.value?.trim()) {
+      const parsed = JSON.parse(row.value) as Record<string, string>;
+      if (parsed && typeof parsed === 'object') {
+        storeLinkOverridesCache = parsed;
+        return parsed;
+      }
+    }
+  } catch {
+    /* cache inválido — ignora */
+  }
+
+  storeLinkOverridesCache = {};
+  return storeLinkOverridesCache;
+}
+
+async function saveStoreLinkOverrides(overrides: Record<string, string>): Promise<void> {
+  await prisma.setting.upsert({
+    where: { key: STORE_LINK_OVERRIDES_KEY },
+    update: { value: JSON.stringify(overrides) },
+    create: { key: STORE_LINK_OVERRIDES_KEY, value: JSON.stringify(overrides) },
+  });
+  storeLinkOverridesCache = overrides;
+}
 
 function visibleCoupons(coupons: MlCoupon[]): MlCoupon[] {
   return coupons.filter((coupon) => coupon.status !== 'generated');
@@ -34,7 +84,11 @@ async function hydrateCouponsCache(): Promise<void> {
 
     const parsed = JSON.parse(row.value) as CouponScrapeResult;
     if (Array.isArray(parsed.coupons) && typeof parsed.scrapedAt === 'string') {
-      lastScrape = parsed;
+      const overrides = await loadStoreLinkOverrides();
+      lastScrape = {
+        ...parsed,
+        coupons: applyStoreLinkOverrides(parsed.coupons, overrides),
+      };
     }
   } catch {
     /* cache inválido — ignora */
@@ -57,12 +111,7 @@ export async function loadCouponsPage(
   await hydrateCouponsConfigCache();
   await hydrateCouponsCache();
 
-  const cacheMissingAnyStoreUrls =
-    lastScrape &&
-    lastScrape.coupons.some((coupon) => coupon.status === 'available' && !coupon.storeUrl);
-
-  if (!lastScrape || (cacheMissingAnyStoreUrls && !storeUrlRefreshAttempted)) {
-    if (cacheMissingAnyStoreUrls) storeUrlRefreshAttempted = true;
+  if (!lastScrape) {
     const result = await refreshCoupons();
     if (!result.ok && !error) error = result.error;
   }
@@ -84,8 +133,12 @@ export async function refreshCoupons(): Promise<{ ok: true; count: number } | { 
   try {
     await hydrateCouponsConfigCache();
     const result = await scrapeAffiliateCoupons();
-    lastScrape = result;
-    await persistCouponsCache(result);
+    const overrides = await loadStoreLinkOverrides();
+    lastScrape = {
+      ...result,
+      coupons: applyStoreLinkOverrides(result.coupons, overrides),
+    };
+    await persistCouponsCache(lastScrape);
     return { ok: true, count: result.coupons.length };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Falha ao buscar cupons';
@@ -142,12 +195,6 @@ export async function sendCouponToChannels(
   if (!coupon) {
     return { ok: false, error: 'Cupom não encontrado — atualize a lista e tente novamente.' };
   }
-  if (!coupon.storeUrl) {
-    const refreshed = await refreshCoupons();
-    if (refreshed.ok) {
-      coupon = findCouponForSend(couponId, code) ?? coupon;
-    }
-  }
   if (coupon.status !== 'available') {
     return { ok: false, error: 'Só é possível enviar cupons com status Disponível.' };
   }
@@ -159,4 +206,33 @@ export async function sendCouponToChannels(
     const err = error instanceof Error ? error.message : 'Falha ao enviar cupom';
     return { ok: false, error: err };
   }
+}
+
+export async function updateCouponStoreLink(
+  couponId: string,
+  storeUrl: string,
+  code?: string | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await hydrateCouponsCache();
+
+  const trimmed = storeUrl.trim();
+  const key = couponLookupKey(couponId, code);
+  const overrides = await loadStoreLinkOverrides();
+
+  if (trimmed) overrides[key] = trimmed;
+  else delete overrides[key];
+
+  await saveStoreLinkOverrides(overrides);
+
+  if (lastScrape) {
+    lastScrape = {
+      ...lastScrape,
+      coupons: lastScrape.coupons.map((coupon) =>
+        matchesCoupon(coupon, couponId, code) ? { ...coupon, storeUrl: trimmed || null } : coupon,
+      ),
+    };
+    await persistCouponsCache(lastScrape);
+  }
+
+  return { ok: true };
 }

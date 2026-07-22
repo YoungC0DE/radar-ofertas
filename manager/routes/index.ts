@@ -17,7 +17,7 @@ import { showOfferDetail, showOffersList, handleDeleteAllPending, handleDeleteOf
 import { handleTemplateSave, handleCouponTemplateSave, showTemplatePage, handleAutoMessageCreate, handleAutoMessageDelete, handleAutoMessageSendNow, handleAutoMessageUpdate } from '../controllers/template-controller.js';
 import { handleChannelLinkSave, handleBrandSave, handleCouponsUrlSave, handleOperatingHoursSave, handleScoreSave, handleSendIntervalSave, handleSenderDelaySave, showSettingsPage } from '../controllers/settings-controller.js';
 import { getLogsJson, showLogsPage } from '../controllers/logs-controller.js';
-import { getCouponsApiJson, handleCouponSend, handleCouponsRefresh, showCouponsPage } from '../controllers/coupons-controller.js';
+import { getCouponsApiJson, handleCouponSend, handleCouponStoreLinkSave, handleCouponsRefresh, showCouponsPage } from '../controllers/coupons-controller.js';
 import {
   handleSourceAdd,
   handleSourceFlagsSave,
@@ -246,6 +246,21 @@ export async function handleManagerRequest(
         res,
         200,
         await handleCouponSend(decodeURIComponent(couponSendMatch[1]!), form.code ?? null),
+      );
+      return;
+    }
+
+    const couponStoreLinkMatch = path.match(/^\/manager\/coupons\/([^/]+)\/store-link$/);
+    if (couponStoreLinkMatch && method === 'POST') {
+      const form = parseFormUrlEncoded(await readFormBody(req));
+      sendHtml(
+        res,
+        200,
+        await handleCouponStoreLinkSave(
+          decodeURIComponent(couponStoreLinkMatch[1]!),
+          form.storeUrl ?? '',
+          form.code ?? null,
+        ),
       );
       return;
     }

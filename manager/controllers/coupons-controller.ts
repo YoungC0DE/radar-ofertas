@@ -1,4 +1,4 @@
-import { loadCouponsPage, refreshCoupons, getCouponsJson, sendCouponToChannels } from '../models/coupons-model.js';
+import { loadCouponsPage, refreshCoupons, getCouponsJson, sendCouponToChannels, updateCouponStoreLink } from '../models/coupons-model.js';
 import { renderCouponsPage } from '../views/coupons.js';
 
 export async function showCouponsPage(
@@ -24,6 +24,18 @@ export async function handleCouponSend(couponId: string, code?: string | null): 
     return showCouponsPage(false, result.error);
   }
   return showCouponsPage(false, null, result.message);
+}
+
+export async function handleCouponStoreLinkSave(
+  couponId: string,
+  storeUrl: string,
+  code?: string | null,
+): Promise<string> {
+  const result = await updateCouponStoreLink(couponId, storeUrl, code);
+  if (!result.ok) {
+    return showCouponsPage(false, result.error);
+  }
+  return showCouponsPage(false, null, 'Link da loja salvo.');
 }
 
 export function getCouponsApiJson(): string {

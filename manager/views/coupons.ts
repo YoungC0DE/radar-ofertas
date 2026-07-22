@@ -15,6 +15,22 @@ function statusBadge(status: string): string {
   return `<span class="badge ${cls}">${escapeHtml(label)}</span>`;
 }
 
+function renderStoreLinkField(coupon: CouponsPageData['coupons'][number]): string {
+  const value = coupon.storeUrl ?? '';
+  return `<form method="post" action="/manager/coupons/${encodeURIComponent(coupon.id)}/store-link" class="store-link-form">
+    ${coupon.code ? `<input type="hidden" name="code" value="${escapeHtml(coupon.code)}">` : ''}
+    <input
+      type="url"
+      name="storeUrl"
+      value="${escapeHtml(value)}"
+      placeholder="https://lista.mercadolivre.com.br/..."
+      class="store-link-input"
+      title="Link completo da loja — será encurtado ao enviar"
+    >
+    <button type="submit" class="btn btn-sm">Salvar</button>
+  </form>`;
+}
+
 function renderSendAction(coupon: CouponsPageData['coupons'][number]): string {
   if (coupon.status !== 'available') return '—';
   return `<form method="post" action="/manager/coupons/${encodeURIComponent(coupon.id)}/send" class="inline-form">
@@ -34,7 +50,7 @@ function renderCouponsTable(coupons: CouponsPageData['coupons']): string {
         <td><strong>${escapeHtml(coupon.storeName || coupon.title)}</strong>${coupon.description ? `<div class="meta">${escapeHtml(coupon.description.slice(0, 120))}${coupon.description.length > 120 ? '…' : ''}</div>` : ''}</td>
         <td>${coupon.discountLabel ? escapeHtml(coupon.discountLabel) : '—'}</td>
         <td>${coupon.code ? `<code>${escapeHtml(coupon.code)}</code>` : '—'}</td>
-        <td>${coupon.storeUrl ? `<a href="${escapeHtml(coupon.storeUrl)}" target="_blank" rel="noopener noreferrer">Ver produtos</a>` : '—'}</td>
+        <td>${renderStoreLinkField(coupon)}</td>
         <td>${coupon.category ? escapeHtml(coupon.category) : '—'}</td>
         <td>${coupon.minPurchase ? escapeHtml(coupon.minPurchase) : '—'}</td>
         <td>${coupon.expiresAt ? escapeHtml(coupon.expiresAt) : '—'}</td>
@@ -50,7 +66,7 @@ function renderCouponsTable(coupons: CouponsPageData['coupons']): string {
         <th>Cupom</th>
         <th>Desconto</th>
         <th>Código</th>
-        <th>Loja</th>
+        <th>Link da loja</th>
         <th>Categoria</th>
         <th>Compra mínima</th>
         <th>Validade</th>
@@ -107,6 +123,26 @@ export function renderCouponsPage(data: CouponsPageData): string {
       padding: 2px 6px;
       border-radius: 4px;
       font-size: 0.9em;
+    }
+    .store-link-form {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 220px;
+      margin: 0;
+    }
+    .store-link-input {
+      width: 100%;
+      min-width: 200px;
+      padding: 6px 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 0.82rem;
+    }
+    .store-link-input:focus {
+      outline: 2px solid #2563eb;
+      outline-offset: 1px;
+      border-color: #2563eb;
     }
   </style>`;
 

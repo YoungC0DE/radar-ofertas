@@ -11,7 +11,7 @@ export const COUPON_PLACEHOLDERS = [
   { key: 'title', label: 'Loja ou título do cupom', example: 'Darklab' },
   { key: 'code', label: 'Código promocional', example: '#PROMOAGRADARKLAB' },
   { key: 'expires', label: 'Data de validade', example: '01/08/2026' },
-  { key: 'store_link', label: 'Link Ver produtos', example: 'https://lista.mercadolivre.com.br/_Container_...' },
+  { key: 'store_link', label: 'Link Ver produtos', example: 'https://mercadolivre.com/sec/...' },
   { key: 'category', label: 'Categoria do cupom', example: 'PRODUCT_DISCOUNT' },
   { key: 'min_purchase', label: 'Compra mínima', example: 'R$ 100' },
 ] as const;
@@ -120,8 +120,11 @@ export function formatCouponMessageFromTemplate(
   template: string,
   coupon: MlCoupon,
   visibility: CouponPlaceholderVisibility = DEFAULT_COUPON_PLACEHOLDER_VISIBILITY,
+  storeLink?: string,
 ): string {
-  return renderCouponTemplate(template, buildCouponTemplateValues(coupon), visibility);
+  const values = buildCouponTemplateValues(coupon);
+  if (storeLink !== undefined) values.store_link = storeLink;
+  return renderCouponTemplate(template, values, visibility);
 }
 
 function mergeCouponPlaceholderVisibility(
@@ -217,7 +220,7 @@ export function sampleCouponTemplateValues(): CouponTemplateValues {
     title: 'Darklab',
     code: '#PROMOAGRADARKLAB',
     expires: '01/08/2026',
-    store_link: 'https://lista.mercadolivre.com.br/_Container_pega-mais-21-off-seller-1784313015',
+    store_link: 'https://mercadolivre.com/sec/abc123',
     category: 'PRODUCT_DISCOUNT',
     min_purchase: 'R$ 100',
   };
