@@ -26,12 +26,16 @@ const STORE_URL_KEYS = [
   'product_url',
   'store_url',
   'seller_url',
+  'listing_url',
+  'container_link',
   'permalink',
   'landing_url',
   'search_url',
   'items_url',
   'container_url',
   'deeplink',
+  'landing',
+  'landing_page',
   'target_url',
   'action_url',
   'link',
@@ -40,19 +44,94 @@ const STORE_URL_KEYS = [
 ] as const;
 
 const STORE_URL_HINT =
-  /listado\.mercadolivre|\/loja\/|\/perfil\/|\/social\/|seller_id=|_CustId_|\/pagina\//i;
+  /lista\.mercadolivre|listado\.mercadolivre|\/_Container_|\/loja\/|\/perfil\/|\/social\/|seller_id=|_CustId_|\/pagina\/|-seller-\d+/i;
 
 function isStoreProductUrl(value: string): boolean {
-  if (!/^https?:\/\//i.test(value)) return false;
-  if (!/mercadolivre\.com|mercadolibre\.com/i.test(value)) return false;
-  if (/\/afiliados\/|\/affiliate-program\//i.test(value)) return false;
-  return STORE_URL_HINT.test(value) || /[?&](seller_id|cust_id|nickname)=/i.test(value);
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith('/_Container_')) return true;
+  if (!/^https?:\/\//i.test(trimmed)) return false;
+  if (!/mercadolivre\.com|mercadolibre\.com/i.test(trimmed)) return false;
+  if (/\/afiliados\/|\/affiliate-program\//i.test(trimmed)) return false;
+  return STORE_URL_HINT.test(trimmed) || /[?&](seller_id|cust_id|nickname)=/i.test(trimmed);
 }
 
 function normalizeStoreUrl(value: string): string {
-  if (value.startsWith('//')) return `https:${value}`;
-  if (value.startsWith('/')) return `https://www.mercadolivre.com.br${value}`;
-  return value;
+  const trimmed = value.trim().replace(/\\\//g, '/');
+  let url: string;
+  if (trimmed.startsWith('//')) url = `https:${trimmed}`;
+  else if (trimmed.startsWith('/_Container_')) url = `https://lista.mercadolivre.com.br${trimmed}`;
+  else if (trimmed.startsWith('_Container_')) url = `https://lista.mercadolivre.com.br/${trimmed}`;
+  else if (trimmed.startsWith('/')) url = `https://www.mercadolivre.com.br${trimmed}`;
+  else url = trimmed;
+  return url.replace(/([^:]\/)\/+/g, '$1');
+}
+
+function pickSellerId(record: Record<string, unknown>): string | null {
+  const value = record.seller_id ?? record.sellerId ?? record.store_id ?? record.storeId;
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  const direct = asString(value);
+  if (direct) return direct;
+
+  const seller = record.seller;
+  if (seller && typeof seller === 'object' && !Array.isArray(seller)) {
+    const sellerRecord = seller as Record<string, unknown>;
+    return pickSellerId(sellerRecord) ?? asString(sellerRecord.id);
+  }
+
+  return null;
+}
+
+function extractListaLinksFromHtml(html: string): string[] {
+  const normalized = html.replace(/\\\//g, '/');
+  const links = new Set<string>();
+
+  for (const match of normalized.matchAll(/https?:\/\/lista\.mercadolivre\.com\.br\/_Container_[^\s"'<>\\]+/gi)) {
+    links.add(normalizeStoreUrl(match[0]));
+  }
+
+  for (const match of normalized.matchAll(/\/_Container_[a-z0-9-]+-seller-\d+/gi)) {
+    links.add(normalizeStoreUrl(match[0]));
+  }
+
+  return [...links];
+}
+
+function findUrlNearCouponInHtml(html: string, couponId: string): string | null {
+  const markers = [`"id":${couponId}`, `"id":"${couponId}"`];
+  for (const marker of markers) {
+    const idx = html.indexOf(marker);
+    if (idx < 0) continue;
+    const chunk = html.slice(Math.max(0, idx - 800), idx + 8000).replace(/\\\//g, '/');
+    const match =
+      chunk.match(/https?:\/\/lista\.mercadolivre\.com\.br\/_Container_[^\s"'<>"]+/i) ??
+      chunk.match(/lista\.mercadolivre\.com\.br\/_Container_[^\s"'<>"]+/i);
+    if (match?.[0]) return normalizeStoreUrl(match[0].startsWith('http') ? match[0] : `https://${match[0]}`);
+  }
+  return null;
+}
+
+function matchListaLinkBySellerId(links: string[], sellerId: string): string | null {
+  const needle = `-seller-${sellerId}`;
+  return links.find((link) => link.includes(needle)) ?? null;
+}
+
+function enrichStoreUrls(coupons: MlCoupon[], html: string): MlCoupon[] {
+  const listaLinks = extractListaLinksFromHtml(html);
+
+  return coupons.map((coupon) => {
+    if (coupon.storeUrl) return coupon;
+
+    const near = findUrlNearCouponInHtml(html, coupon.id);
+    if (near) return { ...coupon, storeUrl: near };
+
+    if (coupon.sellerId) {
+      const bySeller = matchListaLinkBySellerId(listaLinks, coupon.sellerId);
+      if (bySeller) return { ...coupon, storeUrl: bySeller };
+    }
+
+    return coupon;
+  });
 }
 
 function pickStoreUrlFromRecord(record: Record<string, unknown>): string | null {
@@ -81,9 +160,12 @@ function findStoreUrlDeep(node: unknown, depth = 0): string | null {
 
   if (typeof node === 'string') {
     const trimmed = node.trim();
-    if (isStoreProductUrl(trimmed)) return normalizeStoreUrl(trimmed);
-    const match = trimmed.match(/https?:\/\/[^\s"'<>]+/i);
-    if (match?.[0] && isStoreProductUrl(match[0])) return normalizeStoreUrl(match[0]);
+    const candidates = [trimmed, trimmed.replace(/\\\//g, '/')];
+    for (const candidate of candidates) {
+      if (isStoreProductUrl(candidate)) return normalizeStoreUrl(candidate);
+      const match = candidate.match(/https?:\/\/[^\s"'<>\\]+/i);
+      if (match?.[0] && isStoreProductUrl(match[0])) return normalizeStoreUrl(match[0]);
+    }
     return null;
   }
 
@@ -187,6 +269,7 @@ function mapCouponRecord(record: Record<string, unknown>, index: number): MlCoup
     expiresAt,
     storeName: null,
     storeUrl: null,
+    sellerId: null,
     status: normalizeStatus(rawStatus),
     rawStatus,
   };
@@ -215,6 +298,7 @@ function resolveAffiliateCouponStatus(record: Record<string, unknown>, code: str
 function mapAffiliateCouponRecord(record: Record<string, unknown>): MlCoupon {
   const discountLabel = pickFirstString(record, ['title']) ?? '';
   const storeName = resolveStoreName(record);
+  const sellerId = pickSellerId(record);
   const storeUrl = pickStoreUrlFromRecord(record);
   const id = String(record.id ?? discountLabel);
   const expiresAt = pickFirstString(record, ['expiration_date', 'expires_at', 'valid_until']);
@@ -233,6 +317,7 @@ function mapAffiliateCouponRecord(record: Record<string, unknown>): MlCoupon {
     expiresAt,
     storeName,
     storeUrl,
+    sellerId,
     status: resolveAffiliateCouponStatus(record, code),
     rawStatus,
   };
@@ -308,7 +393,7 @@ function extractAffiliateCouponsFromHtml(html: string): MlCoupon[] {
     }
   }
 
-  return enrichCouponsWithDomHints(dedupeCoupons(coupons), html);
+  return enrichCouponsWithDomHints(enrichStoreUrls(dedupeCoupons(coupons), html), html);
 }
 
 function looksLikeCouponObject(record: Record<string, unknown>): boolean {
@@ -398,6 +483,7 @@ function parseDomCoupons(html: string): MlCoupon[] {
         expiresAt: text.match(/v[aá]lid[oa][^.]+/i)?.[0] ?? null,
         storeName: text.match(/Em produtos de\s+(.+?)(?:\s+Ver produtos|$)/i)?.[1]?.trim() ?? null,
         storeUrl: null,
+        sellerId: null,
         status: /gerar|dispon[ií]vel|ativar/i.test(text) ? 'available' : 'unknown',
         rawStatus: null,
       });
@@ -424,6 +510,7 @@ function couponPriority(coupon: MlCoupon): number {
 function mergeCouponDetails(primary: MlCoupon, secondary: MlCoupon): MlCoupon {
   const storeName = primary.storeName || secondary.storeName;
   const storeUrl = primary.storeUrl || secondary.storeUrl;
+  const sellerId = primary.sellerId || secondary.sellerId;
   const code = primary.code || secondary.code;
   const expiresAt = primary.expiresAt || secondary.expiresAt;
   const category = primary.category || secondary.category;
@@ -437,6 +524,7 @@ function mergeCouponDetails(primary: MlCoupon, secondary: MlCoupon): MlCoupon {
     minPurchase,
     storeName,
     storeUrl,
+    sellerId,
     title: storeName || primary.title || secondary.title,
     description: storeName ? primary.discountLabel || secondary.discountLabel : primary.description || secondary.description,
   };
@@ -543,6 +631,12 @@ function dedupeCoupons(coupons: MlCoupon[]): MlCoupon[] {
   return result;
 }
 
+export function finalizeParsedCoupons(coupons: MlCoupon[], html?: string): MlCoupon[] {
+  const deduped = dedupeCoupons(coupons);
+  if (!html?.trim()) return deduped;
+  return enrichCouponsWithDomHints(enrichStoreUrls(deduped, html), html);
+}
+
 export function parseCouponsHtml(html: string): MlCoupon[] {
   const affiliateCoupons = extractAffiliateCouponsFromHtml(html);
   if (affiliateCoupons.length > 0) {
@@ -567,13 +661,13 @@ export function parseCouponsHtml(html: string): MlCoupon[] {
 
   coupons.push(...parseDomCoupons(html));
 
-  return enrichCouponsWithDomHints(dedupeCoupons(coupons), html);
+  return enrichCouponsWithDomHints(enrichStoreUrls(dedupeCoupons(coupons), html), html);
 }
 
-export function parseCouponsJson(data: unknown): MlCoupon[] {
+export function parseCouponsJson(data: unknown, html?: string): MlCoupon[] {
   const coupons: MlCoupon[] = [];
   collectCouponsFromUnknown(data, coupons);
-  return dedupeCoupons(coupons);
+  return finalizeParsedCoupons(coupons, html);
 }
 
 export function isLoginHtml(html: string): boolean {

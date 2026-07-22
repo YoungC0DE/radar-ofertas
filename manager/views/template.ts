@@ -155,13 +155,6 @@ function renderAutoMessagesSection(data: TemplatePageData): string {
       : '<p class="meta">Nenhuma mensagem automática ainda. Crie uma abaixo.</p>';
 
   return `
-    <section class="auto-messages-section">
-      <h2>Mensagens automáticas</h2>
-      <p class="meta">
-        Crie textos como bom dia, código promocional ou avisos. Salve a mensagem, escolha o horário de envio
-        e clique em <strong>Salvar e programar</strong> — o bot envia automaticamente no horário definido.
-      </p>
-
       <div class="auto-messages-list">${cards}</div>
 
       <article class="auto-message-card new-auto-message" data-auto-message-card>
@@ -184,8 +177,35 @@ function renderAutoMessagesSection(data: TemplatePageData): string {
       <table class="auto-placeholders">
         <thead><tr><th>Código</th><th>Significado</th><th>Exemplo</th></tr></thead>
         <tbody>${placeholders}</tbody>
-      </table>
-    </section>`;
+      </table>`;
+}
+
+function isAccordionOpen(
+  section: 'offer' | 'coupon' | 'auto',
+  data: TemplatePageData,
+): boolean {
+  if (data.savedSection === 'offer') return section === 'offer';
+  if (data.savedSection === 'coupon') return section === 'coupon';
+  if (data.autoMessageNotice) return section === 'auto';
+  return section === 'offer';
+}
+
+function renderAccordionItem(
+  title: string,
+  description: string,
+  content: string,
+  open: boolean,
+): string {
+  return `<details class="template-accordion"${open ? ' open' : ''}>
+      <summary class="template-accordion-summary">
+        <span class="template-accordion-title">${escapeHtml(title)}</span>
+        <span class="template-accordion-chevron" aria-hidden="true"></span>
+      </summary>
+      <div class="template-accordion-body">
+        <p class="meta">${description}</p>
+        ${content}
+      </div>
+    </details>`;
 }
 
 export function renderTemplatePage(data: TemplatePageData): string {
@@ -203,6 +223,66 @@ export function renderTemplatePage(data: TemplatePageData): string {
   const offerNote = data.previewOffer
     ? `<p class="meta">Preview com a oferta mais recente: <strong>${escapeHtml(data.previewOffer.title.slice(0, 50))}${data.previewOffer.title.length > 50 ? '…' : ''}</strong></p>`
     : '<p class="meta">Nenhuma oferta salva ainda — preview usa dados de exemplo.</p>';
+
+  const offerSection = `
+      <form method="post" action="/manager/template" class="template-form">
+        <div class="editor-grid">
+          <div class="editor-panel">
+            <label for="template">Texto da mensagem</label>
+            <div class="chip-row" id="placeholder-chips">${placeholderChips(data.placeholderVisibility)}</div>
+            <textarea id="template" name="template" rows="14" spellcheck="false">${escapeHtml(data.template)}</textarea>
+            <div class="form-actions">
+              <button type="submit" class="btn primary">Salvar template</button>
+              <button type="button" class="btn" id="reset-template">Restaurar padrão</button>
+            </div>
+          </div>
+
+          <div class="preview-panel">
+            <label>Preview (como vai no WhatsApp)</label>
+            <pre id="preview" class="preview-box">${escapeHtml(data.previewText)}</pre>
+            ${offerNote}
+          </div>
+        </div>
+
+        <section class="placeholders-section">
+          <h3>Placeholders disponíveis</h3>
+          <p class="meta">Ative ou desative cada flag. Com a flag off, o placeholder some do texto enviado (linhas vazias são removidas).</p>
+          <table>
+            <thead><tr><th>Flag</th><th>Código</th><th>Significado</th><th>Exemplo</th></tr></thead>
+            <tbody>${placeholderTable(data.placeholderVisibility)}</tbody>
+          </table>
+        </section>
+      </form>`;
+
+  const couponSection = `
+      <form method="post" action="/manager/template/coupon" class="template-form">
+        <div class="editor-grid">
+          <div class="editor-panel">
+            <label for="coupon-template">Texto da mensagem</label>
+            <div class="chip-row" id="coupon-placeholder-chips">${couponPlaceholderChips(data.couponPlaceholderVisibility)}</div>
+            <textarea id="coupon-template" name="couponTemplate" rows="12" spellcheck="false">${escapeHtml(data.couponTemplate)}</textarea>
+            <div class="form-actions">
+              <button type="submit" class="btn primary">Salvar template de cupom</button>
+              <button type="button" class="btn" id="reset-coupon-template">Restaurar padrão</button>
+            </div>
+          </div>
+
+          <div class="preview-panel">
+            <label>Preview (como vai no canal)</label>
+            <pre id="coupon-preview" class="preview-box">${escapeHtml(data.couponPreviewText)}</pre>
+            <p class="meta">Preview com dados de exemplo de cupom disponível.</p>
+          </div>
+        </div>
+
+        <section class="placeholders-section">
+          <h3>Placeholders do cupom</h3>
+          <p class="meta">Ative ou desative cada flag. Com a flag off, o placeholder some do texto enviado.</p>
+          <table>
+            <thead><tr><th>Flag</th><th>Código</th><th>Significado</th><th>Exemplo</th></tr></thead>
+            <tbody>${couponPlaceholderTable(data.couponPlaceholderVisibility)}</tbody>
+          </table>
+        </section>
+      </form>`;
 
   const body = `
     <style>
@@ -234,15 +314,71 @@ export function renderTemplatePage(data: TemplatePageData): string {
       .placeholders-section {
         margin-top: 28px;
       }
-      .coupon-template-section {
-        margin-top: 40px;
-        padding-top: 32px;
-        border-top: 1px solid var(--border);
+      .placeholders-section h3 {
+        margin: 0 0 8px;
+        font-size: 1rem;
       }
-      .auto-messages-section {
-        margin-top: 40px;
-        padding-top: 32px;
-        border-top: 1px solid var(--border);
+      .template-accordions {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .template-accordion {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+      .template-accordion-summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 18px;
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+        font-weight: 600;
+        font-size: 1.05rem;
+        background: #f9fafb;
+        border-bottom: 1px solid transparent;
+        transition: background 0.15s ease;
+      }
+      .template-accordion-summary::-webkit-details-marker {
+        display: none;
+      }
+      .template-accordion-summary::marker {
+        content: '';
+      }
+      .template-accordion[open] > .template-accordion-summary {
+        border-bottom-color: var(--border);
+      }
+      .template-accordion-summary:hover {
+        background: #f3f4f6;
+      }
+      .template-accordion-title {
+        color: var(--text);
+      }
+      .template-accordion-chevron {
+        width: 10px;
+        height: 10px;
+        border-right: 2px solid var(--text-muted);
+        border-bottom: 2px solid var(--text-muted);
+        transform: rotate(45deg);
+        transition: transform 0.2s ease;
+        flex-shrink: 0;
+        margin-top: -4px;
+      }
+      .template-accordion[open] .template-accordion-chevron {
+        transform: rotate(-135deg);
+        margin-top: 4px;
+      }
+      .template-accordion-body {
+        padding: 18px;
+      }
+      .template-accordion-body > .meta:first-child {
+        margin-top: 0;
       }
       .auto-messages-list {
         display: flex;
@@ -350,81 +486,26 @@ export function renderTemplatePage(data: TemplatePageData): string {
       .btn.danger { color: #b91c1c; border-color: #fecaca; }
     </style>
     ${alert}
-    <section>
-      <h2>Mensagem de ofertas</h2>
-      <p class="meta">
-        Edite o texto livremente. Use os placeholders — o bot substitui automaticamente na hora do envio.
-        Placeholders desativados não aparecem na mensagem final.
-      </p>
-
-      <form method="post" action="/manager/template" class="template-form">
-        <div class="editor-grid">
-          <div class="editor-panel">
-            <label for="template">Texto da mensagem</label>
-            <div class="chip-row" id="placeholder-chips">${placeholderChips(data.placeholderVisibility)}</div>
-            <textarea id="template" name="template" rows="14" spellcheck="false">${escapeHtml(data.template)}</textarea>
-            <div class="form-actions">
-              <button type="submit" class="btn primary">Salvar template</button>
-              <button type="button" class="btn" id="reset-template">Restaurar padrão</button>
-            </div>
-          </div>
-
-          <div class="preview-panel">
-            <label>Preview (como vai no WhatsApp)</label>
-            <pre id="preview" class="preview-box">${escapeHtml(data.previewText)}</pre>
-            ${offerNote}
-          </div>
-        </div>
-
-        <section class="placeholders-section">
-          <h2>Placeholders disponíveis</h2>
-          <p class="meta">Ative ou desative cada flag. Com a flag off, o placeholder some do texto enviado (linhas vazias são removidas).</p>
-          <table>
-            <thead><tr><th>Flag</th><th>Código</th><th>Significado</th><th>Exemplo</th></tr></thead>
-            <tbody>${placeholderTable(data.placeholderVisibility)}</tbody>
-          </table>
-        </section>
-      </form>
-    </section>
-
-    <section class="coupon-template-section">
-      <h2>Mensagem de cupom</h2>
-      <p class="meta">
-        Texto usado ao clicar em <strong>Enviar ao canal</strong> na página de Cupons.
-        Use os placeholders — o bot substitui automaticamente na hora do envio.
-      </p>
-
-      <form method="post" action="/manager/template/coupon" class="template-form">
-        <div class="editor-grid">
-          <div class="editor-panel">
-            <label for="coupon-template">Texto da mensagem</label>
-            <div class="chip-row" id="coupon-placeholder-chips">${couponPlaceholderChips(data.couponPlaceholderVisibility)}</div>
-            <textarea id="coupon-template" name="couponTemplate" rows="12" spellcheck="false">${escapeHtml(data.couponTemplate)}</textarea>
-            <div class="form-actions">
-              <button type="submit" class="btn primary">Salvar template de cupom</button>
-              <button type="button" class="btn" id="reset-coupon-template">Restaurar padrão</button>
-            </div>
-          </div>
-
-          <div class="preview-panel">
-            <label>Preview (como vai no canal)</label>
-            <pre id="coupon-preview" class="preview-box">${escapeHtml(data.couponPreviewText)}</pre>
-            <p class="meta">Preview com dados de exemplo de cupom disponível.</p>
-          </div>
-        </div>
-
-        <section class="placeholders-section">
-          <h2>Placeholders do cupom</h2>
-          <p class="meta">Ative ou desative cada flag. Com a flag off, o placeholder some do texto enviado.</p>
-          <table>
-            <thead><tr><th>Flag</th><th>Código</th><th>Significado</th><th>Exemplo</th></tr></thead>
-            <tbody>${couponPlaceholderTable(data.couponPlaceholderVisibility)}</tbody>
-          </table>
-        </section>
-      </form>
-    </section>
-
-    ${renderAutoMessagesSection(data)}
+    <div class="template-accordions">
+      ${renderAccordionItem(
+        'Mensagem de ofertas',
+        'Edite o texto livremente. Use os placeholders — o bot substitui automaticamente na hora do envio. Placeholders desativados não aparecem na mensagem final.',
+        offerSection,
+        isAccordionOpen('offer', data),
+      )}
+      ${renderAccordionItem(
+        'Mensagem de cupom',
+        'Texto usado ao clicar em <strong>Enviar ao canal</strong> na página de Cupons. Use os placeholders — o bot substitui automaticamente na hora do envio.',
+        couponSection,
+        isAccordionOpen('coupon', data),
+      )}
+      ${renderAccordionItem(
+        'Mensagens automáticas',
+        'Crie textos como bom dia, código promocional ou avisos. Salve a mensagem, escolha o horário de envio e clique em <strong>Salvar e programar</strong> — o bot envia automaticamente no horário definido.',
+        renderAutoMessagesSection(data),
+        isAccordionOpen('auto', data),
+      )}
+    </div>
 
     <script>
       const textarea = document.getElementById('template');

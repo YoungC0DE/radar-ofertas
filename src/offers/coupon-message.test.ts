@@ -16,7 +16,7 @@ describe('coupon-message', () => {
       minPurchase: null,
       expiresAt: '2026-08-01T02:59:59',
       storeName: 'Darklab',
-      storeUrl: 'https://listado.mercadolivre.com.br/loja/darklab',
+      storeUrl: 'https://lista.mercadolivre.com.br/_Container_pega-mais-21-off-seller-1784313015',
       status: 'available',
       rawStatus: null,
     };

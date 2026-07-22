@@ -1,4 +1,5 @@
 import { getCouponsUrlCached, getCouponsUrlFromDb, hydrateCouponsConfigCache } from '../../src/config/coupons-config-store.js';
+import { prisma } from '../../src/database/client.js';
 import { sendCouponToChannelsNow } from '../../src/offers/coupon-service.js';
 import { scrapeAffiliateCoupons } from '../../src/mercado-livre/coupons.js';
 import type { CouponScrapeResult, MlCoupon } from '../../src/mercado-livre/types.js';
@@ -13,10 +14,39 @@ export interface CouponsPageData {
   sendMessage: string | null;
 }
 
+const COUPONS_CACHE_KEY = 'couponsLastScrape';
+
 let lastScrape: CouponScrapeResult | null = null;
+let cacheHydrated = false;
+let storeUrlRefreshAttempted = false;
 
 function visibleCoupons(coupons: MlCoupon[]): MlCoupon[] {
   return coupons.filter((coupon) => coupon.status !== 'generated');
+}
+
+async function hydrateCouponsCache(): Promise<void> {
+  if (cacheHydrated) return;
+  cacheHydrated = true;
+
+  try {
+    const row = await prisma.setting.findUnique({ where: { key: COUPONS_CACHE_KEY } });
+    if (!row?.value?.trim()) return;
+
+    const parsed = JSON.parse(row.value) as CouponScrapeResult;
+    if (Array.isArray(parsed.coupons) && typeof parsed.scrapedAt === 'string') {
+      lastScrape = parsed;
+    }
+  } catch {
+    /* cache inválido — ignora */
+  }
+}
+
+async function persistCouponsCache(result: CouponScrapeResult): Promise<void> {
+  await prisma.setting.upsert({
+    where: { key: COUPONS_CACHE_KEY },
+    update: { value: JSON.stringify(result) },
+    create: { key: COUPONS_CACHE_KEY, value: JSON.stringify(result) },
+  });
 }
 
 export async function loadCouponsPage(
@@ -25,6 +55,18 @@ export async function loadCouponsPage(
   sendMessage: string | null = null,
 ): Promise<CouponsPageData> {
   await hydrateCouponsConfigCache();
+  await hydrateCouponsCache();
+
+  const cacheMissingAnyStoreUrls =
+    lastScrape &&
+    lastScrape.coupons.some((coupon) => coupon.status === 'available' && !coupon.storeUrl);
+
+  if (!lastScrape || (cacheMissingAnyStoreUrls && !storeUrlRefreshAttempted)) {
+    if (cacheMissingAnyStoreUrls) storeUrlRefreshAttempted = true;
+    const result = await refreshCoupons();
+    if (!result.ok && !error) error = result.error;
+  }
+
   const couponsUrl = await getCouponsUrlFromDb();
 
   return {
@@ -43,6 +85,7 @@ export async function refreshCoupons(): Promise<{ ok: true; count: number } | { 
     await hydrateCouponsConfigCache();
     const result = await scrapeAffiliateCoupons();
     lastScrape = result;
+    await persistCouponsCache(result);
     return { ok: true, count: result.coupons.length };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Falha ao buscar cupons';
@@ -98,6 +141,12 @@ export async function sendCouponToChannels(
 
   if (!coupon) {
     return { ok: false, error: 'Cupom não encontrado — atualize a lista e tente novamente.' };
+  }
+  if (!coupon.storeUrl) {
+    const refreshed = await refreshCoupons();
+    if (refreshed.ok) {
+      coupon = findCouponForSend(couponId, code) ?? coupon;
+    }
   }
   if (coupon.status !== 'available') {
     return { ok: false, error: 'Só é possível enviar cupons com status Disponível.' };

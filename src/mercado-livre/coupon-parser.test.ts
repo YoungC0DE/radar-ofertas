@@ -75,15 +75,32 @@ describe('coupon-parser', () => {
     assert.equal(coupons[0]?.status, 'available');
   });
 
+  it('extrai link escapado no JSON próximo ao cupom', () => {
+    const containerUrl =
+      'https://lista.mercadolivre.com.br/_Container_pega-mais-5-off-seller-1784313015';
+    const html = `
+      <script>"coupons":[
+        {"id":13969808,"title":"5% OFF","category":"PRODUCT_DISCOUNT","expiration_date":"2026-08-01T02:59:59","seller":"Lojaoficialcasasbahia","seller_id":1784313015,"alias":"#PROMOAGRACASASBAHI","status":"AVAILABLE","landing":"https:\\/\\/lista.mercadolivre.com.br\\/ _Container_pega-mais-5-off-seller-1784313015"}
+      ]</script>
+    `.replace(' _Container_', '/_Container_');
+
+    const coupons = parseCouponsHtml(html);
+    assert.equal(coupons.length, 1);
+    assert.equal(coupons[0]?.storeName, 'Lojaoficialcasasbahia');
+    assert.equal(coupons[0]?.storeUrl, containerUrl);
+  });
+
   it('extrai link Ver produtos do JSON e do HTML', () => {
+    const containerUrl =
+      'https://lista.mercadolivre.com.br/_Container_pega-mais-21-off-seller-1784313015';
     const html = `
       <html><body>
         <article>
           <div>21% OFF Em produtos de Lucas-home Ver produtos Condições do cupom</div>
-          <a href="https://listado.mercadolivre.com.br/loja/lucas-home">Ver produtos</a>
+          <a href="${containerUrl}">Ver produtos</a>
         </article>
         <script>"coupons":[
-          {"id":99,"title":"21% OFF","category":"PRODUCT_DISCOUNT","expiration_date":"2026-08-18","seller":"Lucas-home","products_url":"https://listado.mercadolivre.com.br/loja/lucas-home","alias":"#PROMOAGRALUCASHOME","status":"AVAILABLE"}
+          {"id":99,"title":"21% OFF","category":"PRODUCT_DISCOUNT","expiration_date":"2026-08-18","seller":"Lucas-home","products_url":"${containerUrl}","alias":"#PROMOAGRALUCASHOME","status":"AVAILABLE"}
         ]</script>
       </body></html>
     `;
@@ -91,7 +108,22 @@ describe('coupon-parser', () => {
     const coupons = parseCouponsHtml(html);
     assert.equal(coupons.length, 1);
     assert.equal(coupons[0]?.storeName, 'Lucas-home');
-    assert.match(coupons[0]?.storeUrl ?? '', /lucas-home/i);
+    assert.equal(coupons[0]?.storeUrl, containerUrl);
+  });
+
+  it('associa link _Container_ ao cupom por seller_id', () => {
+    const containerUrl =
+      'https://lista.mercadolivre.com.br/_Container_pega-mais-5-off-seller-1784313015';
+    const html = `
+      <script>"coupons":[
+        {"id":13969808,"title":"5% OFF","category":"PRODUCT_DISCOUNT","expiration_date":"2026-08-01T02:59:59","seller":"Lojaoficialcasasbahia","seller_id":1784313015,"alias":"#PROMOAGRACASASBAHI","status":"AVAILABLE"}
+      ]</script>
+      <a href="${containerUrl}">Ver produtos</a>
+    `;
+
+    const coupons = parseCouponsHtml(html);
+    assert.equal(coupons.length, 1);
+    assert.equal(coupons[0]?.storeUrl, containerUrl);
   });
 
   it('marca cupom com alias como disponível', () => {

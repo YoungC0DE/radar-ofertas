@@ -26,6 +26,7 @@ export interface MlCoupon {
   expiresAt: string | null;
   storeName: string | null;
   storeUrl: string | null;
+  sellerId: string | null;
   status: 'available' | 'generated' | 'expired' | 'unknown';
   rawStatus: string | null;
 }

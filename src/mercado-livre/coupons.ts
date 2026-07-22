@@ -2,7 +2,7 @@ import { chromium, type BrowserContextOptions } from 'playwright';
 import { getCouponsUrlFromDb } from '../config/coupons-config-store.js';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
-import { collectCouponsFromUnknown, isLoginHtml, parseCouponsHtml, parseCouponsJson } from './coupon-parser.js';
+import { collectCouponsFromUnknown, finalizeParsedCoupons, isLoginHtml, parseCouponsHtml, parseCouponsJson } from './coupon-parser.js';
 import {
   cookiesToHeader,
   hasValidSession,
@@ -21,14 +21,36 @@ async function couponsPageUrl(): Promise<string> {
   return url.split('#')[0] ?? url;
 }
 
-function dedupeCoupons(coupons: MlCoupon[]): MlCoupon[] {
-  const seen = new Set<string>();
-  return coupons.filter((coupon) => {
-    const key = `${coupon.id}|${coupon.title}|${coupon.code ?? ''}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+function couponsMissingStoreLinks(coupons: MlCoupon[]): boolean {
+  return coupons.some((coupon) => coupon.status === 'available' && !coupon.storeUrl);
+}
+
+async function fetchCouponsHtml(url: string, cookieHeader: string): Promise<string | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), env.ML_HTTP_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        ...DEFAULT_HEADERS,
+        Accept: 'text/html,application/xhtml+xml',
+        'User-Agent': env.ML_SCRAPER_USER_AGENT,
+        Cookie: cookieHeader,
+        Referer: 'https://www.mercadolivre.com.br/afiliados/',
+      },
+      signal: controller.signal,
+      redirect: 'follow',
+    });
+
+    if (!response.ok) return null;
+    const html = await response.text();
+    return isLoginHtml(html) ? null : html;
+  } catch (error) {
+    logger.debug({ error, url }, 'ML coupons HTML fetch failed');
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function fetchCouponsViaHttp(): Promise<MlCoupon[] | null> {
@@ -56,7 +78,8 @@ async function fetchCouponsViaHttp(): Promise<MlCoupon[] | null> {
     const contentType = response.headers.get('content-type') ?? '';
     if (contentType.includes('application/json')) {
       const data = (await response.json()) as unknown;
-      const coupons = parseCouponsJson(data);
+      const html = await fetchCouponsHtml(url, cookieHeader);
+      const coupons = parseCouponsJson(data, html ?? undefined);
       return coupons.length > 0 ? coupons : null;
     }
 
@@ -138,7 +161,7 @@ async function fetchCouponsViaBrowser(): Promise<MlCoupon[]> {
       collectCouponsFromUnknown(embeddedState, collected);
     }
 
-    return dedupeCoupons(collected);
+    return finalizeParsedCoupons(collected, html);
   } finally {
     await browser.close();
   }
@@ -150,12 +173,16 @@ export async function scrapeAffiliateCoupons(): Promise<CouponScrapeResult> {
 
   const httpCoupons = await fetchCouponsViaHttp();
   if (httpCoupons && httpCoupons.length > 0) {
-    return {
-      coupons: httpCoupons,
-      source: 'http',
-      scrapedAt: new Date().toISOString(),
-      sessionRequired: false,
-    };
+    if (!couponsMissingStoreLinks(httpCoupons) || !env.ML_USE_BROWSER_FALLBACK) {
+      return {
+        coupons: httpCoupons,
+        source: 'http',
+        scrapedAt: new Date().toISOString(),
+        sessionRequired: false,
+      };
+    }
+
+    logger.info('HTTP coupons missing store links — trying browser fallback');
   }
 
   if (!env.ML_USE_BROWSER_FALLBACK) {
@@ -167,6 +194,14 @@ export async function scrapeAffiliateCoupons(): Promise<CouponScrapeResult> {
 
   const browserCoupons = await fetchCouponsViaBrowser();
   if (browserCoupons.length === 0) {
+    if (httpCoupons && httpCoupons.length > 0) {
+      return {
+        coupons: httpCoupons,
+        source: 'http',
+        scrapedAt: new Date().toISOString(),
+        sessionRequired,
+      };
+    }
     throw new Error('Nenhum cupom encontrado. Verifique a sessão de afiliado e a URL de cupons em Configuração.');
   }
 

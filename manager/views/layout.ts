@@ -541,10 +541,10 @@ export function renderLayout(title: string, body: string, activeNav?: string): s
         <div class="nav-section">Menu</div>
         ${nav('/manager', 'Dashboard', 'dashboard')}
         ${nav('/manager/offers', 'Ofertas', 'offers')}
-        ${nav('/manager/template', 'Mensagem', 'template')}
-        ${nav('/manager/settings', 'Configuração', 'settings')}
-        ${nav('/manager/logs', 'Log', 'logs')}
         ${nav('/manager/coupons', 'Cupons', 'coupons')}
+        ${nav('/manager/template', 'Mensagem', 'template')}
+        ${nav('/manager/logs', 'Log', 'logs')}
+        ${nav('/manager/settings', 'Configuração', 'settings')}
         <div class="nav-section">Fontes de coleta</div>
         ${getEnabledChannels()
           .map((channel) =>
