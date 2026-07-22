@@ -1,8 +1,12 @@
-import { loadCouponsPage, refreshCoupons, getCouponsJson } from '../models/coupons-model.js';
+import { loadCouponsPage, refreshCoupons, getCouponsJson, sendCouponToChannels } from '../models/coupons-model.js';
 import { renderCouponsPage } from '../views/coupons.js';
 
-export async function showCouponsPage(refreshed = false, error: string | null = null): Promise<string> {
-  const data = await loadCouponsPage(refreshed, error);
+export async function showCouponsPage(
+  refreshed = false,
+  error: string | null = null,
+  sendMessage: string | null = null,
+): Promise<string> {
+  const data = await loadCouponsPage(refreshed, error, sendMessage);
   return renderCouponsPage(data);
 }
 
@@ -12,6 +16,14 @@ export async function handleCouponsRefresh(): Promise<string> {
     return showCouponsPage(false, result.error);
   }
   return showCouponsPage(true, null);
+}
+
+export async function handleCouponSend(couponId: string, code?: string | null): Promise<string> {
+  const result = await sendCouponToChannels(couponId, code);
+  if (!result.ok) {
+    return showCouponsPage(false, result.error);
+  }
+  return showCouponsPage(false, null, result.message);
 }
 
 export function getCouponsApiJson(): string {

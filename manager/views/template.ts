@@ -4,6 +4,7 @@ import {
   getAutoMessagePreview,
   getAutoMessageScheduleLabel,
   getAutoMessageScheduledInputValue,
+  getCouponPlaceholderHelp,
   getPlaceholderHelp,
 } from '../models/template-model.js';
 import { escapeHtml, formatDate } from './helpers.js';
@@ -29,6 +30,35 @@ function placeholderTable(visibility: TemplatePageData['placeholderVisibility'])
           <td>
             <label class="placeholder-flag">
               <input type="checkbox" name="placeholder_${p.key}" value="1" data-placeholder-key="${p.key}" class="placeholder-toggle"${checked}>
+              <span>${visibility[p.key] ? 'Ativo' : 'Off'}</span>
+            </label>
+          </td>
+          <td><code>{{${escapeHtml(p.key)}}}</code></td>
+          <td>${escapeHtml(p.label)}</td>
+          <td class="meta">${escapeHtml(p.example)}</td>
+        </tr>`;
+    })
+    .join('');
+}
+
+function couponPlaceholderChips(visibility: TemplatePageData['couponPlaceholderVisibility']): string {
+  return getCouponPlaceholderHelp()
+    .filter((p) => visibility[p.key])
+    .map(
+      (p) =>
+        `<button type="button" class="chip" data-placeholder="{{${p.key}}}" title="${escapeHtml(p.label)}">{{${p.key}}}</button>`,
+    )
+    .join('\n');
+}
+
+function couponPlaceholderTable(visibility: TemplatePageData['couponPlaceholderVisibility']): string {
+  return getCouponPlaceholderHelp()
+    .map((p) => {
+      const checked = visibility[p.key] ? ' checked' : '';
+      return `<tr>
+          <td>
+            <label class="placeholder-flag">
+              <input type="checkbox" name="coupon_placeholder_${p.key}" value="1" data-coupon-placeholder-key="${p.key}" class="coupon-placeholder-toggle"${checked}>
               <span>${visibility[p.key] ? 'Ativo' : 'Off'}</span>
             </label>
           </td>
@@ -159,13 +189,16 @@ function renderAutoMessagesSection(data: TemplatePageData): string {
 }
 
 export function renderTemplatePage(data: TemplatePageData): string {
-  const alert = data.saved
-    ? '<p class="alert ok">Template salvo com sucesso. Novas mensagens do bot usarão este texto.</p>'
-    : data.autoMessageNotice
-      ? `<p class="alert ok">${escapeHtml(data.autoMessageNotice)}</p>`
-      : data.error
-        ? `<p class="alert err">${escapeHtml(data.error)}</p>`
-        : '';
+  const alert =
+    data.savedSection === 'offer'
+      ? '<p class="alert ok">Template de ofertas salvo com sucesso. Novas mensagens do bot usarão este texto.</p>'
+      : data.savedSection === 'coupon'
+        ? '<p class="alert ok">Template de cupom salvo com sucesso. O envio em Cupons usará este texto.</p>'
+        : data.autoMessageNotice
+          ? `<p class="alert ok">${escapeHtml(data.autoMessageNotice)}</p>`
+          : data.error
+            ? `<p class="alert err">${escapeHtml(data.error)}</p>`
+            : '';
 
   const offerNote = data.previewOffer
     ? `<p class="meta">Preview com a oferta mais recente: <strong>${escapeHtml(data.previewOffer.title.slice(0, 50))}${data.previewOffer.title.length > 50 ? '…' : ''}</strong></p>`
@@ -200,6 +233,11 @@ export function renderTemplatePage(data: TemplatePageData): string {
       }
       .placeholders-section {
         margin-top: 28px;
+      }
+      .coupon-template-section {
+        margin-top: 40px;
+        padding-top: 32px;
+        border-top: 1px solid var(--border);
       }
       .auto-messages-section {
         margin-top: 40px;
@@ -313,7 +351,7 @@ export function renderTemplatePage(data: TemplatePageData): string {
     </style>
     ${alert}
     <section>
-      <h2>Mensagem do bot</h2>
+      <h2>Mensagem de ofertas</h2>
       <p class="meta">
         Edite o texto livremente. Use os placeholders — o bot substitui automaticamente na hora do envio.
         Placeholders desativados não aparecem na mensagem final.
@@ -344,6 +382,43 @@ export function renderTemplatePage(data: TemplatePageData): string {
           <table>
             <thead><tr><th>Flag</th><th>Código</th><th>Significado</th><th>Exemplo</th></tr></thead>
             <tbody>${placeholderTable(data.placeholderVisibility)}</tbody>
+          </table>
+        </section>
+      </form>
+    </section>
+
+    <section class="coupon-template-section">
+      <h2>Mensagem de cupom</h2>
+      <p class="meta">
+        Texto usado ao clicar em <strong>Enviar ao canal</strong> na página de Cupons.
+        Use os placeholders — o bot substitui automaticamente na hora do envio.
+      </p>
+
+      <form method="post" action="/manager/template/coupon" class="template-form">
+        <div class="editor-grid">
+          <div class="editor-panel">
+            <label for="coupon-template">Texto da mensagem</label>
+            <div class="chip-row" id="coupon-placeholder-chips">${couponPlaceholderChips(data.couponPlaceholderVisibility)}</div>
+            <textarea id="coupon-template" name="couponTemplate" rows="12" spellcheck="false">${escapeHtml(data.couponTemplate)}</textarea>
+            <div class="form-actions">
+              <button type="submit" class="btn primary">Salvar template de cupom</button>
+              <button type="button" class="btn" id="reset-coupon-template">Restaurar padrão</button>
+            </div>
+          </div>
+
+          <div class="preview-panel">
+            <label>Preview (como vai no canal)</label>
+            <pre id="coupon-preview" class="preview-box">${escapeHtml(data.couponPreviewText)}</pre>
+            <p class="meta">Preview com dados de exemplo de cupom disponível.</p>
+          </div>
+        </div>
+
+        <section class="placeholders-section">
+          <h2>Placeholders do cupom</h2>
+          <p class="meta">Ative ou desative cada flag. Com a flag off, o placeholder some do texto enviado.</p>
+          <table>
+            <thead><tr><th>Flag</th><th>Código</th><th>Significado</th><th>Exemplo</th></tr></thead>
+            <tbody>${couponPlaceholderTable(data.couponPlaceholderVisibility)}</tbody>
           </table>
         </section>
       </form>
@@ -477,6 +552,90 @@ export function renderTemplatePage(data: TemplatePageData): string {
       });
 
       bindScheduleRadios();
+
+      const couponTextarea = document.getElementById('coupon-template');
+      const couponPreview = document.getElementById('coupon-preview');
+      const couponChipRow = document.getElementById('coupon-placeholder-chips');
+      const couponPreviewValues = ${JSON.stringify(data.couponPreviewValues)};
+      const defaultCouponTemplate = ${JSON.stringify(data.defaultCouponTemplate)};
+      const couponPlaceholderMeta = ${JSON.stringify(getCouponPlaceholderHelp())};
+
+      function getCouponVisibility() {
+        const visibility = {};
+        document.querySelectorAll('.coupon-placeholder-toggle').forEach((input) => {
+          const key = input.getAttribute('data-coupon-placeholder-key');
+          visibility[key] = input.checked;
+          const label = input.closest('.placeholder-flag')?.querySelector('span');
+          if (label) label.textContent = input.checked ? 'Ativo' : 'Off';
+        });
+        return visibility;
+      }
+
+      function renderCouponPreview(text) {
+        const visibility = getCouponVisibility();
+        let result = text;
+        for (const [key, value] of Object.entries(couponPreviewValues)) {
+          const pattern = new RegExp('\\\\{\\\\{\\\\s*' + key + '\\\\s*\\\\}\\\\}', 'g');
+          result = result.replace(pattern, visibility[key] ? value : '');
+        }
+        result = cleanupRenderedMessage(result);
+        couponPreview.textContent = result || '(vazio)';
+      }
+
+      function renderCouponChips() {
+        const visibility = getCouponVisibility();
+        couponChipRow.innerHTML = couponPlaceholderMeta
+          .filter((p) => visibility[p.key])
+          .map(
+            (p) =>
+              '<button type="button" class="chip" data-placeholder="{{' +
+              p.key +
+              '}}" title="' +
+              p.label +
+              '">{{' +
+              p.key +
+              '}}</button>',
+          )
+          .join('');
+        couponChipRow.querySelectorAll('.chip').forEach((btn) => {
+          btn.addEventListener('click', () => insertCouponPlaceholder(btn.getAttribute('data-placeholder')));
+        });
+      }
+
+      function insertCouponPlaceholder(token) {
+        const start = couponTextarea.selectionStart;
+        const end = couponTextarea.selectionEnd;
+        couponTextarea.value = couponTextarea.value.slice(0, start) + token + couponTextarea.value.slice(end);
+        const pos = start + token.length;
+        couponTextarea.setSelectionRange(pos, pos);
+        couponTextarea.focus();
+        renderCouponPreview(couponTextarea.value);
+      }
+
+      couponTextarea.addEventListener('input', () => renderCouponPreview(couponTextarea.value));
+
+      document.querySelectorAll('.coupon-placeholder-toggle').forEach((input) => {
+        input.addEventListener('change', () => {
+          renderCouponChips();
+          renderCouponPreview(couponTextarea.value);
+        });
+      });
+
+      couponChipRow.querySelectorAll('.chip').forEach((btn) => {
+        btn.addEventListener('click', () => insertCouponPlaceholder(btn.getAttribute('data-placeholder')));
+      });
+
+      document.getElementById('reset-coupon-template').addEventListener('click', () => {
+        radarConfirm({
+          title: 'Restaurar padrão',
+          message: 'Restaurar o texto padrão de cupom? Isso não salva até você clicar em Salvar.',
+          confirmLabel: 'Restaurar',
+        }).then((ok) => {
+          if (!ok) return;
+          couponTextarea.value = defaultCouponTemplate;
+          renderCouponPreview(couponTextarea.value);
+        });
+      });
     </script>`;
 
   return renderLayout('Mensagem', body, 'template');

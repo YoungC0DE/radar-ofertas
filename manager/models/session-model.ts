@@ -29,13 +29,17 @@ export async function getMercadoLivreSessionStatus(): Promise<SessionStatus> {
     return { label: 'Mercado Livre', ok: false, detail: 'Sem sessão — rode npm run ml:login' };
   }
 
-  const detail = meta.lastError
-    ? `Erro: ${meta.lastError}`
-    : meta.lastRefreshAt
+  const detail = valid
+    ? meta.lastRefreshAt
       ? `Atualizada em ${formatIsoInTimezone(meta.lastRefreshAt, env.APP_TIMEZONE)}`
       : meta.lastLoginAt
         ? `Login em ${formatIsoInTimezone(meta.lastLoginAt, env.APP_TIMEZONE)}`
-        : 'Sessão presente';
+        : 'Sessão ativa'
+    : meta.lastError
+      ? `Erro: ${meta.lastError}`
+      : meta.lastLoginAt
+        ? `Login em ${formatIsoInTimezone(meta.lastLoginAt, env.APP_TIMEZONE)}`
+        : 'Sessão expirada ou inválida';
 
   return { label: 'Mercado Livre', ok: valid, detail };
 }

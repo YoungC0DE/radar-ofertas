@@ -26,11 +26,31 @@ import { logger } from '../utils/logger.js';
 // garantindo que uma sessão ML lenta nunca segure a fila de envio.
 const AFFILIATE_LINK_SEND_TIMEOUT_MS = 10_000;
 
+/** Último envio normal (não force) neste processo — usado para espaçar ofertas sem bloquear o worker. */
+let lastPacedSendAt = 0;
+
 function getOperatingHours() {
   return {
     startHour: getOperatingHoursStart(),
     endHour: getOperatingHoursEnd(),
   };
+}
+
+async function enforceSenderPacing(job: { moveToDelayed: (timestamp: number) => Promise<void> }, force: boolean): Promise<void> {
+  if (force) return;
+
+  const delayMs = getSenderDelayMinutesCached() * 60 * 1000;
+  if (delayMs <= 0) return;
+
+  const waitMs = lastPacedSendAt + delayMs - Date.now();
+  if (waitMs > 0) {
+    await job.moveToDelayed(Date.now() + waitMs);
+    throw new DelayedError();
+  }
+}
+
+function markPacedSend(force: boolean): void {
+  if (!force) lastPacedSendAt = Date.now();
 }
 
 /**
@@ -64,7 +84,23 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
         throw new DelayedError();
       }
 
-      const { offerId, autoMessageId } = job.data;
+      const { offerId, autoMessageId, text } = job.data;
+
+      await enforceSenderPacing(job, force);
+
+      if (text) {
+        try {
+          const { messageId } = await publisher.publishText(text);
+          logger.info({ channel, messageId, force }, 'Text message published');
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          logger.error({ channel, error: message }, 'Text message publish failed');
+          throw error;
+        }
+
+        markPacedSend(force);
+        return;
+      }
 
       if (autoMessageId) {
         const autoMessage = await findAutoMessageById(autoMessageId);
@@ -85,12 +121,7 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
           throw error;
         }
 
-        if (!force) {
-          const delayMs = getSenderDelayMinutesCached() * 60 * 1000;
-          if (delayMs > 0) {
-            await new Promise((r) => setTimeout(r, delayMs));
-          }
-        }
+        markPacedSend(force);
         return;
       }
 
@@ -142,12 +173,7 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
 
       logger.info({ channel, offerId, title: offer.title, force }, 'Offer published');
 
-      if (!force) {
-        const delayMs = getSenderDelayMinutesCached() * 60 * 1000;
-        if (delayMs > 0) {
-          await new Promise((r) => setTimeout(r, delayMs));
-        }
-      }
+      markPacedSend(force);
     },
     {
       connection: getQueueConnection(),

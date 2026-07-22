@@ -1,4 +1,5 @@
 import { chromium, type BrowserContextOptions } from 'playwright';
+import { getCouponsUrlFromDb } from '../config/coupons-config-store.js';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { collectCouponsFromUnknown, isLoginHtml, parseCouponsHtml, parseCouponsJson } from './coupon-parser.js';
@@ -15,8 +16,9 @@ const DEFAULT_HEADERS = {
   'Cache-Control': 'no-cache',
 };
 
-function couponsPageUrl(): string {
-  return env.ML_COUPONS_URL.split('#')[0] ?? env.ML_COUPONS_URL;
+async function couponsPageUrl(): Promise<string> {
+  const url = await getCouponsUrlFromDb();
+  return url.split('#')[0] ?? url;
 }
 
 function dedupeCoupons(coupons: MlCoupon[]): MlCoupon[] {
@@ -33,7 +35,7 @@ async function fetchCouponsViaHttp(): Promise<MlCoupon[] | null> {
   const state = await loadStorageState();
   if (!state || !hasValidSession(state)) return null;
 
-  const url = couponsPageUrl();
+  const url = await couponsPageUrl();
   const cookieHeader = cookiesToHeader(state.cookies, ['mercadolivre.com.br', 'mercadolibre.com']);
 
   const controller = new AbortController();
@@ -59,10 +61,13 @@ async function fetchCouponsViaHttp(): Promise<MlCoupon[] | null> {
     }
 
     const html = await response.text();
-    if (!response.ok || isLoginHtml(html)) return null;
+    if (!response.ok) return null;
 
     const coupons = parseCouponsHtml(html);
-    return coupons.length > 0 ? coupons : null;
+    if (coupons.length > 0) return coupons;
+    if (isLoginHtml(html)) return null;
+
+    return null;
   } catch (error) {
     logger.debug({ error, url }, 'ML coupons HTTP fetch failed');
     return null;
@@ -73,7 +78,7 @@ async function fetchCouponsViaHttp(): Promise<MlCoupon[] | null> {
 
 async function fetchCouponsViaBrowser(): Promise<MlCoupon[]> {
   const state = await loadStorageState();
-  const url = env.ML_COUPONS_URL;
+  const url = await getCouponsUrlFromDb();
   const collected: MlCoupon[] = [];
 
   const browser = await chromium.launch({ headless: env.ML_BROWSER_HEADLESS });
@@ -118,11 +123,11 @@ async function fetchCouponsViaBrowser(): Promise<MlCoupon[]> {
     }
 
     const html = await page.content();
-    if (isLoginHtml(html) && collected.length === 0) {
+    collected.push(...parseCouponsHtml(html));
+
+    if (collected.length === 0 && isLoginHtml(html)) {
       throw new Error('Sessão de afiliado necessária — conecte o Mercado Livre em Configuração.');
     }
-
-    collected.push(...parseCouponsHtml(html));
 
     const embeddedState = await page.evaluate(() => {
       const globals = window as unknown as Record<string, unknown>;
@@ -162,7 +167,7 @@ export async function scrapeAffiliateCoupons(): Promise<CouponScrapeResult> {
 
   const browserCoupons = await fetchCouponsViaBrowser();
   if (browserCoupons.length === 0) {
-    throw new Error('Nenhum cupom encontrado. Verifique a sessão de afiliado e a URL ML_COUPONS_URL no .env.');
+    throw new Error('Nenhum cupom encontrado. Verifique a sessão de afiliado e a URL de cupons em Configuração.');
   }
 
   return {

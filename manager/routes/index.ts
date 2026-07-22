@@ -14,10 +14,10 @@ import { renderLayout } from '../views/layout.js';
 
 import { showOfferDetail, showOffersList, handleDeleteAllPending, handleDeleteOffer, handleAffiliateDelaySave, handleSendOfferNow, handleSearchLimitSave } from '../controllers/offers-controller.js';
 
-import { handleTemplateSave, showTemplatePage, handleAutoMessageCreate, handleAutoMessageDelete, handleAutoMessageSendNow, handleAutoMessageUpdate } from '../controllers/template-controller.js';
-import { handleChannelLinkSave, handleBrandSave, handleOperatingHoursSave, handleScoreSave, handleSendIntervalSave, handleSenderDelaySave, showSettingsPage } from '../controllers/settings-controller.js';
+import { handleTemplateSave, handleCouponTemplateSave, showTemplatePage, handleAutoMessageCreate, handleAutoMessageDelete, handleAutoMessageSendNow, handleAutoMessageUpdate } from '../controllers/template-controller.js';
+import { handleChannelLinkSave, handleBrandSave, handleCouponsUrlSave, handleOperatingHoursSave, handleScoreSave, handleSendIntervalSave, handleSenderDelaySave, showSettingsPage } from '../controllers/settings-controller.js';
 import { getLogsJson, showLogsPage } from '../controllers/logs-controller.js';
-import { getCouponsApiJson, handleCouponsRefresh, showCouponsPage } from '../controllers/coupons-controller.js';
+import { getCouponsApiJson, handleCouponSend, handleCouponsRefresh, showCouponsPage } from '../controllers/coupons-controller.js';
 import {
   handleSourceAdd,
   handleSourceFlagsSave,
@@ -239,6 +239,17 @@ export async function handleManagerRequest(
       return;
     }
 
+    const couponSendMatch = path.match(/^\/manager\/coupons\/([^/]+)\/send$/);
+    if (couponSendMatch && method === 'POST') {
+      const form = parseFormUrlEncoded(await readFormBody(req));
+      sendHtml(
+        res,
+        200,
+        await handleCouponSend(decodeURIComponent(couponSendMatch[1]!), form.code ?? null),
+      );
+      return;
+    }
+
     if (path === '/manager/api/coupons' && method === 'GET') {
       sendJson(res, 200, getCouponsApiJson());
       return;
@@ -291,6 +302,13 @@ export async function handleManagerRequest(
       return;
     }
 
+    if (path === '/manager/settings/coupons-url' && method === 'POST') {
+      const body = await readFormBody(req);
+      const form = parseFormUrlEncoded(body);
+      sendHtml(res, 200, await handleCouponsUrlSave(form.couponsUrl ?? ''));
+      return;
+    }
+
 
     if (path === '/manager/settings/connect/wa/start' && method === 'POST') {
       sendJson(res, 200, startWhatsAppConnectJson());
@@ -329,7 +347,7 @@ export async function handleManagerRequest(
 
     // ?channel=telegram controla o worker do Telegram; sem o parâmetro, WhatsApp.
     if (path === '/manager/settings/worker/start' && method === 'POST') {
-      sendJson(res, 200, startWorkerJson(parseChannelParam(url.searchParams.get('channel'))));
+      sendJson(res, 200, await startWorkerJson(parseChannelParam(url.searchParams.get('channel'))));
       return;
     }
 
@@ -344,7 +362,7 @@ export async function handleManagerRequest(
     }
 
     if (path === '/manager/settings/worker/status' && method === 'GET') {
-      sendJson(res, 200, getWorkerJson(parseChannelParam(url.searchParams.get('channel'))));
+      sendJson(res, 200, await getWorkerJson(parseChannelParam(url.searchParams.get('channel'))));
       return;
     }
 
@@ -439,6 +457,12 @@ export async function handleManagerRequest(
 
       return;
 
+    }
+
+    if (path === '/manager/template/coupon' && method === 'POST') {
+      const form = parseFormUrlEncoded(await readFormBody(req));
+      sendHtml(res, 200, await handleCouponTemplateSave(form));
+      return;
     }
 
     if (path === '/manager/template/auto-message' && method === 'POST') {

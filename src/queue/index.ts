@@ -31,6 +31,7 @@ export interface CollectorJobData {
 export interface SenderJobData {
   offerId?: string;
   autoMessageId?: string;
+  text?: string;
   force?: boolean;
 }
 
@@ -41,6 +42,10 @@ export function senderJobId(channel: Channel, offerId: string): string {
 
 export function autoMessageJobId(channel: Channel, autoMessageId: string, suffix = 'now'): string {
   return `send-auto-message-${channel}-${autoMessageId}-${suffix}`;
+}
+
+export function textMessageJobId(channel: Channel, suffix: string): string {
+  return `send-text-${channel}-${suffix}`;
 }
 
 const connection = {
@@ -145,6 +150,25 @@ export async function enqueueAutoMessageSend(
       'send-auto-message',
       { autoMessageId, force: options.force },
       { jobId: autoMessageJobId(channel, autoMessageId, suffix), ...SENDER_JOB_OPTIONS },
+    );
+  } finally {
+    await queue.close();
+  }
+}
+
+export async function enqueueTextMessageSend(
+  channel: Channel,
+  text: string,
+  options: { force?: boolean } = {},
+): Promise<void> {
+  assertRedisEnabled('enfileiramento de mensagem de texto');
+  const queue = getSenderQueue(channel);
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  try {
+    await queue.add(
+      'send-text',
+      { text, force: options.force },
+      { jobId: textMessageJobId(channel, suffix), ...SENDER_JOB_OPTIONS },
     );
   } finally {
     await queue.close();

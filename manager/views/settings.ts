@@ -339,6 +339,22 @@ function renderOperationsSection(data: SettingsData): string {
     </section>`;
 }
 
+function renderMlCouponsUrlSection(data: SettingsData): string {
+  const value = `
+    <div class="channel-inline">
+      <code class="coupons-url-preview">${escapeHtml(data.mlCouponsUrl)}</code>
+      <div class="channel-actions">
+        <button type="button" class="btn btn-sm btn-icon" id="edit-coupons-url" title="Editar URL de cupons">${EDIT_ICON}</button>
+      </div>
+    </div>`;
+
+  return configRow(
+    'URL de cupons ML',
+    value,
+    'Página do hub de afiliados usada na busca de cupons',
+  );
+}
+
 function renderChannelSection(data: SettingsData): string {
   const nameBlock = data.channelName
     ? `<span class="channel-name">${escapeHtml(data.channelName)}</span>`
@@ -386,6 +402,8 @@ export function renderSettingsPage(data: SettingsData): string {
               ? '<p class="alert ok">Tempo entre envios atualizado com sucesso.</p>'
               : data.saved === 'mlSources'
                 ? '<p class="alert ok">Fontes ML atualizadas com sucesso.</p>'
+                : data.saved === 'couponsUrl'
+                  ? '<p class="alert ok">URL de cupons atualizada com sucesso.</p>'
               : data.error
             ? `<p class="alert err">${escapeHtml(data.error)}</p>`
             : '';
@@ -764,6 +782,10 @@ export function renderSettingsPage(data: SettingsData): string {
       .hidden {
         display: none;
       }
+      .coupons-url-preview {
+        word-break: break-all;
+        font-size: 0.85rem;
+      }
     </style>
     ${alert}
     <section>
@@ -785,6 +807,7 @@ export function renderSettingsPage(data: SettingsData): string {
           'Intervalo entre cada mensagem enviada no WhatsApp',
         )}
         ${renderChannelSection(data)}
+        ${renderMlCouponsUrlSection(data)}
         ${renderSourcesPointer(data)}
       </div>
     </section>
@@ -850,6 +873,32 @@ export function renderSettingsPage(data: SettingsData): string {
         <div class="modal-actions">
           <button type="button" class="btn" id="wa-connect-close">Fechar</button>
         </div>
+      </div>
+    </div>
+
+    <div id="coupons-url-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="coupons-url-modal-title">
+        <div class="modal-header">
+          <h3 id="coupons-url-modal-title">Editar URL de cupons</h3>
+        </div>
+        <form method="post" action="/manager/settings/coupons-url">
+          <div class="modal-body">
+            <label for="modal-coupons-url" class="modal-label">URL do hub de cupons</label>
+            <input
+              type="url"
+              id="modal-coupons-url"
+              name="couponsUrl"
+              value="${escapeHtml(data.mlCouponsUrl)}"
+              required
+              class="modal-input"
+            >
+            <p class="modal-help">Ex.: https://www.mercadolivre.com.br/afiliados/coupons#hub</p>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn modal-cancel" data-modal="coupons-url-modal">Cancelar</button>
+            <button type="submit" class="btn primary">Salvar</button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -1055,6 +1104,7 @@ export function renderSettingsPage(data: SettingsData): string {
     <script>
       const linkInput = document.getElementById('channel-invite-link');
       const channelModal = document.getElementById('channel-link-modal');
+      const couponsUrlModal = document.getElementById('coupons-url-modal');
       const operatingHoursModal = document.getElementById('operating-hours-modal');
       const intervalModal = document.getElementById('send-interval-modal');
       const senderDelayModal = document.getElementById('sender-delay-modal');
@@ -1090,6 +1140,10 @@ export function renderSettingsPage(data: SettingsData): string {
           document.body.style.overflow = '';
         }
       }
+
+      document.getElementById('edit-coupons-url')?.addEventListener('click', () => {
+        openModal(couponsUrlModal);
+      });
 
       document.getElementById('edit-channel-link')?.addEventListener('click', () => {
         modalInviteInput.value = linkInput?.value || '';
@@ -1167,7 +1221,7 @@ export function renderSettingsPage(data: SettingsData): string {
         });
       });
 
-      [channelModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, brandModal].forEach((modal) => {
+      [channelModal, couponsUrlModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, brandModal].forEach((modal) => {
         modal?.addEventListener('click', (e) => {
           if (e.target === modal) closeModal(modal);
         });
@@ -1175,7 +1229,7 @@ export function renderSettingsPage(data: SettingsData): string {
 
       document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
-        [channelModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, brandModal].forEach((modal) => {
+        [channelModal, couponsUrlModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, brandModal].forEach((modal) => {
           if (!modal.classList.contains('hidden')) closeModal(modal);
         });
       });

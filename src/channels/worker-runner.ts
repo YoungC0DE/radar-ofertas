@@ -2,6 +2,7 @@ import { hydrateBrandCache } from '../config/brand-config.js';
 import { hydrateQueueConfigCache } from '../config/queue-config-store.js';
 import { hydrateScoreConfigCache } from '../config/score-config.js';
 import { startSenderWorker } from '../jobs/sender.js';
+import { hydrateCouponTemplateCache } from '../offers/coupon-template.js';
 import { hydrateTemplateCache } from '../offers/message-template.js';
 import { logger } from '../utils/logger.js';
 import { CHANNEL_LABELS, type ChannelPublisher } from './types.js';
@@ -27,6 +28,7 @@ export async function runChannelWorker(publisher: ChannelPublisher): Promise<voi
     hydrateScoreConfigCache(),
     hydrateBrandCache(),
     hydrateTemplateCache(),
+    hydrateCouponTemplateCache(),
   ]);
 
   const verification = await publisher.verify();

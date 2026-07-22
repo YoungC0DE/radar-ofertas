@@ -18,6 +18,26 @@ import qrcode from 'qrcode-terminal';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 
+const LIBSIGNAL_NOISE = [
+  'Closing open session in favor of incoming prekey bundle',
+  'Closing session:',
+];
+
+function suppressLibsignalConsoleNoise(): void {
+  const wrap =
+    (original: typeof console.warn) =>
+    (...args: unknown[]) => {
+      const message = typeof args[0] === 'string' ? args[0] : '';
+      if (LIBSIGNAL_NOISE.some((noise) => message.includes(noise))) return;
+      original(...args);
+    };
+
+  console.warn = wrap(console.warn.bind(console));
+  console.info = wrap(console.info.bind(console));
+}
+
+suppressLibsignalConsoleNoise();
+
 let socket: WASocket | undefined;
 let isConnecting = false;
 let allowReconnect = true;
@@ -101,10 +121,32 @@ function isPidRunning(pid: number): boolean {
  * o novo worker.
  */
 async function anotherOwnerAlive(): Promise<boolean> {
+  const owner = await getWhatsAppOwnerStatus();
+  return owner.active && !owner.isCurrentProcess;
+}
+
+export interface WhatsAppOwnerStatus {
+  active: boolean;
+  pid: number | null;
+  host: string | null;
+  isCurrentProcess: boolean;
+}
+
+/** Estado do dono da sessão WhatsApp (lock + PID vivo no mesmo host). */
+export async function getWhatsAppOwnerStatus(): Promise<WhatsAppOwnerStatus> {
   const lock = await readOwnerLock();
-  if (!lock || isOwnLock(lock) || !isLockFresh(lock)) return false;
-  if (lock.host === hostname() && !isPidRunning(lock.pid)) return false;
-  return true;
+  if (!lock || !isLockFresh(lock)) {
+    return { active: false, pid: null, host: null, isCurrentProcess: false };
+  }
+  if (lock.host === hostname() && !isPidRunning(lock.pid)) {
+    return { active: false, pid: lock.pid, host: lock.host, isCurrentProcess: false };
+  }
+  return {
+    active: true,
+    pid: lock.pid,
+    host: lock.host,
+    isCurrentProcess: isOwnLock(lock),
+  };
 }
 
 async function writeOwnerLock(): Promise<void> {

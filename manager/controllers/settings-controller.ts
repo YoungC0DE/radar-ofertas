@@ -1,4 +1,4 @@
-import { loadSettingsData, saveBrandIdentity, saveChannelInviteLink, saveOperatingHoursSettings, saveScoreSettings, saveSendIntervalMinutes, saveSenderDelay } from '../models/settings-model.js';
+import { loadSettingsData, saveBrandIdentity, saveChannelInviteLink, saveCouponsUrlSettings, saveOperatingHoursSettings, saveScoreSettings, saveSendIntervalMinutes, saveSenderDelay } from '../models/settings-model.js';
 import type { SettingsSaveType } from '../models/settings-model.js';
 import { renderSettingsPage } from '../views/settings.js';
 
@@ -55,6 +55,14 @@ export async function handleSenderDelaySave(minutesRaw: string): Promise<string>
     return showSettingsPage(null, result.error);
   }
   return showSettingsPage('senderDelay', null);
+}
+
+export async function handleCouponsUrlSave(url: string): Promise<string> {
+  const result = await saveCouponsUrlSettings(url);
+  if (!result.ok) {
+    return showSettingsPage(null, result.error);
+  }
+  return showSettingsPage('couponsUrl', null);
 }
 
 export async function handleOperatingHoursSave(form: Record<string, string>): Promise<string> {

@@ -11,6 +11,19 @@ import {
 import type { AutoMessageRecord } from '../../src/auto-messages/types.js';
 import { formatTimeInputValue, toDatetimeLocalInputValue } from '../../src/utils/datetime.js';
 import {
+  COUPON_PLACEHOLDERS,
+  DEFAULT_COUPON_TEMPLATE,
+  DEFAULT_COUPON_PLACEHOLDER_VISIBILITY,
+  type CouponPlaceholderVisibility,
+  loadCouponPlaceholderVisibility,
+  loadCouponTemplate,
+  parseCouponPlaceholderVisibilityFromForm,
+  renderCouponTemplate,
+  sampleCouponTemplateValues,
+  saveCouponPlaceholderVisibility,
+  saveCouponTemplate,
+} from '../../src/offers/coupon-template.js';
+import {
   buildTemplateValues,
   DEFAULT_MESSAGE_TEMPLATE,
   DEFAULT_PLACEHOLDER_VISIBILITY,
@@ -27,6 +40,8 @@ import {
 import type { OfferRecord } from '../../src/offers/types.js';
 import { withDatabase, type DatabaseSnapshot } from './db-model.js';
 
+export type TemplateSavedSection = 'offer' | 'coupon' | null;
+
 export interface TemplatePageData {
   database: DatabaseSnapshot;
   template: string;
@@ -35,24 +50,31 @@ export interface TemplatePageData {
   previewText: string;
   previewValues: ReturnType<typeof buildTemplateValues>;
   placeholderVisibility: PlaceholderVisibility;
+  couponTemplate: string;
+  defaultCouponTemplate: string;
+  couponPreviewText: string;
+  couponPreviewValues: ReturnType<typeof sampleCouponTemplateValues>;
+  couponPlaceholderVisibility: CouponPlaceholderVisibility;
   autoMessages: AutoMessageRecord[];
   autoMessagePlaceholders: typeof AUTO_MESSAGE_PLACEHOLDERS;
-  saved: boolean;
+  savedSection: TemplateSavedSection;
   autoMessageNotice: string | null;
   error: string | null;
 }
 
 export async function loadTemplatePage(
-  saved = false,
+  savedSection: TemplateSavedSection = null,
   error: string | null = null,
   autoMessageNotice: string | null = null,
 ): Promise<TemplatePageData> {
-  const [template, placeholderVisibility, autoMessages] = await Promise.all([
-    loadMessageTemplate(),
-    loadPlaceholderVisibility(),
-    listAutoMessages(),
-  ]);
-  const samplePreviewText = renderMessageTemplate(template, sampleTemplateValues(), placeholderVisibility);
+  const [template, placeholderVisibility, couponTemplate, couponPlaceholderVisibility, autoMessages] =
+    await Promise.all([
+      loadMessageTemplate(),
+      loadPlaceholderVisibility(),
+      loadCouponTemplate(),
+      loadCouponPlaceholderVisibility(),
+      listAutoMessages(),
+    ]);
 
   const offerResult = await withDatabase(
     async () => {
@@ -65,6 +87,8 @@ export async function loadTemplatePage(
   const previewOffer = offerResult.data;
   const previewValues = previewOffer ? buildTemplateValues(previewOffer) : sampleTemplateValues();
   const previewText = renderMessageTemplate(template, previewValues, placeholderVisibility);
+  const couponPreviewValues = sampleCouponTemplateValues();
+  const couponPreviewText = renderCouponTemplate(couponTemplate, couponPreviewValues, couponPlaceholderVisibility);
 
   return {
     database: offerResult.database,
@@ -74,9 +98,14 @@ export async function loadTemplatePage(
     previewText,
     previewValues,
     placeholderVisibility,
+    couponTemplate,
+    defaultCouponTemplate: DEFAULT_COUPON_TEMPLATE,
+    couponPreviewText,
+    couponPreviewValues,
+    couponPlaceholderVisibility,
     autoMessages,
     autoMessagePlaceholders: AUTO_MESSAGE_PLACEHOLDERS,
-    saved,
+    savedSection,
     autoMessageNotice,
     error,
   };
@@ -96,8 +125,26 @@ export async function saveTemplateFromForm(
   }
 }
 
+export async function saveCouponTemplateFromForm(
+  template: string,
+  form: Record<string, string>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await saveCouponTemplate(template);
+    await saveCouponPlaceholderVisibility(parseCouponPlaceholderVisibilityFromForm(form));
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Falha ao salvar template de cupom';
+    return { ok: false, error: message };
+  }
+}
+
 export function getPlaceholderHelp() {
   return MESSAGE_PLACEHOLDERS;
+}
+
+export function getCouponPlaceholderHelp() {
+  return COUPON_PLACEHOLDERS;
 }
 
 export function getPreviewForOffer(

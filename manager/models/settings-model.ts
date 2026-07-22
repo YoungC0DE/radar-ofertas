@@ -15,6 +15,11 @@ import {
   saveScoreConfig,
   type ScoreConfig,
 } from '../../src/config/score-config.js';
+import {
+  getCouponsUrlFromDb,
+  hydrateCouponsConfigCache,
+  saveCouponsUrl,
+} from '../../src/config/coupons-config-store.js';
 import { env } from '../../src/config/env.js';
 import { isWithinOperatingHours } from '../../src/utils/datetime.js';
 import { isRedisEnabled, rescheduleCollectorJob } from '../../src/queue/index.js';
@@ -39,7 +44,7 @@ import {
 } from './session-model.js';
 import { getWorkerState, type WorkerState } from './process-model.js';
 
-export type SettingsSaveType = 'channel' | 'interval' | 'brand' | 'score' | 'hours' | 'senderDelay' | 'mlSources' | null;
+export type SettingsSaveType = 'channel' | 'interval' | 'brand' | 'score' | 'hours' | 'senderDelay' | 'mlSources' | 'couponsUrl' | null;
 
 export interface SettingsData {
   timezone: string;
@@ -65,6 +70,7 @@ export interface SettingsData {
   tgSession: SessionStatus | null;
   workerState: WorkerState;
   telegramWorkerState: WorkerState;
+  mlCouponsUrl: string;
   saved: SettingsSaveType;
   error: string | null;
 }
@@ -78,7 +84,7 @@ export async function loadSettingsData(
   saved: SettingsSaveType = null,
   error: string | null = null,
 ): Promise<SettingsData> {
-  await Promise.all([hydrateQueueConfigCache(), hydrateBrandCache()]);
+  await Promise.all([hydrateQueueConfigCache(), hydrateBrandCache(), hydrateCouponsConfigCache()]);
   const scoreConfig = await getRuntimeScoreConfigAsync();
   const senderDelayMinutes = await getSenderDelayMinutesFromDb();
   const [mlSession, waSession, tgSession] = await Promise.all([
@@ -101,6 +107,7 @@ export async function loadSettingsData(
   }
 
   const brand = getBrandSettings();
+  const mlCouponsUrl = await getCouponsUrlFromDb();
 
   return {
     timezone: env.APP_TIMEZONE,
@@ -127,8 +134,9 @@ export async function loadSettingsData(
     telegramEnabled: env.TELEGRAM_ENABLED,
     telegramChatId: env.TELEGRAM_CHAT_ID,
     tgSession,
-    workerState: getWorkerState('whatsapp'),
-    telegramWorkerState: getWorkerState('telegram'),
+    workerState: await getWorkerState('whatsapp'),
+    telegramWorkerState: await getWorkerState('telegram'),
+    mlCouponsUrl,
     saved,
     error,
   };
@@ -199,6 +207,18 @@ export async function saveBrandIdentity(input: {
     return { ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Falha ao salvar identidade visual';
+    return { ok: false, error: message };
+  }
+}
+
+export async function saveCouponsUrlSettings(
+  url: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await saveCouponsUrl(url);
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Falha ao salvar URL de cupons';
     return { ok: false, error: message };
   }
 }

@@ -28,7 +28,7 @@
     "start:manager": "tsx --env-file=.env manager/server.ts",
     "e2e:test": "tsx --env-file=.env src/run-e2e-test.ts",
     "test": "tsx --test src/**/*.test.ts",
-    "postinstall": "playwright install chromium"
+    "postinstall": "prisma generate && playwright install chromium"
   },
   "devDependencies": {
     "@types/node": "^25.8.0",

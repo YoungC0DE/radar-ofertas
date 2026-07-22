@@ -15,6 +15,14 @@ function statusBadge(status: string): string {
   return `<span class="badge ${cls}">${escapeHtml(label)}</span>`;
 }
 
+function renderSendAction(coupon: CouponsPageData['coupons'][number]): string {
+  if (coupon.status !== 'available') return '—';
+  return `<form method="post" action="/manager/coupons/${encodeURIComponent(coupon.id)}/send" class="inline-form">
+    ${coupon.code ? `<input type="hidden" name="code" value="${escapeHtml(coupon.code)}">` : ''}
+    <button type="submit" class="btn btn-sm primary">Enviar ao canal</button>
+  </form>`;
+}
+
 function renderCouponsTable(coupons: CouponsPageData['coupons']): string {
   if (coupons.length === 0) {
     return '<p class="meta">Nenhum cupom carregado ainda. Clique em <strong>Atualizar cupons</strong> para buscar no Mercado Livre.</p>';
@@ -23,13 +31,15 @@ function renderCouponsTable(coupons: CouponsPageData['coupons']): string {
   const rows = coupons
     .map(
       (coupon) => `<tr>
-        <td><strong>${escapeHtml(coupon.title)}</strong>${coupon.description ? `<div class="meta">${escapeHtml(coupon.description.slice(0, 120))}${coupon.description.length > 120 ? '…' : ''}</div>` : ''}</td>
+        <td><strong>${escapeHtml(coupon.storeName || coupon.title)}</strong>${coupon.description ? `<div class="meta">${escapeHtml(coupon.description.slice(0, 120))}${coupon.description.length > 120 ? '…' : ''}</div>` : ''}</td>
         <td>${coupon.discountLabel ? escapeHtml(coupon.discountLabel) : '—'}</td>
         <td>${coupon.code ? `<code>${escapeHtml(coupon.code)}</code>` : '—'}</td>
+        <td>${coupon.storeUrl ? `<a href="${escapeHtml(coupon.storeUrl)}" target="_blank" rel="noopener noreferrer">Ver produtos</a>` : '—'}</td>
         <td>${coupon.category ? escapeHtml(coupon.category) : '—'}</td>
         <td>${coupon.minPurchase ? escapeHtml(coupon.minPurchase) : '—'}</td>
         <td>${coupon.expiresAt ? escapeHtml(coupon.expiresAt) : '—'}</td>
         <td>${statusBadge(coupon.status)}</td>
+        <td>${renderSendAction(coupon)}</td>
       </tr>`,
     )
     .join('');
@@ -40,10 +50,12 @@ function renderCouponsTable(coupons: CouponsPageData['coupons']): string {
         <th>Cupom</th>
         <th>Desconto</th>
         <th>Código</th>
+        <th>Loja</th>
         <th>Categoria</th>
         <th>Compra mínima</th>
         <th>Validade</th>
         <th>Status</th>
+        <th>Ação</th>
       </tr>
     </thead>
     <tbody>${rows}</tbody>
@@ -53,13 +65,12 @@ function renderCouponsTable(coupons: CouponsPageData['coupons']): string {
 export function renderCouponsPage(data: CouponsPageData): string {
   const alert = data.error
     ? `<p class="alert err">${escapeHtml(data.error)}</p>`
-    : data.refreshed
-      ? `<p class="alert ok">${data.coupons.length} cupom(ns) encontrado(s)${data.source ? ` via ${data.source}` : ''}.</p>`
-      : '';
+    : data.sendMessage
+      ? `<p class="alert ok">${escapeHtml(data.sendMessage)}</p>`
+      : data.refreshed
+        ? `<p class="alert ok">${data.coupons.length} cupom(ns) encontrado(s)${data.source ? ` via ${data.source}` : ''}.</p>`
+        : '';
 
-  const sessionAlert = data.sessionOk
-    ? `<p class="alert ok">Sessão ML: ${escapeHtml(data.sessionDetail)}</p>`
-    : `<p class="alert err">Sessão ML: ${escapeHtml(data.sessionDetail)} — conecte em <a href="/manager/settings">Configuração</a>.</p>`;
 
   const meta = data.scrapedAt
     ? `<p class="meta">Última busca: ${formatDateTimeString(data.scrapedAt, env.APP_TIMEZONE)}</p>`
@@ -67,16 +78,10 @@ export function renderCouponsPage(data: CouponsPageData): string {
 
   const body = `
     ${alert}
-    ${sessionAlert}
   <section>
     <div class="coupons-header">
       <div>
         <h2>Cupons de afiliado</h2>
-        <p class="meta">
-          Busca cupons disponíveis para gerar no hub de afiliados do Mercado Livre.
-          A URL de origem é configurável no <code>.env</code> (<code>ML_COUPONS_URL</code>).
-        </p>
-        <p class="meta">URL atual: <code>${escapeHtml(data.couponsUrl)}</code></p>
         ${meta}
       </div>
       <form method="post" action="/manager/coupons/refresh" class="inline-form">
