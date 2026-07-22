@@ -13,6 +13,7 @@ const NAV_ICONS: Record<string, string> = {
   template: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
   settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>`,
   logs: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h8M8 9h2"/></svg>`,
+  coupons: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9h16v2H4z"/><path d="M5 9V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2"/><path d="M9 13h6"/><path d="M9 17h4"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>`,
   sources: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>`,
 };
 
@@ -411,6 +412,17 @@ export function renderLayout(title: string, body: string, activeNav?: string): s
     .alert { padding: 12px 16px; border-radius: var(--radius); margin-bottom: 16px; font-size: 0.875rem; }
     .alert.ok { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
     .alert.err { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
     .message-preview {
       background: #f9fafb;
       border: 1px solid var(--border);
@@ -532,6 +544,7 @@ export function renderLayout(title: string, body: string, activeNav?: string): s
         ${nav('/manager/template', 'Mensagem', 'template')}
         ${nav('/manager/settings', 'Configuração', 'settings')}
         ${nav('/manager/logs', 'Log', 'logs')}
+        ${nav('/manager/coupons', 'Cupons', 'coupons')}
         <div class="nav-section">Fontes de coleta</div>
         ${getEnabledChannels()
           .map((channel) =>
@@ -595,6 +608,7 @@ export function renderLayout(title: string, body: string, activeNav?: string): s
       });
 
       window.radarConfirm = function (options) {
+        cancelBtn.style.display = '';
         titleEl.textContent = options.title || 'Confirmar';
         messageEl.textContent = options.message || '';
         okBtn.textContent = options.confirmLabel || 'Confirmar';
@@ -605,6 +619,30 @@ export function renderLayout(title: string, body: string, activeNav?: string): s
         okBtn.focus();
         return new Promise((resolve) => { resolver = resolve; });
       };
+
+      window.radarAlert = function (options) {
+        cancelBtn.style.display = 'none';
+        titleEl.textContent = options.title || 'Atenção';
+        messageEl.textContent = options.message || '';
+        okBtn.textContent = options.okLabel || 'OK';
+        okBtn.className = options.danger ? 'btn danger' : 'btn primary';
+        overlay.classList.remove('hidden');
+        overlay.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+        okBtn.focus();
+        return new Promise((resolve) => {
+          resolver = (result) => resolve(result !== false);
+        });
+      };
+
+      document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.alert.err').forEach((el) => {
+          const message = el.textContent?.trim();
+          if (!message) return;
+          el.classList.add('sr-only');
+          window.radarAlert({ title: 'Erro', message, danger: true });
+        });
+      });
     })();
   </script>
 </body>

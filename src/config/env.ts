@@ -61,6 +61,10 @@ const envSchema = z.object({
     .default('true')
     .transform((val) => val === 'true' || val === '1'),
   ML_HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+  ML_COUPONS_URL: z
+    .string()
+    .url()
+    .default('https://www.mercadolivre.com.br/afiliados/coupons#hub'),
   AFFILIATE_CONFIG: z
     .string()
     .default('{}')

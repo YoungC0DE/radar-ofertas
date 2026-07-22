@@ -1,6 +1,7 @@
 import { Queue } from 'bullmq';
 import { getCollectorIntervalMinutes } from '../config/queue-config-store.js';
 import { env } from '../config/env.js';
+import { CHANNELS, isChannelEnabled } from '../channels/index.js';
 import type { Channel } from '../channels/types.js';
 
 export const QUEUE_NAMES = {
@@ -28,13 +29,18 @@ export interface CollectorJobData {
 }
 
 export interface SenderJobData {
-  offerId: string;
+  offerId?: string;
+  autoMessageId?: string;
   force?: boolean;
 }
 
 /** Job id determinístico: garante um envio por oferta por canal. */
 export function senderJobId(channel: Channel, offerId: string): string {
   return `send-offer-${channel}-${offerId}`;
+}
+
+export function autoMessageJobId(channel: Channel, autoMessageId: string, suffix = 'now'): string {
+  return `send-auto-message-${channel}-${autoMessageId}-${suffix}`;
 }
 
 const connection = {
@@ -123,6 +129,62 @@ export async function enqueueOfferSend(channel: Channel, offerId: string): Promi
     await queue.add('send', { offerId }, { jobId: senderJobId(channel, offerId), ...SENDER_JOB_OPTIONS });
   } finally {
     await queue.close();
+  }
+}
+
+export async function enqueueAutoMessageSend(
+  channel: Channel,
+  autoMessageId: string,
+  options: { force?: boolean } = {},
+): Promise<void> {
+  assertRedisEnabled('enfileiramento de mensagem automática');
+  const queue = getSenderQueue(channel);
+  const suffix = `now-${Date.now()}`;
+  try {
+    await queue.add(
+      'send-auto-message',
+      { autoMessageId, force: options.force },
+      { jobId: autoMessageJobId(channel, autoMessageId, suffix), ...SENDER_JOB_OPTIONS },
+    );
+  } finally {
+    await queue.close();
+  }
+}
+
+export async function enqueueScheduledAutoMessageSend(
+  channel: Channel,
+  autoMessageId: string,
+  delayMs: number,
+): Promise<void> {
+  assertRedisEnabled('agendamento de mensagem automática');
+  const queue = getSenderQueue(channel);
+  try {
+    await queue.add(
+      'send-auto-message',
+      { autoMessageId },
+      {
+        jobId: autoMessageJobId(channel, autoMessageId, 'scheduled'),
+        delay: delayMs,
+        ...SENDER_JOB_OPTIONS,
+      },
+    );
+  } finally {
+    await queue.close();
+  }
+}
+
+export async function cancelScheduledAutoMessageJobs(autoMessageId: string): Promise<void> {
+  if (!env.REDIS_ENABLED) return;
+
+  for (const channel of CHANNELS) {
+    if (!isChannelEnabled(channel)) continue;
+    const queue = getSenderQueue(channel);
+    try {
+      const job = await queue.getJob(autoMessageJobId(channel, autoMessageId, 'scheduled'));
+      if (job) await job.remove();
+    } finally {
+      await queue.close();
+    }
   }
 }
 

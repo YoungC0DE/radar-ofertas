@@ -1,5 +1,16 @@
 import { findOffers } from '../../src/offers/repository.js';
 import {
+  AUTO_MESSAGE_PLACEHOLDERS,
+  describeAutoMessageSchedule,
+  dispatchAutoMessage,
+  listAutoMessages,
+  removeAutoMessage,
+  renderAutoMessageContent,
+  saveAutoMessageFromForm,
+} from '../../src/auto-messages/service.js';
+import type { AutoMessageRecord } from '../../src/auto-messages/types.js';
+import { formatTimeInputValue, toDatetimeLocalInputValue } from '../../src/utils/datetime.js';
+import {
   buildTemplateValues,
   DEFAULT_MESSAGE_TEMPLATE,
   DEFAULT_PLACEHOLDER_VISIBILITY,
@@ -24,14 +35,22 @@ export interface TemplatePageData {
   previewText: string;
   previewValues: ReturnType<typeof buildTemplateValues>;
   placeholderVisibility: PlaceholderVisibility;
+  autoMessages: AutoMessageRecord[];
+  autoMessagePlaceholders: typeof AUTO_MESSAGE_PLACEHOLDERS;
   saved: boolean;
+  autoMessageNotice: string | null;
   error: string | null;
 }
 
-export async function loadTemplatePage(saved = false, error: string | null = null): Promise<TemplatePageData> {
-  const [template, placeholderVisibility] = await Promise.all([
+export async function loadTemplatePage(
+  saved = false,
+  error: string | null = null,
+  autoMessageNotice: string | null = null,
+): Promise<TemplatePageData> {
+  const [template, placeholderVisibility, autoMessages] = await Promise.all([
     loadMessageTemplate(),
     loadPlaceholderVisibility(),
+    listAutoMessages(),
   ]);
   const samplePreviewText = renderMessageTemplate(template, sampleTemplateValues(), placeholderVisibility);
 
@@ -55,7 +74,10 @@ export async function loadTemplatePage(saved = false, error: string | null = nul
     previewText,
     previewValues,
     placeholderVisibility,
+    autoMessages,
+    autoMessagePlaceholders: AUTO_MESSAGE_PLACEHOLDERS,
     saved,
+    autoMessageNotice,
     error,
   };
 }
@@ -88,4 +110,48 @@ export function getPreviewForOffer(
 
 export function getPreviewValues(offer: OfferRecord) {
   return buildTemplateValues(offer);
+}
+
+export async function createAutoMessageFromForm(
+  form: Record<string, string>,
+): Promise<{ ok: true; summary: string } | { ok: false; error: string }> {
+  const result = await saveAutoMessageFromForm(form);
+  return result.ok ? { ok: true, summary: result.summary } : { ok: false, error: result.error };
+}
+
+export async function updateAutoMessageFromForm(
+  id: string,
+  form: Record<string, string>,
+): Promise<{ ok: true; summary: string } | { ok: false; error: string }> {
+  const result = await saveAutoMessageFromForm(form, id);
+  return result.ok ? { ok: true, summary: result.summary } : { ok: false, error: result.error };
+}
+
+export async function deleteAutoMessageById(
+  id: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  return removeAutoMessage(id);
+}
+
+export async function sendAutoMessageNow(
+  id: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  return dispatchAutoMessage(id, { force: true });
+}
+
+export function getAutoMessagePreview(content: string): string {
+  return renderAutoMessageContent(content);
+}
+
+export function getAutoMessageScheduleLabel(message: AutoMessageRecord): string {
+  return describeAutoMessageSchedule(message);
+}
+
+export function getAutoMessageScheduledInputValue(message: AutoMessageRecord): string {
+  return message.scheduledAt ? toDatetimeLocalInputValue(message.scheduledAt) : '';
+}
+
+export function getAutoMessageDailyTimeValue(message: AutoMessageRecord): string {
+  if (message.dailyHour === null) return '08:00';
+  return formatTimeInputValue(message.dailyHour, message.dailyMinute ?? 0);
 }

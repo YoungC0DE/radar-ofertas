@@ -61,3 +61,21 @@ model OfferDelivery {
   @@index([channel, sentAt])
   @@map("offer_deliveries")
 }
+
+/// Mensagens automáticas (bom dia, código promocional, etc.) — independentes de ofertas.
+model AutoMessage {
+  id           String    @id @default(cuid())
+  title        String
+  content      String
+  /// manual = só envia ao clicar; once = programada uma vez; daily = todo dia no horário
+  scheduleType String    @default("manual") @map("schedule_type")
+  scheduledAt  DateTime? @map("scheduled_at")
+  dailyHour    Int?      @map("daily_hour")
+  dailyMinute  Int?      @default(0) @map("daily_minute")
+  enabled      Boolean   @default(true)
+  lastSentAt   DateTime? @map("last_sent_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("auto_messages")
+}

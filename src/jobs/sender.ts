@@ -1,5 +1,7 @@
 import { DelayedError, Worker } from 'bullmq';
 import type { ChannelPublisher } from '../channels/types.js';
+import { findAutoMessageById } from '../auto-messages/repository.js';
+import { markAutoMessageSent, renderAutoMessageContent } from '../auto-messages/service.js';
 import { env } from '../config/env.js';
 import {
   getOperatingHoursStart,
@@ -62,7 +64,40 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
         throw new DelayedError();
       }
 
-      const { offerId } = job.data;
+      const { offerId, autoMessageId } = job.data;
+
+      if (autoMessageId) {
+        const autoMessage = await findAutoMessageById(autoMessageId);
+        if (!autoMessage) {
+          logger.warn({ channel, autoMessageId }, 'Auto message not found, skipping');
+          return;
+        }
+
+        const text = renderAutoMessageContent(autoMessage.content);
+
+        try {
+          const { messageId } = await publisher.publishText(text);
+          await markAutoMessageSent(autoMessageId);
+          logger.info({ channel, autoMessageId, messageId, title: autoMessage.title, force }, 'Auto message published');
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          logger.error({ channel, autoMessageId, error: message }, 'Auto message publish failed');
+          throw error;
+        }
+
+        if (!force) {
+          const delayMs = getSenderDelayMinutesCached() * 60 * 1000;
+          if (delayMs > 0) {
+            await new Promise((r) => setTimeout(r, delayMs));
+          }
+        }
+        return;
+      }
+
+      if (!offerId) {
+        logger.warn({ channel, jobId: job.id }, 'Sender job without offerId or autoMessageId, skipping');
+        return;
+      }
 
       const offer = await findOfferById(offerId);
       if (!offer) {

@@ -34,7 +34,11 @@ async function main(): Promise<void> {
   const result = await runPreflight('all');
   printPreflight(result.items);
 
-  if (!result.ok) {
+  // Falhas de sessão ML não bloqueiam a subida — o login é feito pelo painel (Configurações › Mercado Livre).
+  const criticalFailures = result.items.filter(
+    (i) => !i.ok && i.label !== 'Mercado Livre (afiliado)',
+  );
+  if (criticalFailures.length > 0) {
     console.log('Corrija os itens acima antes de continuar.\n');
     printSetupGuide();
     process.exit(1);

@@ -59,6 +59,12 @@ export const whatsappPublisher: ChannelPublisher = {
     return { messageId: result.key.id ?? '' };
   },
 
+  async publishText(text: string) {
+    const sock = await requireWhatsAppSocket();
+    const result = await sendOffer(sock, env.WHATSAPP_CHANNEL_ID, null, text);
+    return { messageId: result.key.id ?? '' };
+  },
+
   async shutdown() {
     // Libera o lock de dono da sessão para que um restart rápido (painel / watch)
     // consiga reassumir o WhatsApp em vez de se ver como duplicado.

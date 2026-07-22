@@ -43,6 +43,9 @@ export interface ChannelPublisher {
   /** Publica a oferta já formatada. Devolve o id da mensagem no canal. */
   publish(offer: OfferRecord, caption: string): Promise<{ messageId: string }>;
 
+  /** Publica texto livre (mensagens automáticas). */
+  publishText(text: string): Promise<{ messageId: string }>;
+
   /** Libera recursos no shutdown (sessões, sockets). Opcional. */
   shutdown?(): Promise<void>;
 }

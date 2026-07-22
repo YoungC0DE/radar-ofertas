@@ -1,4 +1,6 @@
 import { Worker } from 'bullmq';
+import { processScheduledAutoMessages } from '../auto-messages/service.js';
+import { hydrateBrandCache } from '../config/brand-config.js';
 import { env } from '../config/env.js';
 import { hydrateMlSourcesCache } from '../config/ml-sources-config.js';
 import { getOperatingHoursStart, getOperatingHoursEnd, hydrateQueueConfigCache } from '../config/queue-config-store.js';
@@ -18,7 +20,13 @@ export function startCollectorWorker(): Worker<CollectorJobData> {
   const worker = new Worker<CollectorJobData>(
     QUEUE_NAMES.OFFER_COLLECTOR,
     async (job) => {
-      await Promise.all([hydrateQueueConfigCache(), hydrateMlSourcesCache()]);
+      await Promise.all([hydrateQueueConfigCache(), hydrateMlSourcesCache(), hydrateBrandCache()]);
+
+      // Mensagens automáticas programadas (bom dia, promoções) — roda a cada ciclo do collector.
+      await processScheduledAutoMessages().catch((error) => {
+        logger.error({ error }, 'Failed to process scheduled auto messages');
+      });
+
       const operatingHours = getOperatingHours();
 
       if (!isWithinOperatingHours(env.APP_TIMEZONE, operatingHours)) {

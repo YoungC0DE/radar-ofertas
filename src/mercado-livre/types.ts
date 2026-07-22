@@ -15,6 +15,26 @@ export interface ScrapedItem {
   discountPercent: number | null;
 }
 
+export interface MlCoupon {
+  id: string;
+  title: string;
+  description: string;
+  discountLabel: string;
+  code: string | null;
+  category: string | null;
+  minPurchase: string | null;
+  expiresAt: string | null;
+  status: 'available' | 'generated' | 'expired' | 'unknown';
+  rawStatus: string | null;
+}
+
+export interface CouponScrapeResult {
+  coupons: MlCoupon[];
+  source: 'http' | 'browser';
+  scrapedAt: string;
+  sessionRequired: boolean;
+}
+
 export interface AffiliateLinkResult {
   url: string;
   shortUrl: string | null;

@@ -40,4 +40,9 @@ export const telegramPublisher: ChannelPublisher = {
     const result = await sendOffer(env.TELEGRAM_CHAT_ID, offer.image, caption);
     return { messageId: String(result.message_id) };
   },
+
+  async publishText(text: string) {
+    const result = await sendOffer(env.TELEGRAM_CHAT_ID, null, text);
+    return { messageId: String(result.message_id) };
+  },
 };

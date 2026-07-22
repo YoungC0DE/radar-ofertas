@@ -8,12 +8,16 @@ import { closeLogStore } from '../../src/utils/log-store.js';
 import { logger } from '../../src/utils/logger.js';
 
 import { handleCollectOffers, showDashboard } from '../controllers/dashboard-controller.js';
+import { toManagerErrorMessage } from '../views/error-message.js';
+import { escapeHtml } from '../views/helpers.js';
+import { renderLayout } from '../views/layout.js';
 
 import { showOfferDetail, showOffersList, handleDeleteAllPending, handleDeleteOffer, handleAffiliateDelaySave, handleSendOfferNow, handleSearchLimitSave } from '../controllers/offers-controller.js';
 
-import { handleTemplateSave, showTemplatePage } from '../controllers/template-controller.js';
+import { handleTemplateSave, showTemplatePage, handleAutoMessageCreate, handleAutoMessageDelete, handleAutoMessageSendNow, handleAutoMessageUpdate } from '../controllers/template-controller.js';
 import { handleChannelLinkSave, handleBrandSave, handleOperatingHoursSave, handleScoreSave, handleSendIntervalSave, handleSenderDelaySave, showSettingsPage } from '../controllers/settings-controller.js';
 import { getLogsJson, showLogsPage } from '../controllers/logs-controller.js';
+import { getCouponsApiJson, handleCouponsRefresh, showCouponsPage } from '../controllers/coupons-controller.js';
 import {
   handleSourceAdd,
   handleSourceFlagsSave,
@@ -225,6 +229,21 @@ export async function handleManagerRequest(
       return;
     }
 
+    if (path === '/manager/coupons' && method === 'GET') {
+      sendHtml(res, 200, await showCouponsPage());
+      return;
+    }
+
+    if (path === '/manager/coupons/refresh' && method === 'POST') {
+      sendHtml(res, 200, await handleCouponsRefresh());
+      return;
+    }
+
+    if (path === '/manager/api/coupons' && method === 'GET') {
+      sendJson(res, 200, getCouponsApiJson());
+      return;
+    }
+
     if (path === '/manager/api/logs' && method === 'GET') {
       sendJson(res, 200, await getLogsJson(url.searchParams));
       return;
@@ -422,6 +441,31 @@ export async function handleManagerRequest(
 
     }
 
+    if (path === '/manager/template/auto-message' && method === 'POST') {
+      const form = parseFormUrlEncoded(await readFormBody(req));
+      sendHtml(res, 200, await handleAutoMessageCreate(form));
+      return;
+    }
+
+    const autoMessageUpdateMatch = path.match(/^\/manager\/template\/auto-message\/([^/]+)$/);
+    if (autoMessageUpdateMatch && method === 'POST') {
+      const form = parseFormUrlEncoded(await readFormBody(req));
+      sendHtml(res, 200, await handleAutoMessageUpdate(autoMessageUpdateMatch[1]!, form));
+      return;
+    }
+
+    const autoMessageDeleteMatch = path.match(/^\/manager\/template\/auto-message\/([^/]+)\/delete$/);
+    if (autoMessageDeleteMatch && method === 'POST') {
+      sendHtml(res, 200, await handleAutoMessageDelete(autoMessageDeleteMatch[1]!));
+      return;
+    }
+
+    const autoMessageSendMatch = path.match(/^\/manager\/template\/auto-message\/([^/]+)\/send$/);
+    if (autoMessageSendMatch && method === 'POST') {
+      sendHtml(res, 200, await handleAutoMessageSendNow(autoMessageSendMatch[1]!));
+      return;
+    }
+
 
 
     if (method !== 'GET') {
@@ -497,7 +541,15 @@ export async function handleManagerRequest(
 
     logger.error({ error, path }, 'Manager request failed');
 
-    sendText(res, 500, 'Internal Server Error');
+    const message = toManagerErrorMessage(error);
+    sendHtml(
+      res,
+      500,
+      renderLayout(
+        'Erro',
+        `<p class="alert err">${escapeHtml(message)}</p><p class="meta"><a href="/manager">Voltar ao painel</a></p>`,
+      ),
+    );
 
   }
 

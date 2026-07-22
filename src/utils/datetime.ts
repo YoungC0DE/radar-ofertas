@@ -54,6 +54,44 @@ export function formatInTimezone(value: Date, timeZone: string): string {
   }).format(value);
 }
 
+/** Valor para input datetime-local a partir de Date gravado como relógio local (UTC fields). */
+export function toDatetimeLocalInputValue(date: Date): string {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  const h = String(date.getUTCHours()).padStart(2, '0');
+  const min = String(date.getUTCMinutes()).padStart(2, '0');
+  return `${y}-${m}-${d}T${h}:${min}`;
+}
+
+/** Interpreta datetime-local como relógio local da região (mesmo padrão de nowInTimezone). */
+export function parseDatetimeLocalValue(value: string): Date | null {
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!match) return null;
+  const y = Number(match[1]);
+  const m = Number(match[2]) - 1;
+  const d = Number(match[3]);
+  const h = Number(match[4]);
+  const min = Number(match[5]);
+  const date = new Date(Date.UTC(y, m, d, h, min, 0, 0));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** Interpreta input type="time" (HH:mm). */
+export function parseTimeInputValue(value: string): { hour: number; minute: number } | null {
+  const match = value.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) return null;
+  if (!Number.isInteger(minute) || minute < 0 || minute > 59) return null;
+  return { hour, minute };
+}
+
+export function formatTimeInputValue(hour: number, minute: number): string {
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
 /**
  * Formata datas gravadas via nowInTimezone — os componentes de horário
  * já correspondem ao relógio local e estão nos campos UTC do Date.
