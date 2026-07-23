@@ -1,6 +1,7 @@
 import type { CouponsPageData } from '../models/coupons-model.js';
 import { escapeHtml, formatDateTimeString } from './helpers.js';
 import { renderLayout } from './layout.js';
+import { pageStyles } from './page-assets.js';
 import { env } from '../../src/config/env.js';
 
 function statusBadge(status: string): string {
@@ -106,45 +107,7 @@ export function renderCouponsPage(data: CouponsPageData): string {
     </div>
 
     ${renderCouponsTable(data.coupons)}
-  </section>
+  </section>`;
 
-  <style>
-    .coupons-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 16px;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
-    }
-    .coupons-header h2 { margin-top: 0; }
-    table code {
-      background: #f3f4f6;
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 0.9em;
-    }
-    .store-link-form {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      min-width: 220px;
-      margin: 0;
-    }
-    .store-link-input {
-      width: 100%;
-      min-width: 200px;
-      padding: 6px 8px;
-      border: 1px solid #d1d5db;
-      border-radius: 6px;
-      font-size: 0.82rem;
-    }
-    .store-link-input:focus {
-      outline: 2px solid #2563eb;
-      outline-offset: 1px;
-      border-color: #2563eb;
-    }
-  </style>`;
-
-  return renderLayout('Cupons', body, 'coupons');
+  return renderLayout('Cupons', body, 'coupons', pageStyles('coupons.css'));
 }

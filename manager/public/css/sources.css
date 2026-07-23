@@ -1,0 +1,46 @@
+.ml-sources-group-title {
+  margin: 20px 0 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ml-sources-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ml-sources-save {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.ml-sources-table {
+  margin-top: 4px;
+}
+
+.ml-source-label {
+  font-weight: 600;
+}
+
+.ml-source-url {
+  word-break: break-all;
+}
+
+.ml-source-others {
+  margin-top: 2px;
+  font-size: 0.72rem;
+}
+
+.ml-source-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}

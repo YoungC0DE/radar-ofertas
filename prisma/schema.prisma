@@ -50,6 +50,7 @@ model OfferDelivery {
   id        String    @id @default(cuid())
   offerId   String    @map("offer_id")
   channel   String
+  accountId String    @default("default") @map("account_id")
   sentAt    DateTime? @map("sent_at")
   messageId String?   @map("message_id")
   error     String?
@@ -57,8 +58,9 @@ model OfferDelivery {
 
   offer     Offer     @relation(fields: [offerId], references: [id], onDelete: Cascade)
 
-  @@unique([offerId, channel])
+  @@unique([offerId, channel, accountId])
   @@index([channel, sentAt])
+  @@index([accountId, channel, sentAt])
   @@map("offer_deliveries")
 }
 

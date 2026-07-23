@@ -21,6 +21,7 @@ import { buildAffiliateLink } from '../mercado-livre/index.js';
 import { getQueueConnection, getSenderQueueName, type SenderJobData } from '../queue/index.js';
 import { isWithinOperatingHours, msUntilOperatingWindow } from '../utils/datetime.js';
 import { logger } from '../utils/logger.js';
+import { recordSendSuccess, recordSendFailure } from '../utils/metrics.js';
 
 // Tempo máximo para gerar o link de afiliado no envio antes de cair no fallback,
 // garantindo que uma sessão ML lenta nunca segure a fila de envio.
@@ -163,11 +164,13 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
       try {
         const { messageId } = await publisher.publish(offer, caption);
         await markOfferDelivered(offerId, channel, messageId);
+        recordSendSuccess(channel);
       } catch (error) {
         // Guardamos o motivo antes de repropagar: o BullMQ ainda vai retentar,
         // mas o painel precisa saber por que este canal está travado.
         const message = error instanceof Error ? error.message : String(error);
         await markOfferDeliveryFailed(offerId, channel, message).catch(() => {});
+        recordSendFailure(channel);
         throw error;
       }
 

@@ -1,36 +1,54 @@
----
-description: Regras do painel web manager
-globs: manager/**
-alwaysApply: false
----
-
 # Manager
 
 Painel admin server-rendered em `manager/`. Entry: `npm run manager` → `http://localhost:MANAGER_PORT/manager`.
 
-## Estrutura MVC
+## Estrutura
 
-- `routes/index.ts` — roteamento e auth.
-- `controllers/` — handlers (parse form, redirect).
-- `models/` — monta dados para views; **reutiliza** `src/` (não duplicar lógica).
-- `views/` — HTML em TypeScript (sem framework).
+```
+manager/
+├── app.ts / server.ts     → entry HTTP
+├── http/
+│   ├── request.ts         → helpers HTTP, auth, createRouter
+│   └── routes/            → rotas declarativas por domínio
+├── routes/index.ts        → exporta handleManagerRequest
+├── controllers/           → handlers finos (parse form, redirect)
+├── models/
+│   ├── shared/            → helpers reutilizáveis (save-result)
+│   ├── logs/              → classificação de logs (fora das views)
+│   └── *.ts               → dados por página; reutiliza src/
+└── views/
+    ├── components/        → UI compartilhada (icons, cards, badges)
+    ├── layout/            → shell HTML + nav
+    ├── settings/          → página de config dividida por seção
+    ├── logs/              → view enxuta
+    ├── page-assets.ts     → pageStyles / pageScripts / pageData
+    └── *.ts               → demais páginas
+
+public/                    → CSS/JS estáticos servidos em /manager/assets/*
+├── css/                   → base.css + um arquivo por página
+└── js/
+    ├── shared/            → modal, polling, confirm, offer-delete
+    └── *.js               → um arquivo por página com interatividade
+```
+
+## Assets estáticos
+
+- CSS compartilhado em `public/css/base.css`; CSS de página via `pageStyles('nome.css')`.
+- JS de página via `pageScripts(...)` com `defer`; dados dinâmicos em `<script type="application/json" id="*-page-data">`.
+- Classificação de logs só no servidor (`models/logs/log-classifier.ts`); o cliente consome campos já classificados da API.
 
 ## Auth
 
 `MANAGER_TOKEN` opcional. Se definido, exige `?token=` ou header `Authorization: Bearer`.
 
-## Páginas
-
-| Rota | Função |
-|------|--------|
-| `/manager` | Dashboard (status, coleta manual, envio imediato) |
-| `/manager/offers` | Lista e detalhe de ofertas |
-| `/manager/settings` | Score, brand, horários, fontes ML, conexões WA/ML, worker |
-| `/manager/template` | Editor de template WhatsApp |
-| `/manager/logs` | Logs da aplicação |
-| `/manager/health` | Health check |
-
 ## Regras
 
-- Não colocar regra de negócio no manager — delegar para `src/offers/`, `src/config/`, etc.
+- Não colocar regra de negócio no manager — delegar para `src/offers/`, `src/config/`, `src/accounts/`.
 - Models do manager podem importar de `src/`; `src/` nunca importa de `manager/`.
+- Views não classificam logs nem interpretam mensagens — isso fica em `models/logs/`.
+- Componentes reutilizáveis em `views/components/` — não duplicar markup de cards/ícones.
+- Novas rotas: adicionar em `http/routes/` no grupo do domínio correto.
+
+## Multi-conta (preparação)
+
+Contas futuras vivem em `src/accounts/` (tipos, paths, repository). O manager ganhará páginas de contas quando a feature for implementada; hoje a conta default espelha o `.env`.

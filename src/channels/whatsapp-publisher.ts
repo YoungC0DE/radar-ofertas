@@ -13,6 +13,7 @@ import type { ChannelPublisher } from './types.js';
 
 export const whatsappPublisher: ChannelPublisher = {
   channel: 'whatsapp',
+  accountId: 'default',
 
   isEnabled: () => true,
 

@@ -1,0 +1,66 @@
+.section-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.inline-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inline-label {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.inline-input {
+  width: 72px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.collected-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dest-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.dest-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dest-sent {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.dest-pending {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.dest-failed {
+  background: #fee2e2;
+  color: #991b1b;
+}

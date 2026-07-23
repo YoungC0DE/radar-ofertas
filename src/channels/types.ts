@@ -33,6 +33,7 @@ export interface ChannelVerifyResult {
  */
 export interface ChannelPublisher {
   readonly channel: Channel;
+  readonly accountId: string;
 
   /** O canal está ligado no .env? Um worker de canal desligado encerra no boot. */
   isEnabled(): boolean;

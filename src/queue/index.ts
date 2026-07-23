@@ -20,8 +20,9 @@ const SENDER_QUEUE_NAMES: Record<Channel, string> = {
   telegram: 'offer-sender-telegram',
 };
 
-export function getSenderQueueName(channel: Channel): string {
-  return SENDER_QUEUE_NAMES[channel];
+export function getSenderQueueName(channel: Channel, accountId = 'default'): string {
+  if (accountId === 'default') return SENDER_QUEUE_NAMES[channel];
+  return `${SENDER_QUEUE_NAMES[channel]}-${accountId}`;
 }
 
 export interface CollectorJobData {
@@ -35,9 +36,10 @@ export interface SenderJobData {
   force?: boolean;
 }
 
-/** Job id determinístico: garante um envio por oferta por canal. */
-export function senderJobId(channel: Channel, offerId: string): string {
-  return `send-offer-${channel}-${offerId}`;
+/** Job id determinístico: garante um envio por oferta por canal por conta. */
+export function senderJobId(channel: Channel, offerId: string, accountId = 'default'): string {
+  if (accountId === 'default') return `send-offer-${channel}-${offerId}`;
+  return `send-offer-${channel}-${accountId}-${offerId}`;
 }
 
 export function autoMessageJobId(channel: Channel, autoMessageId: string, suffix = 'now'): string {
@@ -127,11 +129,11 @@ export const SENDER_JOB_OPTIONS = {
   removeOnFail: 100,
 } as const;
 
-export async function enqueueOfferSend(channel: Channel, offerId: string): Promise<void> {
+export async function enqueueOfferSend(channel: Channel, offerId: string, accountId = 'default'): Promise<void> {
   assertRedisEnabled('enfileiramento de envio');
   const queue = getSenderQueue(channel);
   try {
-    await queue.add('send', { offerId }, { jobId: senderJobId(channel, offerId), ...SENDER_JOB_OPTIONS });
+    await queue.add('send', { offerId }, { jobId: senderJobId(channel, offerId, accountId), ...SENDER_JOB_OPTIONS });
   } finally {
     await queue.close();
   }

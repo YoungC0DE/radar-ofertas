@@ -1,5 +1,6 @@
 import { getEnabledChannels, isChannelEnabled } from '../channels/index.js';
 import type { Channel } from '../channels/types.js';
+import { findAccountsByPlatform } from '../accounts/repository.js';
 import {
   getActiveMlCategoriesForChannel,
   getChannelsForCategory,
@@ -33,6 +34,36 @@ import {
 } from './repository.js';
 import type { OfferRecord, RawOffer } from './types.js';
 
+export interface ServiceDeps {
+  getRuntimeScoreConfig: typeof getRuntimeScoreConfig;
+  calculateOfferScore: typeof calculateOfferScore;
+  getEnabledChannels: typeof getEnabledChannels;
+  isChannelEnabled: typeof isChannelEnabled;
+  getChannelsForCategory: typeof getChannelsForCategory;
+  findOfferIdByMercadoLivreId: typeof findOfferIdByMercadoLivreId;
+  findExistingDeliveryChannels: typeof findExistingDeliveryChannels;
+  sentOfferExistsByTitleAndPrice: typeof sentOfferExistsByTitleAndPrice;
+  createOffer: typeof createOffer;
+  openOfferDelivery: typeof openOfferDelivery;
+  enqueueOfferSend: typeof enqueueOfferSend;
+  findAccountsByPlatform: typeof findAccountsByPlatform;
+}
+
+const defaultDeps: ServiceDeps = {
+  getRuntimeScoreConfig,
+  calculateOfferScore,
+  getEnabledChannels,
+  isChannelEnabled,
+  getChannelsForCategory,
+  findOfferIdByMercadoLivreId,
+  findExistingDeliveryChannels,
+  sentOfferExistsByTitleAndPrice,
+  createOffer,
+  openOfferDelivery,
+  enqueueOfferSend,
+  findAccountsByPlatform,
+};
+
 export async function formatOfferMessage(offer: OfferRecord): Promise<string> {
   const [template, visibility] = await Promise.all([
     loadMessageTemplate(),
@@ -41,37 +72,34 @@ export async function formatOfferMessage(offer: OfferRecord): Promise<string> {
   return formatOfferMessageFromTemplate(template, offer, visibility);
 }
 
-export async function processOffer(rawOffer: RawOffer): Promise<string | null> {
-  const scoreConfig = getRuntimeScoreConfig();
-  const score = calculateOfferScore(rawOffer);
+export async function processOffer(rawOffer: RawOffer, deps: ServiceDeps = defaultDeps): Promise<string | null> {
+  const scoreConfig = deps.getRuntimeScoreConfig();
+  const score = deps.calculateOfferScore(rawOffer);
 
   if (score < scoreConfig.minScore) {
     logger.debug({ mercadoLivreId: rawOffer.mercadoLivreId, score }, 'Below min score');
     return null;
   }
 
-  const targetChannels = resolveOfferChannels(rawOffer);
+  const targetChannels = resolveOfferChannels(rawOffer, deps);
   if (targetChannels.length === 0) {
     return null;
   }
 
-  // Se a oferta já existe (mesmo produto coletado na passada de outro canal),
-  // não descartamos: apenas garantimos a entrega para os canais que ainda faltam.
-  // Assim uma fonte compartilhada chega aos dois canais sem duplicar a oferta.
-  const existingId = await findOfferIdByMercadoLivreId(rawOffer.mercadoLivreId);
+  const existingId = await deps.findOfferIdByMercadoLivreId(rawOffer.mercadoLivreId);
   if (existingId) {
-    const already = await findExistingDeliveryChannels(existingId);
+    const already = await deps.findExistingDeliveryChannels(existingId);
     const missing = targetChannels.filter((channel) => !already.includes(channel));
     if (missing.length === 0) {
       logger.debug({ mercadoLivreId: rawOffer.mercadoLivreId }, 'Offer already dispatched to its channels');
       return null;
     }
-    await dispatchOffer(existingId, missing);
+    await dispatchOffer(existingId, missing, deps);
     logger.info({ offerId: existingId, channels: missing }, 'Existing offer dispatched to missing channels');
     return existingId;
   }
 
-  if (await sentOfferExistsByTitleAndPrice(rawOffer.title, rawOffer.price)) {
+  if (await deps.sentOfferExistsByTitleAndPrice(rawOffer.title, rawOffer.price)) {
     logger.debug({ title: rawOffer.title, price: rawOffer.price }, 'Duplicate sent offer (same title+price)');
     return null;
   }
@@ -79,7 +107,7 @@ export async function processOffer(rawOffer: RawOffer): Promise<string | null> {
   // Não geramos o link de afiliado aqui. Guardamos o permalink e deixamos o link
   // nulo — ele é gerado sob demanda na hora do envio (sender), evitando chamadas
   // ao ML para ofertas que talvez nunca sejam enviadas.
-  const offer = await createOffer({
+  const offer = await deps.createOffer({
     mercadoLivreId: rawOffer.mercadoLivreId,
     title: rawOffer.title,
     price: rawOffer.price,
@@ -97,21 +125,16 @@ export async function processOffer(rawOffer: RawOffer): Promise<string | null> {
     score,
   });
 
-  const channels = await dispatchOffer(offer.id, targetChannels);
+  const channels = await dispatchOffer(offer.id, targetChannels, deps);
 
   logger.info({ offerId: offer.id, score: offer.score, channels }, 'Offer saved and enqueued');
   return offer.id;
 }
 
-/**
- * Canais que devem receber uma oferta: os que a fonte dela alimenta, cruzados com
- * os canais efetivamente ligados. Sem fonte conhecida (ex.: caminho e2e), cai no
- * fan-out para todos os ligados.
- */
-function resolveOfferChannels(rawOffer: RawOffer): Channel[] {
-  const enabled = getEnabledChannels();
+function resolveOfferChannels(rawOffer: RawOffer, deps: ServiceDeps = defaultDeps): Channel[] {
+  const enabled = deps.getEnabledChannels();
   if (!rawOffer.sourceCategory) return enabled;
-  const sourceChannels = getChannelsForCategory(rawOffer.sourceCategory);
+  const sourceChannels = deps.getChannelsForCategory(rawOffer.sourceCategory);
   return enabled.filter((channel) => sourceChannels.includes(channel));
 }
 
@@ -123,17 +146,24 @@ function resolveOfferChannels(rawOffer: RawOffer): Channel[] {
  * Cada canal falha por conta própria — um Redis recusando o job do Telegram não
  * pode impedir o WhatsApp de receber o seu.
  */
-export async function dispatchOffer(offerId: string, channels?: Channel[]): Promise<Channel[]> {
-  const targets = (channels ?? getEnabledChannels()).filter((channel) => isChannelEnabled(channel));
+export async function dispatchOffer(offerId: string, channels?: Channel[], deps: ServiceDeps = defaultDeps): Promise<Channel[]> {
+  const targets = (channels ?? deps.getEnabledChannels()).filter((channel) => deps.isChannelEnabled(channel));
   const dispatched: Channel[] = [];
 
   for (const channel of targets) {
-    try {
-      await openOfferDelivery(offerId, channel);
-      await enqueueOfferSend(channel, offerId);
-      dispatched.push(channel);
-    } catch (error) {
-      logger.error({ offerId, channel, error }, 'Falha ao enfileirar envio do canal');
+    const accounts = await deps.findAccountsByPlatform(channel);
+    const accountIds = accounts.length > 0
+      ? accounts.map((a) => a.id)
+      : ['default'];
+
+    for (const accountId of accountIds) {
+      try {
+        await deps.openOfferDelivery(offerId, channel, accountId);
+        await deps.enqueueOfferSend(channel, offerId, accountId);
+        if (!dispatched.includes(channel)) dispatched.push(channel);
+      } catch (error) {
+        logger.error({ offerId, channel, accountId, error }, 'Falha ao enfileirar envio do canal');
+      }
     }
   }
 

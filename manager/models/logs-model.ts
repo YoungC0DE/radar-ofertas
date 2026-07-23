@@ -9,12 +9,20 @@ import {
   type LogLevel,
   type LogSource,
 } from '../../src/utils/log-store.js';
+import {
+  classifyLogEntry,
+  classifyMlScrapeEntry,
+  type ClassifiedLogEntry,
+  type ClassifiedMlScrapeEntry,
+} from './logs/log-classifier.js';
+
+export type { ClassifiedLogEntry, ClassifiedMlScrapeEntry };
 
 export interface LogsPageData {
-  logs: LogEntry[];
+  logs: ClassifiedLogEntry[];
   total: number;
   mlScrapeCount: number;
-  mlScrapeLogs: LogEntry[];
+  mlScrapeLogs: ClassifiedMlScrapeEntry[];
   filters: Required<Pick<LogFilters, 'level' | 'source' | 'limit'>>;
   redisEnabled: boolean;
 }
@@ -57,20 +65,20 @@ export async function loadLogsPage(searchParams: URLSearchParams): Promise<LogsP
   ]);
 
   return {
-    logs,
+    logs: logs.map(classifyLogEntry),
     total,
     mlScrapeCount,
-    mlScrapeLogs,
+    mlScrapeLogs: mlScrapeLogs.map(classifyMlScrapeEntry),
     filters,
     redisEnabled: env.REDIS_ENABLED,
   };
 }
 
 export interface LogsApiData {
-  logs: LogEntry[];
+  logs: ClassifiedLogEntry[];
   total: number;
   mlScrapeCount: number;
-  mlScrapeLogs: LogEntry[];
+  mlScrapeLogs: ClassifiedMlScrapeEntry[];
 }
 
 export async function loadLogsApi(searchParams: URLSearchParams): Promise<LogsApiData> {
@@ -89,5 +97,10 @@ export async function loadLogsApi(searchParams: URLSearchParams): Promise<LogsAp
     countMlScrapeLogs(),
     getMlScrapeLogs({ since: mlSince, limit: 200 }),
   ]);
-  return { logs, total, mlScrapeCount, mlScrapeLogs };
+  return {
+    logs: logs.map(classifyLogEntry),
+    total,
+    mlScrapeCount,
+    mlScrapeLogs: mlScrapeLogs.map(classifyMlScrapeEntry),
+  };
 }

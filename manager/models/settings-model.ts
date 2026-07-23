@@ -8,6 +8,7 @@ import {
   saveOperatingHours,
   saveSenderDelayMinutes,
 } from '../../src/config/queue-config-store.js';
+import { runSave } from './shared/save-result.js';
 import {
   describeScoreRules,
   getRuntimeScoreConfigAsync,
@@ -145,55 +146,35 @@ export async function loadSettingsData(
 export async function saveChannelInviteLink(
   inviteLink: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  try {
-    await saveWhatsAppChannelInviteLink(inviteLink);
-    return { ok: true };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Falha ao salvar link do canal';
-    return { ok: false, error: message };
-  }
+  return runSave(() => saveWhatsAppChannelInviteLink(inviteLink), 'Falha ao salvar link do canal');
 }
 
 export async function saveSendIntervalMinutes(
   minutes: number,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  try {
+  return runSave(async () => {
     await saveCollectorIntervalMinutes(minutes);
     if (isRedisEnabled()) {
       await rescheduleCollectorJob();
     }
-    return { ok: true };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Falha ao salvar intervalo de envio';
-    return { ok: false, error: message };
-  }
+  }, 'Falha ao salvar intervalo de envio');
 }
 
 export async function saveSenderDelay(
   minutes: number,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  try {
-    await saveSenderDelayMinutes(minutes);
-    return { ok: true };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Falha ao salvar tempo de envio';
-    return { ok: false, error: message };
-  }
+  return runSave(() => saveSenderDelayMinutes(minutes), 'Falha ao salvar tempo de envio');
 }
 
 export async function saveOperatingHoursSettings(
   startRaw: string,
   endRaw: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  try {
+  return runSave(async () => {
     const startHour = Number.parseInt(startRaw, 10);
     const endHour = Number.parseInt(endRaw, 10);
     await saveOperatingHours(startHour, endHour);
-    return { ok: true };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Falha ao salvar janela operacional';
-    return { ok: false, error: message };
-  }
+  }, 'Falha ao salvar janela operacional');
 }
 
 export async function saveBrandIdentity(input: {
@@ -202,37 +183,21 @@ export async function saveBrandIdentity(input: {
   logoData?: string;
   removeLogo?: boolean;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  try {
-    await saveBrandSettings(input);
-    return { ok: true };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Falha ao salvar identidade visual';
-    return { ok: false, error: message };
-  }
+  return runSave(() => saveBrandSettings(input), 'Falha ao salvar identidade visual');
 }
 
 export async function saveCouponsUrlSettings(
   url: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  try {
-    await saveCouponsUrl(url);
-    return { ok: true };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Falha ao salvar URL de cupons';
-    return { ok: false, error: message };
-  }
+  return runSave(() => saveCouponsUrl(url), 'Falha ao salvar URL de cupons');
 }
 
 export async function saveScoreSettings(
   form: Record<string, string>,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  try {
+  return runSave(async () => {
     const config = parseScoreConfigFromForm(form);
     await saveScoreConfig(config);
-    return { ok: true };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Falha ao salvar regras de score';
-    return { ok: false, error: message };
-  }
+  }, 'Falha ao salvar regras de score');
 }
 

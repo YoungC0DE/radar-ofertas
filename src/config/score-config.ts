@@ -36,7 +36,8 @@ function defaultMinScore(): number {
   return env.QUEUE_CONFIG.minScore;
 }
 
-export const DEFAULT_SCORE_CONFIG: ScoreConfig = {
+function buildDefaultScoreConfig(): ScoreConfig {
+  return {
   minScore: defaultMinScore(),
   discount: {
     enabled: true,
@@ -71,7 +72,28 @@ export const DEFAULT_SCORE_CONFIG: ScoreConfig = {
       { enabled: true, threshold: 2500, points: 10 },
     ],
   },
-};
+  };
+}
+
+export function getDefaultScoreConfig(): ScoreConfig {
+  return buildDefaultScoreConfig();
+}
+
+/** @deprecated Use getDefaultScoreConfig() para acesso lazy. */
+export const DEFAULT_SCORE_CONFIG: ScoreConfig = new Proxy({} as ScoreConfig, {
+  get(_, prop) {
+    return (buildDefaultScoreConfig() as unknown as Record<string | symbol, unknown>)[prop];
+  },
+  has(_, prop) {
+    return prop in buildDefaultScoreConfig();
+  },
+  ownKeys() {
+    return Reflect.ownKeys(buildDefaultScoreConfig());
+  },
+  getOwnPropertyDescriptor(_, prop) {
+    return Object.getOwnPropertyDescriptor(buildDefaultScoreConfig(), prop);
+  },
+});
 
 const SETTING_KEY = 'scoreConfig';
 let scoreCache: ScoreConfig | null = null;
@@ -96,7 +118,7 @@ function mergeCategory(defaultCategory: ScoreCategory, override?: Partial<ScoreC
 }
 
 function mergeScoreConfig(override: Partial<ScoreConfig>): ScoreConfig {
-  const defaults = { ...DEFAULT_SCORE_CONFIG, minScore: defaultMinScore() };
+  const defaults = buildDefaultScoreConfig();
   return {
     minScore: override.minScore ?? defaults.minScore,
     discount: mergeCategory(defaults.discount, override.discount),

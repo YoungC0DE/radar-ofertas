@@ -5,6 +5,7 @@ import type { ChannelPublisher } from './types.js';
 
 export const telegramPublisher: ChannelPublisher = {
   channel: 'telegram',
+  accountId: 'default',
 
   isEnabled: () => env.TELEGRAM_ENABLED,
 

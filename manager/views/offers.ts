@@ -4,6 +4,7 @@ import type { DeliveryRecord } from '../../src/offers/types.js';
 import { env } from '../../src/config/env.js';
 import { escapeHtml, formatCurrency, formatDate, statusBadge } from './helpers.js';
 import { renderLayout } from './layout.js';
+import { pageData, pageScripts, pageStyles } from './page-assets.js';
 
 function filterLink(filter: string, label: string, active: string): string {
   const cls = filter === active ? ' class="active"' : '';
@@ -128,56 +129,6 @@ export function renderOffersPage(
       : '';
 
   const body = `
-    <style>
-      .section-actions {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        flex-wrap: wrap;
-      }
-      .inline-form {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .inline-label {
-        font-size: 0.875rem;
-        color: var(--text-muted);
-        white-space: nowrap;
-      }
-      .inline-input {
-        width: 72px;
-        padding: 6px 8px;
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        background: var(--surface);
-        color: var(--text);
-        font-size: 0.875rem;
-        text-align: center;
-      }
-      .collected-cell {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-      }
-      .dest-cell {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-      }
-      .dest-badge {
-        display: inline-block;
-        padding: 2px 8px;
-        border-radius: 20px;
-        font-size: 0.72rem;
-        font-weight: 600;
-        white-space: nowrap;
-      }
-      .dest-sent { background: #dcfce7; color: #166534; }
-      .dest-pending { background: #fef9c3; color: #854d0e; }
-      .dest-failed { background: #fee2e2; color: #991b1b; }
-    </style>
     <section>
       <div class="section-header">
         <h2>Ofertas</h2>
@@ -263,71 +214,8 @@ export function renderOffersPage(
       </div>
     </div>
 
-    <script>
-      const affiliateDelayModal = document.getElementById('affiliate-delay-modal');
+    ${pageData('offers-page-data', { pendingCount: data.pendingCount })}
+    ${pageScripts('shared/modal.js', 'shared/offer-delete.js', 'offers.js')}`;
 
-      function openModal(modal) {
-        modal.classList.remove('hidden');
-        modal.setAttribute('aria-hidden', 'false');
-        document.body.style.overflow = 'hidden';
-        const focusable = modal.querySelector('input, button, textarea, select');
-        focusable?.focus();
-      }
-
-      function closeModal(modal) {
-        modal.classList.add('hidden');
-        modal.setAttribute('aria-hidden', 'true');
-        if (document.querySelectorAll('.modal-overlay:not(.hidden)').length === 0) {
-          document.body.style.overflow = '';
-        }
-      }
-
-      document.getElementById('edit-affiliate-delay-btn')?.addEventListener('click', () => {
-        openModal(affiliateDelayModal);
-      });
-
-      affiliateDelayModal?.querySelector('.modal-cancel')?.addEventListener('click', () => {
-        closeModal(affiliateDelayModal);
-      });
-
-      affiliateDelayModal?.addEventListener('click', (event) => {
-        if (event.target === affiliateDelayModal) closeModal(affiliateDelayModal);
-      });
-
-      document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && affiliateDelayModal && !affiliateDelayModal.classList.contains('hidden')) {
-          closeModal(affiliateDelayModal);
-        }
-      });
-      ${
-        data.database.available && data.pendingCount > 0
-          ? `
-      document.getElementById('delete-pending-btn').addEventListener('click', () => {
-        radarConfirm({
-          title: 'Remover ofertas pendentes',
-          message: 'Remover todas as ${data.pendingCount} ofertas pendentes? Elas não serão enviadas ao WhatsApp.',
-          confirmLabel: 'Remover',
-          danger: true,
-        }).then((ok) => {
-          if (ok) document.getElementById('delete-pending-form').submit();
-        });
-      });`
-          : ''
-      }
-
-      document.querySelectorAll('.offer-delete-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          radarConfirm({
-            title: 'Apagar oferta',
-            message: 'Apagar esta oferta pendente? Ela não será enviada ao WhatsApp.',
-            confirmLabel: 'Apagar',
-            danger: true,
-          }).then((ok) => {
-            if (ok) btn.closest('form').submit();
-          });
-        });
-      });
-    </script>`;
-
-  return renderLayout('Ofertas', body, 'offers');
+  return renderLayout('Ofertas', body, 'offers', pageStyles('offers.css'));
 }

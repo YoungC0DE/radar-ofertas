@@ -6,6 +6,8 @@ import type { RawOffer } from '../offers/types.js';
 import { generateAffiliateLink, type AffiliateLinkOptions } from './affiliate-link.js';
 import { fetchCategoryViaBrowser } from './browser-scraper.js';
 import { ML_ITEMS_PER_PAGE } from './category-url.js';
+import { mlCircuitBreaker } from './circuit-breaker.js';
+import { recordScrapeLatency, recordScrapeFailure } from '../utils/metrics.js';
 import {
   fetchCategoryViaHttp,
   fetchSingleCategoryPage,
@@ -44,11 +46,33 @@ function mapToRawOffer(item: ScrapedItem): RawOffer {
   };
 }
 
+function isBlockError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return /blocked|captcha|403|challenge/i.test(error.message);
+}
+
 async function scrapeCategory(category: string): Promise<ScrapedItem[]> {
+  if (mlCircuitBreaker.isOpen()) {
+    if (!env.ML_USE_BROWSER_FALLBACK) {
+      throw new Error('ML circuit breaker open — HTTP scraping suspended');
+    }
+    logger.info({ category }, 'Circuit breaker open — skipping HTTP, using Playwright directly');
+    return fetchCategoryViaBrowser(category);
+  }
+
   try {
-    return await fetchCategoryViaHttp(category);
+    const start = Date.now();
+    const items = await fetchCategoryViaHttp(category);
+    recordScrapeLatency(Date.now() - start);
+    mlCircuitBreaker.recordSuccess();
+    return items;
   } catch (httpError) {
     logger.warn({ category, httpError }, 'HTTP scrape failed');
+    recordScrapeFailure();
+
+    if (isBlockError(httpError)) {
+      mlCircuitBreaker.recordFailure();
+    }
 
     if (!env.ML_USE_BROWSER_FALLBACK) throw httpError;
 
@@ -132,6 +156,11 @@ export async function* iterateScrapedPages(category: string): AsyncGenerator<Raw
     }
   } catch (httpError) {
     logger.warn({ category, httpError }, 'HTTP scrape failed — trying browser fallback');
+
+    if (isBlockError(httpError)) {
+      mlCircuitBreaker.recordFailure();
+    }
+
     if (!env.ML_USE_BROWSER_FALLBACK) throw httpError;
     const items = await fetchCategoryViaBrowser(category);
     if (items.length > 0) yield items.map(mapToRawOffer);

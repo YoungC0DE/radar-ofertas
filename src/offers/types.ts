@@ -54,6 +54,7 @@ export interface DeliveryRecord {
   id: string;
   offerId: string;
   channel: Channel;
+  accountId: string;
   sentAt: Date | null;
   messageId: string | null;
   error: string | null;

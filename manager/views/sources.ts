@@ -1,5 +1,6 @@
 import { renderLayout } from './layout.js';
 import { escapeHtml } from './helpers.js';
+import { pageScripts, pageStyles } from './page-assets.js';
 import type { SourcesPageData } from '../models/sources-model.js';
 import type { MlCategoryRow } from '../../src/config/ml-sources-config.js';
 
@@ -98,18 +99,6 @@ export function renderSourcesPage(data: SourcesPageData): string {
     : '';
 
   const body = `
-    <style>
-      .ml-sources-group-title { margin: 20px 0 8px; font-size: 0.82rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
-      .ml-sources-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-      .ml-sources-save { display: flex; justify-content: flex-end; margin-top: 14px; }
-      .ml-sources-table { margin-top: 4px; }
-      .ml-source-label { font-weight: 600; }
-      .ml-source-url { word-break: break-all; }
-      .ml-source-others { margin-top: 2px; font-size: 0.72rem; }
-      .ml-source-flag { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-      .modal-overlay.hidden { display: none; }
-    </style>
-
     ${alert}
 
     <section>
@@ -156,26 +145,14 @@ export function renderSourcesPage(data: SourcesPageData): string {
             <p class="modal-help">O link entra ativo só neste canal (${escapeHtml(channelLabel)}). Você pode ativá-lo em outros canais nas respectivas páginas.</p>
           </div>
           <div class="modal-actions">
-            <button type="button" class="btn" id="ml-source-cancel">Cancelar</button>
+            <button type="button" class="btn modal-cancel" id="ml-source-cancel">Cancelar</button>
             <button type="submit" class="btn primary">Adicionar</button>
           </div>
         </form>
       </div>
     </div>
 
-    <script>
-      (function () {
-        const modal = document.getElementById('ml-source-modal');
-        const openBtn = document.getElementById('add-ml-source');
-        const cancelBtn = document.getElementById('ml-source-cancel');
-        function open() { modal.classList.remove('hidden'); modal.setAttribute('aria-hidden', 'false'); }
-        function close() { modal.classList.add('hidden'); modal.setAttribute('aria-hidden', 'true'); }
-        openBtn?.addEventListener('click', open);
-        cancelBtn?.addEventListener('click', close);
-        modal?.addEventListener('click', (e) => { if (e.target === modal) close(); });
-        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
-      })();
-    </script>`;
+    ${pageScripts('shared/modal.js', 'sources.js')}`;
 
-  return renderLayout(`Fontes — ${channelLabel}`, body, `sources-${channel}`);
+  return renderLayout(`Fontes — ${channelLabel}`, body, `sources-${channel}`, pageStyles('sources.css'));
 }

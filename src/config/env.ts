@@ -118,14 +118,44 @@ const envSchema = z.object({
     }
   });
 
-const envParse = envSchema.safeParse(process.env);
-
-if (!envParse.success) {
-  console.error('Invalid environment variables:', envParse.error.format());
-  process.exit(1);
-}
-
-export const env = envParse.data;
-export type Env = typeof env;
+export type Env = z.infer<typeof envSchema>;
 export type QueueConfig = z.infer<typeof queueConfigSchema>;
 export type AffiliateConfig = z.infer<typeof affiliateConfigSchema>;
+
+let _parsed: Env | undefined;
+
+function resolveEnv(): Env {
+  if (_parsed) return _parsed;
+  const result = envSchema.safeParse(process.env);
+  if (!result.success) {
+    console.error('Invalid environment variables:', result.error.format());
+    process.exit(1);
+  }
+  _parsed = result.data;
+  return _parsed;
+}
+
+/**
+ * Lazy: o parse só roda no primeiro acesso a uma propriedade, não no import.
+ * Isso permite que testes importem módulos que dependem de env sem precisar
+ * de .env no runner — desde que o teste não acesse env diretamente.
+ */
+export const env: Env = new Proxy({} as Env, {
+  get(_, prop) {
+    return (resolveEnv() as Record<string | symbol, unknown>)[prop];
+  },
+  has(_, prop) {
+    return prop in resolveEnv();
+  },
+  ownKeys() {
+    return Reflect.ownKeys(resolveEnv());
+  },
+  getOwnPropertyDescriptor(_, prop) {
+    return Object.getOwnPropertyDescriptor(resolveEnv(), prop);
+  },
+});
+
+/** Injeta um env fake para testes. Passar undefined restaura o parse real. */
+export function setEnvForTest(fake: Env | undefined): void {
+  _parsed = fake;
+}

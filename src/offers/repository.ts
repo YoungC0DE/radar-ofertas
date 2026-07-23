@@ -43,10 +43,10 @@ export async function findOfferIdByMercadoLivreId(mercadoLivreId: string): Promi
   return offer?.id ?? null;
 }
 
-/** Canais que já têm registro de entrega (pendente ou enviada) para a oferta. */
-export async function findExistingDeliveryChannels(offerId: string): Promise<Channel[]> {
+/** Canais que já têm registro de entrega (pendente ou enviada) para a oferta em uma conta. */
+export async function findExistingDeliveryChannels(offerId: string, accountId = 'default'): Promise<Channel[]> {
   const rows = await prisma.offerDelivery.findMany({
-    where: { offerId },
+    where: { offerId, accountId },
     select: { channel: true },
   });
   return rows.map((row) => row.channel as Channel);
@@ -92,6 +92,7 @@ function toDeliveryRecord(delivery: PrismaOfferDelivery): DeliveryRecord {
     id: delivery.id,
     offerId: delivery.offerId,
     channel: delivery.channel as Channel,
+    accountId: delivery.accountId,
     sentAt: delivery.sentAt,
     messageId: delivery.messageId,
     error: delivery.error,
@@ -104,11 +105,11 @@ function toDeliveryRecord(delivery: PrismaOfferDelivery): DeliveryRecord {
  * a linha com sentAt nulo é o registro de "esta oferta deve ir para este canal".
  * Idempotente: reenfileirar limpa o erro anterior sem apagar um envio concluído.
  */
-export async function openOfferDelivery(offerId: string, channel: Channel): Promise<void> {
+export async function openOfferDelivery(offerId: string, channel: Channel, accountId = 'default'): Promise<void> {
   await prisma.offerDelivery.upsert({
-    where: { offerId_channel: { offerId, channel } },
+    where: { offerId_channel_accountId: { offerId, channel, accountId } },
     update: { error: null },
-    create: { offerId, channel },
+    create: { offerId, channel, accountId },
   });
 }
 
@@ -121,14 +122,15 @@ export async function markOfferDelivered(
   offerId: string,
   channel: Channel,
   messageId: string,
+  accountId = 'default',
 ): Promise<void> {
   const sentAt = nowInTimezone(env.APP_TIMEZONE);
 
   await prisma.$transaction([
     prisma.offerDelivery.upsert({
-      where: { offerId_channel: { offerId, channel } },
+      where: { offerId_channel_accountId: { offerId, channel, accountId } },
       update: { sentAt, messageId, error: null },
-      create: { offerId, channel, sentAt, messageId },
+      create: { offerId, channel, accountId, sentAt, messageId },
     }),
     // Só o primeiro canal a concluir grava — updateMany com sentAt: null evita
     // sobrescrever a marca de um canal que publicou antes.
@@ -144,17 +146,18 @@ export async function markOfferDeliveryFailed(
   offerId: string,
   channel: Channel,
   error: string,
+  accountId = 'default',
 ): Promise<void> {
   await prisma.offerDelivery.upsert({
-    where: { offerId_channel: { offerId, channel } },
+    where: { offerId_channel_accountId: { offerId, channel, accountId } },
     update: { error: error.slice(0, 500) },
-    create: { offerId, channel, error: error.slice(0, 500) },
+    create: { offerId, channel, accountId, error: error.slice(0, 500) },
   });
 }
 
-export async function findDelivery(offerId: string, channel: Channel): Promise<DeliveryRecord | null> {
+export async function findDelivery(offerId: string, channel: Channel, accountId = 'default'): Promise<DeliveryRecord | null> {
   const delivery = await prisma.offerDelivery.findUnique({
-    where: { offerId_channel: { offerId, channel } },
+    where: { offerId_channel_accountId: { offerId, channel, accountId } },
   });
   return delivery ? toDeliveryRecord(delivery) : null;
 }
@@ -187,9 +190,9 @@ export async function findDeliveriesByOfferIds(
   return byOffer;
 }
 
-export async function offerWasSentTo(offerId: string, channel: Channel): Promise<boolean> {
+export async function offerWasSentTo(offerId: string, channel: Channel, accountId = 'default'): Promise<boolean> {
   const count = await prisma.offerDelivery.count({
-    where: { offerId, channel, sentAt: { not: null } },
+    where: { offerId, channel, accountId, sentAt: { not: null } },
   });
   return count > 0;
 }

@@ -14,7 +14,10 @@ src/
 ├── ml-login.ts         → entry: login afiliado ML
 ├── config/             → ENV (Zod) + stores de runtime (settings DB)
 │   ├── score-config.ts, brand-config.ts, queue-config-store.ts, ml-sources-config.ts
+├── accounts/           → contas por plataforma (multi-conta)
+├── channels/           → contrato de canal + publishers
 ├── whatsapp/           → Baileys (conexão + envio)
+├── telegram/           → Bot API
 ├── mercado-livre/      → scraping híbrido + sessão afiliado
 ├── offers/             → tipos, persistência, regras de negócio, template
 ├── jobs/               → workers BullMQ (collector, sender)
@@ -25,10 +28,11 @@ src/
 
 manager/                → painel web (MVC server-rendered)
 ├── server.ts           → entry: npm run manager
-├── routes/             → roteamento HTTP
+├── http/               → router declarativo + helpers HTTP
+├── routes/             → exporta handleManagerRequest
 ├── controllers/        → handlers de request
 ├── models/             → dados para views (reutiliza src/)
-└── views/              → HTML gerado em TS
+└── views/              → HTML em TS (components/ + settings/)
 ```
 
 ## Regras
