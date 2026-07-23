@@ -91,6 +91,21 @@ export async function updateOfferAffiliateLink(id: string, affiliateLink: string
   });
 }
 
+export async function updateOfferMarketInsights(
+  id: string,
+  data: {
+    rating?: number | null;
+    soldQuantity?: number | null;
+    salesRank?: string | null;
+    seller?: string | null;
+  },
+): Promise<void> {
+  await prisma.offer.update({
+    where: { id },
+    data,
+  });
+}
+
 // --- Entregas por canal -------------------------------------------------------
 
 function toDeliveryRecord(delivery: PrismaOfferDelivery): DeliveryRecord {

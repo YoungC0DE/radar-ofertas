@@ -64,3 +64,27 @@
   background: #fee2e2;
   color: #991b1b;
 }
+
+.platform-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.platform-ml {
+  background: #e8f1ff;
+  color: #1d4ed8;
+}
+
+.platform-amazon {
+  background: #fff4e5;
+  color: #b45309;
+}
+
+.platform-unknown {
+  background: #f3f4f6;
+  color: #4b5563;
+}

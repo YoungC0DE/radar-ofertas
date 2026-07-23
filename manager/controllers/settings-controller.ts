@@ -3,6 +3,7 @@ import {
   saveBrandIdentity,
   saveChannelInviteLink,
   saveCouponsUrlSettings,
+  saveAmazonAffiliateSettings,
   saveOperatingHoursSettings,
   saveScoreSettings,
   saveSendIntervalMinutes,
@@ -104,6 +105,18 @@ export async function handleCouponsUrlSave(url: string): Promise<string> {
     return showSettingsPage(null, result.error);
   }
   return showSettingsPage('couponsUrl', null);
+}
+
+export async function handleAmazonAffiliateSave(form: Record<string, string>): Promise<string> {
+  const result = await saveAmazonAffiliateSettings({
+    baseUrl: form.amazonBaseUrl ?? '',
+    affiliateLinkPrefix: form.amazonAffiliateLinkPrefix ?? '',
+    storeId: form.amazonAffiliateStoreId ?? '',
+  });
+  if (!result.ok) {
+    return showSettingsPage(null, result.error);
+  }
+  return showSettingsPage('amazonAffiliate', null);
 }
 
 export async function handleOperatingHoursSave(form: Record<string, string>): Promise<string> {

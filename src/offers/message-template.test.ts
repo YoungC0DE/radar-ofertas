@@ -4,6 +4,8 @@ import {
   DEFAULT_MESSAGE_TEMPLATE,
   DEFAULT_PLACEHOLDER_VISIBILITY,
   formatOfferMessageFromTemplate,
+  formatOfferRating,
+  formatSoldQuantity,
   formatTopSoldLabel,
   renderMessageTemplate,
   sampleTemplateValues,
@@ -125,5 +127,34 @@ describe('message-template', () => {
     const result = formatOfferMessageFromTemplate(DEFAULT_MESSAGE_TEMPLATE, sampleOffer);
     assert.match(result, /Mouse Gamer RGB/);
     assert.match(result, /Compre aqui/);
+  });
+
+  it('formata avaliação e vendas no estilo Amazon', () => {
+    assert.equal(
+      formatOfferRating(4.8, 'amazon', 5024),
+      '4,8 de 5 estrelas (5.024)',
+    );
+    assert.equal(formatSoldQuantity(2000, 'amazon'), 'Mais de 2 mil compras no mês passado');
+
+    const amazonOffer: OfferRecord = {
+      ...sampleOffer,
+      mercadoLivreId: 'B07JFTS6BS',
+      permalink: 'https://www.amazon.com.br/dp/B07JFTS6BS',
+      affiliateLink: 'https://www.amazon.com.br/dp/B07JFTS6BS?tag=mercadaodasfa-20',
+      rating: 4.8,
+      soldQuantity: 2000,
+      salesRank: '5024',
+      seller: null,
+      officialStore: false,
+      bestSeller: false,
+    };
+
+    const result = formatOfferMessageFromTemplate(
+      '{{avalia}}\n{{qty_sold}}\n{{product_link}}',
+      amazonOffer,
+    );
+    assert.match(result, /4,8 de 5 estrelas \(5\.024\)/);
+    assert.match(result, /Mais de 2 mil compras no mês passado/);
+    assert.match(result, /https:\/\/www\.amazon\.com\.br\/dp\/B07JFTS6BS\?tag=mercadaodasfa-20/);
   });
 });

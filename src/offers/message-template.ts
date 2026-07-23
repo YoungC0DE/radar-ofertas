@@ -1,6 +1,8 @@
 import { getBrandName } from '../config/brand-config.js';
 import { prisma } from '../database/client.js';
+import { detectOfferPlatform } from './platform.js';
 import type { OfferRecord } from './types.js';
+import type { OfferPlatform } from './platform.js';
 
 export const MESSAGE_PLACEHOLDERS = [
   { key: 'brand', label: 'Nome do seu canal', example: 'Radar Ofertas' },
@@ -74,13 +76,49 @@ export function formatOfferPrice(offer: Pick<OfferRecord, 'price' | 'oldPrice'>)
   return formatCurrency(offer.price);
 }
 
-export function formatOfferRating(rating: number | null): string {
+export function formatOfferRating(
+  rating: number | null,
+  platform: OfferPlatform = 'unknown',
+  reviewsCount: number | null = null,
+): string {
   if (rating === null) return 'Sem avaliação';
+
+  if (platform === 'amazon') {
+    const ratingText = `${rating.toFixed(1).replace('.', ',')} de 5 estrelas`;
+    if (reviewsCount !== null && reviewsCount > 0) {
+      return `${ratingText} (${reviewsCount.toLocaleString('pt-BR')})`;
+    }
+    return ratingText;
+  }
+
   return `${rating.toFixed(1)} ⭐`;
 }
 
-export function formatSoldQuantity(soldQuantity: number | null): string {
+export function parseAmazonReviewsCount(salesRank: string | null): number | null {
+  if (!salesRank?.trim()) return null;
+  const digits = salesRank.replace(/[^\d]/g, '');
+  if (!digits) return null;
+  const value = Number.parseInt(digits, 10);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+export function formatSoldQuantity(
+  soldQuantity: number | null,
+  platform: OfferPlatform = 'unknown',
+): string {
   if (soldQuantity === null || soldQuantity <= 0) return 'Sem dados de vendas';
+
+  if (platform === 'amazon') {
+    if (soldQuantity >= 1000) {
+      const thousands = soldQuantity / 1000;
+      const label = Number.isInteger(thousands)
+        ? `${thousands} mil`
+        : `${thousands.toFixed(1).replace('.', ',')} mil`;
+      return `Mais de ${label} compras no mês passado`;
+    }
+    return `Mais de ${soldQuantity.toLocaleString('pt-BR')} compras no mês passado`;
+  }
+
   return `${soldQuantity.toLocaleString('pt-BR')} vendidos`;
 }
 
@@ -143,15 +181,19 @@ export interface MessageTemplateValues {
 }
 
 export function buildTemplateValues(offer: OfferRecord): MessageTemplateValues {
+  const platform = detectOfferPlatform(offer);
+  const reviewsCount =
+    platform === 'amazon' ? parseAmazonReviewsCount(offer.salesRank) : null;
+
   return {
     brand: getBrandName(),
     name: offer.title,
     price: formatOfferPrice(offer),
     discount: formatDiscount(offer.discount),
-    avalia: formatOfferRating(offer.rating),
-    qty_sold: formatSoldQuantity(offer.soldQuantity),
+    avalia: formatOfferRating(offer.rating, platform, reviewsCount),
+    qty_sold: formatSoldQuantity(offer.soldQuantity, platform),
     best_seller: formatBestSeller(offer.bestSeller),
-    top_sold: formatTopSoldLabel(offer.salesRank),
+    top_sold: platform === 'amazon' ? '' : formatTopSoldLabel(offer.salesRank),
     store: formatSeller(offer.seller, offer.officialStore),
     product_link: offer.affiliateLink ?? '',
   };

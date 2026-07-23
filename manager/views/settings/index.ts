@@ -8,9 +8,9 @@ import {
   renderConnectionsSection,
   renderOperationsSection,
 } from './sections/connections-section.js';
+import { renderAffiliateProgramsSection } from './sections/affiliate-section.js';
 import { renderBrandSection } from './sections/brand-section.js';
 import { renderChannelSection } from './sections/channel-section.js';
-import { renderMlCouponsUrlSection, renderSourcesPointer } from './sections/sources-section.js';
 import { renderOperatingHoursSection } from './sections/operating-hours-section.js';
 import { renderScoreSection } from './sections/score-section.js';
 import { renderSettingsModals } from './modals.js';
@@ -51,10 +51,10 @@ export function renderSettingsPage(data: SettingsData): string {
           'Intervalo entre cada mensagem enviada no WhatsApp',
         )}
         ${renderChannelSection(data)}
-        ${renderMlCouponsUrlSection(data)}
-        ${renderSourcesPointer(data)}
       </div>
     </section>
+
+    ${renderAffiliateProgramsSection(data)}
 
     ${renderConnectionsSection(data)}
 

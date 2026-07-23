@@ -1,33 +1,13 @@
 import type { OffersPageData } from '../models/offers-model.js';
-import { CHANNEL_LABELS } from '../../src/channels/types.js';
-import type { DeliveryRecord } from '../../src/offers/types.js';
 import { env } from '../../src/config/env.js';
 import { escapeHtml, formatCurrency, formatDate, statusBadge } from './helpers.js';
+import { renderDestino, renderPlatformBadge } from './offer-cells.js';
 import { renderLayout } from './layout.js';
 import { pageData, pageScripts, pageStyles } from './page-assets.js';
 
 function filterLink(filter: string, label: string, active: string): string {
   const cls = filter === active ? ' class="active"' : '';
   return `<a href="/manager/offers?status=${filter}"${cls}>${escapeHtml(label)}</a>`;
-}
-
-/** Badges de destino: um por canal que recebe a oferta, com o status da entrega. */
-function renderDestino(deliveries: DeliveryRecord[] | undefined): string {
-  if (!deliveries || deliveries.length === 0) {
-    return '<span class="meta">—</span>';
-  }
-
-  return deliveries
-    .map((delivery) => {
-      const label = CHANNEL_LABELS[delivery.channel] ?? delivery.channel;
-      const { cls, glyph, title } = delivery.sentAt
-        ? { cls: 'dest-sent', glyph: '✓', title: 'Enviado' }
-        : delivery.error
-          ? { cls: 'dest-failed', glyph: '✗', title: `Falhou: ${delivery.error}` }
-          : { cls: 'dest-pending', glyph: '•', title: 'Pendente' };
-      return `<span class="dest-badge ${cls}" title="${escapeHtml(title)}">${escapeHtml(label)} ${glyph}</span>`;
-    })
-    .join(' ');
 }
 
 const TRASH_ICON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`;
@@ -37,11 +17,13 @@ export function renderOffersPage(
   clearedCount: number | null = null,
   error: string | null = null,
   delaySaved = false,
+  collectMessage: string | null = null,
+  collectError: string | null = null,
 ): string {
   const rows = !data.database.available
-    ? `<tr><td colspan="9">${escapeHtml(data.database.error ?? 'Banco indisponível')}</td></tr>`
+    ? `<tr><td colspan="10">${escapeHtml(data.database.error ?? 'Banco indisponível')}</td></tr>`
     : data.offers.length === 0
-      ? `<tr><td colspan="9">Nenhuma oferta encontrada.</td></tr>`
+      ? `<tr><td colspan="10">Nenhuma oferta encontrada.</td></tr>`
       : data.offers
           .map((o) => {
             const scheduleAt = o.sentAt ? null : (data.scheduleByOfferId.get(o.id) ?? null);
@@ -54,6 +36,7 @@ export function renderOffersPage(
                   </form>`;
 
             return `<tr>
+          <td>${renderPlatformBadge(o)}</td>
           <td><a class="link" href="/manager/offers/${escapeHtml(o.id)}">${escapeHtml(o.id.slice(0, 10))}…</a></td>
           <td><div class="dest-cell">${renderDestino(data.deliveriesByOfferId.get(o.id))}</div></td>
           <td>${escapeHtml(o.title.slice(0, 50))}${o.title.length > 50 ? '…' : ''}</td>
@@ -84,7 +67,11 @@ export function renderOffersPage(
     </div>`;
 
   const clearedAlert =
-    clearedCount != null && clearedCount > 0
+    collectMessage
+      ? `<p class="alert ok">${escapeHtml(collectMessage)}</p>`
+      : collectError
+        ? `<p class="alert err">${escapeHtml(collectError)}</p>`
+        : clearedCount != null && clearedCount > 0
       ? `<p class="alert ok">${clearedCount} oferta(s) pendente(s) removida(s) com sucesso.</p>`
       : delaySaved
         ? '<p class="alert ok">Configuração de delay salva com sucesso.</p>'
@@ -96,6 +83,11 @@ export function renderOffersPage(
     data.affiliateDelay.backlogDelayMinutes === 1
       ? '1 min'
       : `${data.affiliateDelay.backlogDelayMinutes} min`;
+
+  const collectForm = `
+    <form method="post" action="/manager/offers/collect?returnTo=offers" class="inline-form">
+      <button type="submit" class="btn btn-sm primary">Buscar novos anúncios</button>
+    </form>`;
 
   const searchLimitForm = `
     <form method="post" action="/manager/offers/search-limit" class="inline-form" id="search-limit-form">
@@ -129,6 +121,7 @@ export function renderOffersPage(
       <div class="section-header">
         <h2>Ofertas</h2>
         <div class="section-actions">
+          ${collectForm}
           ${searchLimitForm}
           ${deletePendingForm}
         </div>
@@ -146,7 +139,7 @@ export function renderOffersPage(
       </div>
       <table>
         <thead>
-          <tr><th>ID</th><th>Destino</th><th>Título</th><th>Score</th><th>Preço</th><th>Desconto</th><th>Status</th><th>Previsão de envio</th><th>Coletada em</th></tr>
+          <tr><th>Origem</th><th>ID</th><th>Destino</th><th>Título</th><th>Score</th><th>Preço</th><th>Desconto</th><th>Status</th><th>Previsão de envio</th><th>Coletada em</th></tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>

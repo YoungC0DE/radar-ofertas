@@ -1,6 +1,7 @@
 import { DEFAULT_ACCOUNT_ID } from '../accounts/types.js';
 import { DelayedError, Worker } from 'bullmq';
 import type { Channel, ChannelPublisher } from '../channels/types.js';
+import { fetchAmazonOfferInsights } from '../amazon/index.js';
 import { findAutoMessageById } from '../auto-messages/repository.js';
 import { markAutoMessageSent, renderAutoMessageContent } from '../auto-messages/service.js';
 import { env } from '../config/env.js';
@@ -17,8 +18,10 @@ import {
   markOfferDelivered,
   markOfferDeliveryFailed,
   updateOfferAffiliateLink,
+  updateOfferMarketInsights,
 } from '../offers/repository.js';
-import { buildAffiliateLink } from '../mercado-livre/index.js';
+import { buildOfferAffiliateLink, shouldRefreshAmazonAffiliateLink } from '../offers/affiliate-link.js';
+import { detectOfferPlatform } from '../offers/platform.js';
 import { getQueueConnection, getSenderQueueName, type SenderJobData } from '../queue/index.js';
 import { isWithinOperatingHours, msUntilOperatingWindow } from '../utils/datetime.js';
 import { logger } from '../utils/logger.js';
@@ -162,9 +165,15 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
         return;
       }
 
-      if (!offer.affiliateLink && offer.permalink) {
-        const affiliateLink = await buildAffiliateLink(
-          offer.permalink,
+      const permalink = offer.permalink;
+      const needsAffiliateLink =
+        permalink &&
+        (!offer.affiliateLink ||
+          shouldRefreshAmazonAffiliateLink(permalink, offer.mercadoLivreId, offer.affiliateLink));
+
+      if (needsAffiliateLink) {
+        const affiliateLink = await buildOfferAffiliateLink(
+          permalink,
           offer.mercadoLivreId,
           undefined,
           {
@@ -175,6 +184,34 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
         await updateOfferAffiliateLink(offerId, affiliateLink);
         offer.affiliateLink = affiliateLink;
         logger.info({ channel, accountId, offerId }, 'Affiliate link gerado sob demanda no envio');
+      }
+
+      const isAmazonOffer = detectOfferPlatform(offer) === 'amazon';
+      const needsAmazonInsights =
+        isAmazonOffer &&
+        permalink &&
+        (offer.rating === null || offer.soldQuantity === null || !offer.salesRank);
+
+      if (needsAmazonInsights) {
+        try {
+          const insights = await fetchAmazonOfferInsights(permalink);
+          if (insights) {
+            const salesRank =
+              insights.reviewsCount !== null ? String(insights.reviewsCount) : offer.salesRank;
+            await updateOfferMarketInsights(offerId, {
+              rating: insights.rating ?? offer.rating,
+              soldQuantity: insights.soldQuantity ?? offer.soldQuantity,
+              salesRank,
+              seller: insights.seller ?? offer.seller,
+            });
+            offer.rating = insights.rating ?? offer.rating;
+            offer.soldQuantity = insights.soldQuantity ?? offer.soldQuantity;
+            offer.salesRank = salesRank;
+            offer.seller = insights.seller ?? offer.seller;
+          }
+        } catch (error) {
+          logger.warn({ channel, accountId, offerId, error }, 'Falha ao enriquecer oferta Amazon');
+        }
       }
 
       const caption = await formatOfferMessage(offer);

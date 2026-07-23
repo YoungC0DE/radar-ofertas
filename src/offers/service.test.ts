@@ -3,9 +3,10 @@ import { describe, it, mock } from 'node:test';
 import { stubEnv } from '../test/env-stub.js';
 import type { RawOffer } from './types.js';
 import type { ServiceDeps } from './service.js';
-import { processOffer, dispatchOffer } from './service.js';
 
 stubEnv();
+
+const { processOffer, dispatchOffer } = await import('./service.js');
 
 type MockFn = ReturnType<typeof mock.fn>;
 function calls(fn: unknown): number {
@@ -82,7 +83,7 @@ function makeDeps(overrides: Partial<ServiceDeps> = {}): ServiceDeps {
     calculateOfferScore: mock.fn(() => 80),
     getEnabledChannels: mock.fn(() => ['whatsapp', 'telegram'] as never[]),
     isChannelEnabled: mock.fn(() => true),
-    getChannelsForCategory: mock.fn(() => ['whatsapp', 'telegram'] as never[]),
+    getChannelsForSource: mock.fn(() => ['whatsapp', 'telegram'] as never[]),
     findOfferIdByMercadoLivreId: mock.fn(async () => null),
     findExistingDeliveryChannels: mock.fn(async () => []),
     sentOfferExistsByTitleAndPrice: mock.fn(async () => false),
@@ -159,7 +160,7 @@ describe('processOffer', () => {
 
   it('filtra canais por sourceCategory quando presente', async () => {
     const deps = makeDeps({
-      getChannelsForCategory: mock.fn(() => ['telegram'] as never[]),
+      getChannelsForSource: mock.fn(() => ['telegram'] as never[]),
     });
 
     const result = await processOffer(makeRawOffer({ sourceCategory: 'MLB1648' }), deps);

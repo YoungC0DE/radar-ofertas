@@ -26,6 +26,13 @@ export function stubEnv(overrides: Partial<Env> = {}): Env {
     ML_BROWSER_HEADLESS: true,
     ML_HTTP_TIMEOUT_MS: 30_000,
     ML_COUPONS_URL: 'https://www.mercadolivre.com.br/afiliados/coupons#hub',
+    AMAZON_BASE_URL: 'https://www.amazon.com.br/',
+    AMAZON_AFFILIATE_LINK_PREFIX: '',
+    AMAZON_AFFILIATE_STORE_ID: '',
+    AMAZON_SOURCES: ['https://www.amazon.com.br/b/node/122326793011'],
+    AMAZON_SCRAPER_USER_AGENT: 'test-agent',
+    AMAZON_USE_BROWSER_FALLBACK: false,
+    AMAZON_HTTP_TIMEOUT_MS: 30_000,
     AFFILIATE_CONFIG: { tag: '', baseUrl: 'https://www.mercadolivre.com.br' },
     QUEUE_CONFIG: {
       collectorIntervalMinutes: 15,

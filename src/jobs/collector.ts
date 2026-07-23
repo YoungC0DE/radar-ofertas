@@ -1,7 +1,7 @@
 import { Worker, type Job } from 'bullmq';
 import { hydrateBrandCache } from '../config/brand-config.js';
 import { env } from '../config/env.js';
-import { hydrateMlSourcesCache } from '../config/ml-sources-config.js';
+import { hydrateAllSourcesCaches } from '../sources/routing.js';
 import {
   getOperatingHoursStart,
   getOperatingHoursEnd,
@@ -36,7 +36,7 @@ export function startCollectorWorker(): Worker<CollectorJobData> {
   const worker = new Worker<CollectorJobData>(
     QUEUE_NAMES.OFFER_COLLECTOR,
     async (job) => {
-      await Promise.all([hydrateQueueConfigCache(), hydrateMlSourcesCache(), hydrateBrandCache()]);
+      await Promise.all([hydrateQueueConfigCache(), hydrateAllSourcesCaches(), hydrateBrandCache()]);
 
       if (job.name === 'collect-source' && job.data.kind === 'source') {
         const { channel, category, quota } = job.data;

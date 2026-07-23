@@ -14,6 +14,7 @@ import {
   renderMessageTemplate,
   buildTemplateValues,
 } from '../../src/offers/message-template.js';
+import { hydrateAmazonOfferRecord } from '../../src/amazon/offer-hydration.js';
 import {
   removeAllPendingOffers,
   removePendingOffer,
@@ -27,9 +28,19 @@ export async function showOffersList(searchParams: URLSearchParams): Promise<str
   const page = parsePage(searchParams.get('page'));
   const cleared = searchParams.get('cleared');
   const error = searchParams.get('error');
+  const collectMessage =
+    searchParams.get('collectQueued') === '1' ? 'Busca de novos anúncios enfileirada.' : null;
+  const collectError = searchParams.get('collectError');
   const clearedCount = cleared ? Number.parseInt(cleared, 10) : null;
   const data = await loadOffersPage(filter, page);
-  return renderOffersPage(data, Number.isFinite(clearedCount) ? clearedCount : null, error);
+  return renderOffersPage(
+    data,
+    Number.isFinite(clearedCount) ? clearedCount : null,
+    error,
+    false,
+    collectMessage,
+    collectError,
+  );
 }
 
 export async function handleDeleteAllPending(): Promise<{ count: number } | { error: string }> {
@@ -104,10 +115,16 @@ export async function showOfferDetail(id: string): Promise<{ status: number; htm
   if (!offer) {
     return { status: 404, html: renderNotFound('Oferta não encontrada.') };
   }
+
+  const { offer: hydratedOffer, coupon } = await hydrateAmazonOfferRecord(offer);
   const [template, visibility] = await Promise.all([
     loadMessageTemplate(),
     loadPlaceholderVisibility(),
   ]);
-  const messagePreview = renderMessageTemplate(template, buildTemplateValues(offer), visibility);
-  return { status: 200, html: renderOfferDetail(offer, messagePreview) };
+  const messagePreview = renderMessageTemplate(
+    template,
+    buildTemplateValues(hydratedOffer),
+    visibility,
+  );
+  return { status: 200, html: renderOfferDetail(hydratedOffer, messagePreview, coupon) };
 }

@@ -1,0 +1,56 @@
+.offer-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.offer-detail-title-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.offer-detail-title-wrap h2 {
+  margin: 8px 0 10px;
+  line-height: 1.35;
+}
+
+.offer-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.offer-detail-grid {
+  margin-bottom: 24px;
+}
+
+.coupon-badge {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.affiliate-link-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  word-break: break-all;
+}
+
+.affiliate-link-row code {
+  font-size: 0.82rem;
+}
+
+.offer-detail-preview h2 {
+  margin-top: 0;
+}

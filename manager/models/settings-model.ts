@@ -17,6 +17,11 @@ import {
   type ScoreConfig,
 } from '../../src/config/score-config.js';
 import {
+  getAmazonConfigFromDb,
+  hydrateAmazonConfigCache,
+  saveAmazonAffiliateConfig,
+} from '../../src/config/amazon-config-store.js';
+import {
   getCouponsUrlFromDb,
   hydrateCouponsConfigCache,
   saveCouponsUrl,
@@ -65,6 +70,7 @@ export type SettingsSaveType =
   | 'senderDelay'
   | 'mlSources'
   | 'couponsUrl'
+  | 'amazonAffiliate'
   | null;
 
 export interface SettingsData {
@@ -96,6 +102,9 @@ export interface SettingsData {
   telegramWorkers: AccountWorkerState[];
   canSpawnWorkers: boolean;
   mlCouponsUrl: string;
+  amazonBaseUrl: string;
+  amazonAffiliateLinkPrefix: string;
+  amazonAffiliateStoreId: string;
   saved: SettingsSaveType;
   error: string | null;
 }
@@ -109,7 +118,7 @@ export async function loadSettingsData(
   saved: SettingsSaveType = null,
   error: string | null = null,
 ): Promise<SettingsData> {
-  await Promise.all([hydrateQueueConfigCache(), hydrateBrandCache(), hydrateCouponsConfigCache()]);
+  await Promise.all([hydrateQueueConfigCache(), hydrateBrandCache(), hydrateCouponsConfigCache(), hydrateAmazonConfigCache()]);
   await ensureDefaultWhatsAppDestinationFromEnv();
   const scoreConfig = await getRuntimeScoreConfigAsync();
   const senderDelayMinutes = await getSenderDelayMinutesFromDb();
@@ -138,6 +147,7 @@ export async function loadSettingsData(
 
   const brand = getBrandSettings();
   const mlCouponsUrl = await getCouponsUrlFromDb();
+  const amazonConfig = await getAmazonConfigFromDb();
   const whatsappWorkers = await listWorkerStates('whatsapp');
   const telegramWorkers = env.TELEGRAM_ENABLED ? await listWorkerStates('telegram') : [];
 
@@ -173,6 +183,9 @@ export async function loadSettingsData(
     telegramWorkers,
     canSpawnWorkers: canManagerSpawnWorkers(),
     mlCouponsUrl,
+    amazonBaseUrl: amazonConfig.baseUrl,
+    amazonAffiliateLinkPrefix: amazonConfig.affiliateLinkPrefix,
+    amazonAffiliateStoreId: amazonConfig.storeId,
     saved,
     error,
   };
@@ -225,6 +238,17 @@ export async function saveCouponsUrlSettings(
   url: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   return runSave(() => saveCouponsUrl(url), 'Falha ao salvar URL de cupons');
+}
+
+export async function saveAmazonAffiliateSettings(input: {
+  baseUrl: string;
+  affiliateLinkPrefix: string;
+  storeId: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  return runSave(
+    () => saveAmazonAffiliateConfig(input),
+    'Falha ao salvar configuração Amazon',
+  );
 }
 
 export async function saveScoreSettings(

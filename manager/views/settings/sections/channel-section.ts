@@ -7,9 +7,6 @@ function renderDestinationItem(destination: SettingsData['whatsappDestinations']
   const status = destination.enabled
     ? '<span class="badge ok">Ativo</span>'
     : '<span class="badge warn">Pausado</span>';
-  const invite = destination.inviteLink
-    ? `<a href="${escapeHtml(destination.inviteLink)}" target="_blank" rel="noopener">Abrir link</a>`
-    : '';
 
   return `
     <li class="destination-item" data-destination-id="${escapeHtml(destination.id)}">
@@ -20,7 +17,6 @@ function renderDestinationItem(destination: SettingsData['whatsappDestinations']
       </div>
       <div class="destination-meta">
         <code>${escapeHtml(destination.jid)}</code>
-        ${invite}
       </div>
       <div class="destination-actions">
         <button
@@ -49,8 +45,7 @@ export function renderChannelSection(data: SettingsData): string {
     <div class="destinations-wrap">
       ${list}
       <button type="button" class="btn btn-sm" id="add-whatsapp-destination">Adicionar destino</button>
-    </div>
-    <p class="meta">Aceita link de canal (<code>whatsapp.com/channel/...</code>) ou grupo (<code>chat.whatsapp.com/...</code>).</p>`;
+    </div>`;
 
   return configRow('Destinos WhatsApp', channelValue);
 }

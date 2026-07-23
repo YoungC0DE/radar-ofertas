@@ -5,12 +5,13 @@ import {
 } from '../../src/config/queue-config-store.js';
 import { env } from '../../src/config/env.js';
 import {
+  findDeliveriesByOfferIds,
   findOffers,
   findLastSentAt,
   getOfferStats,
   type OfferStats,
 } from '../../src/offers/repository.js';
-import type { OfferRecord } from '../../src/offers/types.js';
+import type { DeliveryRecord, OfferRecord } from '../../src/offers/types.js';
 import { estimatePendingSendTimes } from '../../src/queue/sender-schedule.js';
 import { isWithinOperatingHours } from '../../src/utils/datetime.js';
 import { type DatabaseSnapshot, withDatabase } from './db-model.js';
@@ -35,6 +36,7 @@ export interface DashboardData {
   stats: OfferStats;
   pendingOffers: DashboardOfferRow[];
   sentOffers: DashboardOfferRow[];
+  deliveriesByOfferId: Map<string, DeliveryRecord[]>;
   queues: QueuesSnapshot;
   sessions: SessionStatus[];
   withinOperatingHours: boolean;
@@ -82,8 +84,13 @@ export async function loadDashboardData(
 
   let pendingRows: DashboardOfferRow[] = [];
   let sentRows: DashboardOfferRow[] = [];
+  let deliveriesByOfferId = new Map<string, DeliveryRecord[]>();
 
   if (offersResult.database.available) {
+    const allOffers = [
+      ...offersResult.data.pendingOffers,
+      ...offersResult.data.sentOffers,
+    ];
     const schedule = await estimatePendingSendTimes(
       offersResult.data.pendingOffers.map((offer) => offer.id),
     );
@@ -97,6 +104,7 @@ export async function loadDashboardData(
       scheduleAt: offer.sentAt,
       isPending: false,
     }));
+    deliveriesByOfferId = await findDeliveriesByOfferIds(allOffers.map((offer) => offer.id));
   }
 
   const [queues, mlSession, waSession, tgSession] = await Promise.all([
@@ -111,6 +119,7 @@ export async function loadDashboardData(
     stats: offersResult.data.stats,
     pendingOffers: pendingRows,
     sentOffers: sentRows,
+    deliveriesByOfferId,
     queues,
     // O Telegram só aparece quando ligado: quem não usa o canal não deve ver um
     // status vermelho permanente de algo que escolheu não ter.

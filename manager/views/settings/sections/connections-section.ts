@@ -2,7 +2,6 @@ import type { SettingsData } from '../../../models/settings-model.js';
 import type { AccountWorkerState } from '../../../models/process-model.js';
 import { escapeHtml } from '../../helpers.js';
 import {
-  ML_ICON,
   PRISMA_ICON,
   renderConnectCard,
   renderSimpleConnectCard,
@@ -46,9 +45,8 @@ export function renderConnectionsSection(data: SettingsData): string {
   return `
     <section class="connect-section">
       <h2>Conectar com</h2>
-      <p class="meta">Autentique as contas usadas pelo bot direto por aqui — sem precisar rodar comandos no terminal.</p>
+      <p class="meta">Autentique os canais de publicação usados pelo bot — WhatsApp e Telegram.</p>
       <div class="connect-grid">
-        ${renderSimpleConnectCard({ service: 'ml', name: 'Mercado Livre', icon: ML_ICON, status: data.mlSession, connectButtonId: 'connect-ml' })}
         ${renderSimpleConnectCard({ service: 'wa', name: 'WhatsApp', icon: WA_ICON, status: data.waSession, connectButtonId: 'connect-wa' })}
         ${renderTelegramConnectCard(data)}
       </div>

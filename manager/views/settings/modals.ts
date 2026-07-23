@@ -93,6 +93,52 @@ export function renderSettingsModals(data: SettingsData): string {
       </div>
     </div>
 
+    <div id="amazon-affiliate-modal" class="modal-overlay hidden" aria-hidden="true">
+      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="amazon-affiliate-modal-title">
+        <div class="modal-header">
+          <h3 id="amazon-affiliate-modal-title">Editar links Amazon</h3>
+        </div>
+        <form method="post" action="/manager/settings/amazon-affiliate">
+          <div class="modal-body">
+            <label for="modal-amazon-base-url" class="modal-label">URL base do site</label>
+            <input
+              type="url"
+              id="modal-amazon-base-url"
+              name="amazonBaseUrl"
+              value="${escapeHtml(data.amazonBaseUrl)}"
+              required
+              class="modal-input"
+            >
+            <p class="modal-help">Ex.: https://www.amazon.com.br/</p>
+            <label for="modal-amazon-store-id" class="modal-label">ID da loja (tracking tag)</label>
+            <input
+              type="text"
+              id="modal-amazon-store-id"
+              name="amazonAffiliateStoreId"
+              value="${escapeHtml(data.amazonAffiliateStoreId)}"
+              class="modal-input"
+              placeholder="mercadaodasfa-20"
+            >
+            <p class="modal-help">Painel Amazon › Compartilhar links de afiliados › ID da loja. Gera links com ?tag=...</p>
+            <label for="modal-amazon-affiliate-prefix" class="modal-label">Prefixo customizado (opcional)</label>
+            <input
+              type="url"
+              id="modal-amazon-affiliate-prefix"
+              name="amazonAffiliateLinkPrefix"
+              value="${escapeHtml(data.amazonAffiliateLinkPrefix)}"
+              class="modal-input"
+              placeholder="Deixe vazio para usar amazon.com.br/dp/ASIN?tag=..."
+            >
+            <p class="modal-help">Não use link.amazon — não é um domínio válido da Amazon. O formato oficial é amazon.com.br/dp/ASIN?tag=sua-loja.</p>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn modal-cancel" data-modal="amazon-affiliate-modal">Cancelar</button>
+            <button type="submit" class="btn primary">Salvar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div id="channel-link-modal" class="modal-overlay hidden" aria-hidden="true">
       <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="channel-link-modal-title">
         <div class="modal-header">

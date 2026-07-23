@@ -12,6 +12,7 @@
 
   const channelModal = document.getElementById('channel-link-modal');
       const couponsUrlModal = document.getElementById('coupons-url-modal');
+      const amazonAffiliateModal = document.getElementById('amazon-affiliate-modal');
       const operatingHoursModal = document.getElementById('operating-hours-modal');
       const intervalModal = document.getElementById('send-interval-modal');
       const senderDelayModal = document.getElementById('sender-delay-modal');
@@ -32,6 +33,10 @@
 
       document.getElementById('edit-coupons-url')?.addEventListener('click', () => {
         openModal(couponsUrlModal);
+      });
+
+      document.getElementById('edit-amazon-affiliate')?.addEventListener('click', () => {
+        openModal(amazonAffiliateModal);
       });
 
   document.getElementById('add-whatsapp-destination')?.addEventListener('click', () => {
@@ -152,7 +157,7 @@
         });
       });
 
-      [channelModal, couponsUrlModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, brandModal].forEach((modal) => {
+      [channelModal, couponsUrlModal, amazonAffiliateModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, brandModal].forEach((modal) => {
         modal?.addEventListener('click', (e) => {
           if (e.target === modal) closeModal(modal);
         });
@@ -160,7 +165,7 @@
 
       document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
-        [channelModal, couponsUrlModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, brandModal].forEach((modal) => {
+        [channelModal, couponsUrlModal, amazonAffiliateModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, brandModal].forEach((modal) => {
           if (!modal.classList.contains('hidden')) closeModal(modal);
         });
       });

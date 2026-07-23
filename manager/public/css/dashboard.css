@@ -1,5 +1,15 @@
-.action-cell {
+.offers-table-wrap {
+  overflow-x: auto;
+}
+
+.collected-cell {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.collected-cell .inline-form {
+  margin: 0;
 }

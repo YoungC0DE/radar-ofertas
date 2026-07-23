@@ -1,9 +1,17 @@
 import { invalidateAccountsCache } from '../accounts/repository.js';
 import { hydrateBrandCache, invalidateBrandCache } from '../config/brand-config.js';
 import {
+  hydrateAmazonConfigCache,
+  invalidateAmazonConfigCache,
+} from '../config/amazon-config-store.js';
+import {
   hydrateCouponsConfigCache,
   invalidateCouponsConfigCache,
 } from '../config/coupons-config-store.js';
+import {
+  hydrateAmazonSourcesCache,
+  invalidateAmazonSourcesCache,
+} from '../config/amazon-sources-config.js';
 import { hydrateMlSourcesCache, invalidateMlSourcesCache } from '../config/ml-sources-config.js';
 import {
   hydrateQueueConfigCache,
@@ -45,6 +53,16 @@ export function registerConfigCacheHandlers(): void {
   registerCacheInvalidationHandler('coupons-config', async () => {
     invalidateCouponsConfigCache();
     await hydrateCouponsConfigCache();
+  });
+
+  registerCacheInvalidationHandler('amazon-sources', async () => {
+    invalidateAmazonSourcesCache();
+    await hydrateAmazonSourcesCache();
+  });
+
+  registerCacheInvalidationHandler('amazon-config', async () => {
+    invalidateAmazonConfigCache();
+    await hydrateAmazonConfigCache();
   });
 }
 

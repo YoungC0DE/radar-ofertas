@@ -1,14 +1,15 @@
 import { isChannel, type Channel } from '../../src/channels/types.js';
 import {
-  addSource,
+  addAmazonSource,
+  addMlSource,
   loadSourcesData,
-  removeSource,
+  removeAmazonSource,
+  removeMlSource,
   saveSourceFlags,
   type SourcesSaveType,
 } from '../models/sources-model.js';
 import { renderSourcesPage } from '../views/sources.js';
 
-/** Canal da URL; default WhatsApp quando ausente ou inválido. */
 export function parseSourcesChannel(value: string | undefined): Channel {
   return value && isChannel(value) ? value : 'whatsapp';
 }
@@ -34,15 +35,28 @@ export async function handleSourceFlagsSave(
   return page(channel, result.ok ? 'flags' : null, result.ok ? null : result.error);
 }
 
-export async function handleSourceAdd(
+export async function handleMlSourceAdd(
   channel: Channel,
   form: Record<string, string>,
 ): Promise<string> {
-  const result = await addSource(channel, form.url ?? '', form.label);
+  const result = await addMlSource(channel, form.url ?? '', form.label);
   return page(channel, result.ok ? 'added' : null, result.ok ? null : result.error);
 }
 
-export async function handleSourceRemove(channel: Channel, id: string): Promise<string> {
-  const result = await removeSource(id);
+export async function handleAmazonSourceAdd(
+  channel: Channel,
+  form: Record<string, string>,
+): Promise<string> {
+  const result = await addAmazonSource(channel, form.url ?? '', form.label);
+  return page(channel, result.ok ? 'added' : null, result.ok ? null : result.error);
+}
+
+export async function handleMlSourceRemove(channel: Channel, id: string): Promise<string> {
+  const result = await removeMlSource(id);
+  return page(channel, result.ok ? 'removed' : null, result.ok ? null : result.error);
+}
+
+export async function handleAmazonSourceRemove(channel: Channel, id: string): Promise<string> {
+  const result = await removeAmazonSource(id);
   return page(channel, result.ok ? 'removed' : null, result.ok ? null : result.error);
 }

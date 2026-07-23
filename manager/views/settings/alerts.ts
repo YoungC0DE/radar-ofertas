@@ -10,6 +10,7 @@ const SAVED_MESSAGES: Partial<Record<NonNullable<SettingsSaveType>, string>> = {
   senderDelay: 'Tempo entre envios atualizado com sucesso.',
   mlSources: 'Fontes ML atualizadas com sucesso.',
   couponsUrl: 'URL de cupons atualizada com sucesso.',
+  amazonAffiliate: 'Configuração Amazon atualizada com sucesso.',
 };
 
 export function renderSettingsAlert(saved: SettingsSaveType, error: string | null): string {

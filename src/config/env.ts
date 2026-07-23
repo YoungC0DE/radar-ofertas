@@ -71,6 +71,29 @@ const envSchema = z
       .string()
       .url()
       .default('https://www.mercadolivre.com.br/afiliados/coupons#hub'),
+    AMAZON_BASE_URL: z.string().url().default('https://www.amazon.com.br/'),
+    AMAZON_AFFILIATE_LINK_PREFIX: z.string().default(''),
+    /** ID da loja no programa de afiliados Amazon — ex.: mercadaodasfa-20 */
+    AMAZON_AFFILIATE_STORE_ID: z.string().default(''),
+    AMAZON_SOURCES: z
+      .string()
+      .default('https://www.amazon.com.br/b/node/122326793011')
+      .transform((val) =>
+        val
+          .split(',')
+          .map((c) => c.trim())
+          .filter(Boolean),
+      ),
+    AMAZON_SCRAPER_USER_AGENT: z
+      .string()
+      .default(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+      ),
+    AMAZON_USE_BROWSER_FALLBACK: z
+      .string()
+      .default('true')
+      .transform((val) => val === 'true' || val === '1'),
+    AMAZON_HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
     AFFILIATE_CONFIG: z
       .string()
       .default('{}')

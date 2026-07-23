@@ -1,9 +1,16 @@
+import type { DeliveryRecord } from '../../src/offers/types.js';
 import type { DashboardData, DashboardOfferRow } from '../models/dashboard-model.js';
 import { escapeHtml, formatCurrency, formatDate, statusBadge } from './helpers.js';
+import { renderDestino, renderPlatformBadge } from './offer-cells.js';
 import { renderLayout } from './layout.js';
 import { pageScripts, pageStyles } from './page-assets.js';
 
 const TRASH_ICON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`;
+
+const OFFER_TABLE_HEADERS =
+  '<tr><th>Origem</th><th>ID</th><th>Destino</th><th>Título</th><th>Score</th><th>Preço</th><th>Desconto</th><th>Status</th><th>Previsão de envio</th><th>Coletada em</th></tr>';
+
+const OFFER_TABLE_COLSPAN = 10;
 
 function sessionBadge(ok: boolean): string {
   return ok ? '<span class="badge ok">OK</span>' : '<span class="badge err">Atenção</span>';
@@ -20,40 +27,52 @@ function queueRow(label: string, counts: DashboardData['queues']['collector']): 
   </tr>`;
 }
 
-function renderOfferRow(row: DashboardOfferRow, timezone: string): string {
+function renderOfferRow(
+  row: DashboardOfferRow,
+  timezone: string,
+  deliveriesByOfferId: Map<string, DeliveryRecord[]>,
+): string {
   const { offer, scheduleAt, isPending } = row;
-  const scheduleLabel = isPending ? 'Previsão' : 'Enviada em';
-  const actionCell = isPending
-    ? `<div class="action-cell">
-        <form method="post" action="/manager/offers/${escapeHtml(offer.id)}/send-now" class="inline-form">
+  const scheduleCell = scheduleAt ? formatDate(scheduleAt, timezone) : '—';
+
+  const pendingActions = isPending
+    ? `<form method="post" action="/manager/offers/${escapeHtml(offer.id)}/send-now" class="inline-form">
           <button type="submit" class="btn btn-sm primary">Enviar agora</button>
         </form>
         <form method="post" action="/manager/offers/${escapeHtml(offer.id)}/delete" class="offer-delete-form">
           <button type="button" class="btn-trash offer-delete-btn" title="Apagar oferta pendente" aria-label="Apagar oferta">${TRASH_ICON}</button>
-        </form>
-      </div>`
-    : '—';
+        </form>`
+    : '';
 
   return `<tr>
-    <td><a class="link" href="/manager/offers/${escapeHtml(offer.id)}">${escapeHtml(offer.id.slice(0, 8))}…</a></td>
-    <td>${escapeHtml(offer.title.slice(0, 60))}${offer.title.length > 60 ? '…' : ''}</td>
+    <td>${renderPlatformBadge(offer)}</td>
+    <td><a class="link" href="/manager/offers/${escapeHtml(offer.id)}">${escapeHtml(offer.id.slice(0, 10))}…</a></td>
+    <td><div class="dest-cell">${renderDestino(deliveriesByOfferId.get(offer.id))}</div></td>
+    <td>${escapeHtml(offer.title.slice(0, 50))}${offer.title.length > 50 ? '…' : ''}</td>
     <td>${offer.score}</td>
     <td>${formatCurrency(offer.price)}</td>
+    <td>${offer.discount != null ? `${offer.discount}%` : '—'}</td>
     <td>${statusBadge(offer.sentAt)}</td>
-    <td title="${escapeHtml(scheduleLabel)}">${formatDate(scheduleAt, timezone)}</td>
-    <td>${actionCell}</td>
+    <td>${scheduleCell}</td>
+    <td>
+      <div class="collected-cell">
+        <span>${formatDate(offer.createdAt, timezone)}</span>
+        ${pendingActions}
+      </div>
+    </td>
   </tr>`;
 }
 
 function renderOffersTable(
   rows: DashboardOfferRow[],
   timezone: string,
+  deliveriesByOfferId: DashboardData['deliveriesByOfferId'],
   emptyMessage: string,
 ): string {
   if (rows.length === 0) {
-    return `<tr><td colspan="7">${escapeHtml(emptyMessage)}</td></tr>`;
+    return `<tr><td colspan="${OFFER_TABLE_COLSPAN}">${escapeHtml(emptyMessage)}</td></tr>`;
   }
-  return rows.map((row) => renderOfferRow(row, timezone)).join('');
+  return rows.map((row) => renderOfferRow(row, timezone, deliveriesByOfferId)).join('');
 }
 
 function formatPreviewCount(shown: number, total: number): string {
@@ -94,12 +113,22 @@ export function renderDashboard(data: DashboardData): string {
       : '';
 
   const pendingRows = !data.database.available
-    ? `<tr><td colspan="7">${escapeHtml(data.database.error ?? 'Banco indisponível')}</td></tr>`
-    : renderOffersTable(data.pendingOffers, data.timezone, 'Nenhuma oferta pendente.');
+    ? `<tr><td colspan="${OFFER_TABLE_COLSPAN}">${escapeHtml(data.database.error ?? 'Banco indisponível')}</td></tr>`
+    : renderOffersTable(
+        data.pendingOffers,
+        data.timezone,
+        data.deliveriesByOfferId,
+        'Nenhuma oferta pendente.',
+      );
 
   const sentRows = !data.database.available
     ? ''
-    : renderOffersTable(data.sentOffers, data.timezone, 'Nenhuma oferta enviada ainda.');
+    : renderOffersTable(
+        data.sentOffers,
+        data.timezone,
+        data.deliveriesByOfferId,
+        'Nenhuma oferta enviada ainda.',
+      );
 
   const body = `
     ${
@@ -163,18 +192,22 @@ export function renderDashboard(data: DashboardData): string {
           <button type="submit" class="btn btn-sm primary">Buscar novos anúncios</button>
         </form>
       </div>
+      <div class="offers-table-wrap">
       <table>
-        <thead><tr><th>ID</th><th>Título</th><th>Score</th><th>Preço</th><th>Status</th><th>Horário</th><th>Ação</th></tr></thead>
+        <thead>${OFFER_TABLE_HEADERS}</thead>
         <tbody>${pendingRows}</tbody>
       </table>
+      </div>
       <h3 class="subsection-title">Últimas enviadas (${formatPreviewCount(data.sentOffers.length, data.stats.sent)})</h3>
+      <div class="offers-table-wrap">
       <table>
-        <thead><tr><th>ID</th><th>Título</th><th>Score</th><th>Preço</th><th>Status</th><th>Horário</th><th>Ação</th></tr></thead>
+        <thead>${OFFER_TABLE_HEADERS}</thead>
         <tbody>${sentRows}</tbody>
       </table>
+      </div>
     </section>
 
     ${pageScripts('shared/offer-delete.js')}`;
 
-  return renderLayout('Dashboard', body, 'dashboard', pageStyles('dashboard.css'));
+  return renderLayout('Dashboard', body, 'dashboard', pageStyles('offers.css', 'dashboard.css'));
 }

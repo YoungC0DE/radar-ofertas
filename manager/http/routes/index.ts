@@ -30,6 +30,7 @@ import {
   handleBrandSave,
   handleChannelLinkSave,
   handleCouponsUrlSave,
+  handleAmazonAffiliateSave,
   handleOperatingHoursSave,
   handleScoreSave,
   handleSendIntervalSave,
@@ -48,9 +49,11 @@ import {
   showCouponsPage,
 } from '../../controllers/coupons-controller.js';
 import {
-  handleSourceAdd,
+  handleAmazonSourceAdd,
+  handleAmazonSourceRemove,
+  handleMlSourceAdd,
+  handleMlSourceRemove,
   handleSourceFlagsSave,
-  handleSourceRemove,
   parseSourcesChannel,
   showSourcesPage,
 } from '../../controllers/sources-controller.js';
@@ -110,13 +113,15 @@ export const dashboardRoutes: RouteDefinition[] = [
   {
     method: 'POST',
     pattern: '/manager/offers/collect',
-    handler: async ({ res }) => {
+    handler: async ({ res, url }) => {
       const result = await handleCollectOffers();
+      const returnToOffers = url.searchParams.get('returnTo') === 'offers';
+      const base = returnToOffers ? '/manager/offers' : '/manager';
       if ('error' in result) {
-        sendRedirect(res, `/manager?collectError=${encodeURIComponent(result.error)}`);
+        sendRedirect(res, `${base}?collectError=${encodeURIComponent(result.error)}`);
         return;
       }
-      sendRedirect(res, '/manager?collectQueued=1');
+      sendRedirect(res, `${base}?collectQueued=1`);
     },
   },
   {
@@ -319,6 +324,14 @@ export const settingsRoutes: RouteDefinition[] = [
       sendHtml(res, 200, await handleCouponsUrlSave(form.couponsUrl ?? ''));
     },
   },
+  {
+    method: 'POST',
+    pattern: '/manager/settings/amazon-affiliate',
+    handler: async ({ req, res }) => {
+      const form = parseFormUrlEncoded(await readFormBody(req));
+      sendHtml(res, 200, await handleAmazonAffiliateSave(form));
+    },
+  },
 ];
 
 export const templateRoutes: RouteDefinition[] = [
@@ -452,7 +465,16 @@ export const sourcesRoutes: RouteDefinition[] = [
     handler: async ({ req, res, params }) => {
       const channel = parseSourcesChannel(params.channel);
       const form = parseFormUrlEncoded(await readFormBody(req));
-      sendHtml(res, 200, await handleSourceAdd(channel, form));
+      sendHtml(res, 200, await handleMlSourceAdd(channel, form));
+    },
+  },
+  {
+    method: 'POST',
+    pattern: '/manager/sources/:channel/add-amazon',
+    handler: async ({ req, res, params }) => {
+      const channel = parseSourcesChannel(params.channel);
+      const form = parseFormUrlEncoded(await readFormBody(req));
+      sendHtml(res, 200, await handleAmazonSourceAdd(channel, form));
     },
   },
   {
@@ -460,7 +482,15 @@ export const sourcesRoutes: RouteDefinition[] = [
     pattern: '/manager/sources/:channel/remove/:sourceId',
     handler: async ({ res, params }) => {
       const channel = parseSourcesChannel(params.channel);
-      sendHtml(res, 200, await handleSourceRemove(channel, params.sourceId));
+      sendHtml(res, 200, await handleMlSourceRemove(channel, params.sourceId));
+    },
+  },
+  {
+    method: 'POST',
+    pattern: '/manager/sources/:channel/remove-amazon/:sourceId',
+    handler: async ({ res, params }) => {
+      const channel = parseSourcesChannel(params.channel);
+      sendHtml(res, 200, await handleAmazonSourceRemove(channel, params.sourceId));
     },
   },
 ];

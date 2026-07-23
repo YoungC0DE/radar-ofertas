@@ -1,5 +1,5 @@
 import { hydrateBrandCache } from './config/brand-config.js';
-import { hydrateMlSourcesCache } from './config/ml-sources-config.js';
+import { hydrateAllSourcesCaches } from './sources/routing.js';
 import { hydrateQueueConfigCache } from './config/queue-config-store.js';
 import { hydrateScoreConfigCache } from './config/score-config.js';
 import { closeBrowserPool } from './mercado-livre/browser-pool.js';
@@ -18,7 +18,7 @@ async function main(): Promise<void> {
     hydrateQueueConfigCache(),
     hydrateScoreConfigCache(),
     hydrateBrandCache(),
-    hydrateMlSourcesCache(),
+    hydrateAllSourcesCaches(),
   ]);
   await scheduleCollectorJob();
   await bootstrapCacheCoherence();

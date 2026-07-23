@@ -3,13 +3,13 @@ import type { Channel } from '../channels/types.js';
 import { findAccountsByPlatform } from '../accounts/repository.js';
 import { getEnabledAccountIdsForChannel } from '../accounts/channel-accounts.js';
 import {
-  getActiveMlCategoriesForChannel,
-  getChannelsForCategory,
-  hydrateMlSourcesCache,
-} from '../config/ml-sources-config.js';
+  getActiveSourcesForChannel,
+  getChannelsForSource,
+  hydrateAllSourcesCaches,
+  iterateSourcePages,
+} from '../sources/routing.js';
 import { getSearchLimit } from '../config/queue-config-store.js';
 import { calculateOfferScore, getRuntimeScoreConfig } from '../config/score-config.js';
-import { iterateScrapedPages } from '../mercado-livre/index.js';
 import {
   enqueueOfferSend,
   enqueueCollectSourceJob,
@@ -45,7 +45,7 @@ export interface ServiceDeps {
   calculateOfferScore: typeof calculateOfferScore;
   getEnabledChannels: typeof getEnabledChannels;
   isChannelEnabled: typeof isChannelEnabled;
-  getChannelsForCategory: typeof getChannelsForCategory;
+  getChannelsForSource: typeof getChannelsForSource;
   findOfferIdByMercadoLivreId: typeof findOfferIdByMercadoLivreId;
   findExistingDeliveryChannels: typeof findExistingDeliveryChannels;
   sentOfferExistsByTitleAndPrice: typeof sentOfferExistsByTitleAndPrice;
@@ -60,7 +60,7 @@ const defaultDeps: ServiceDeps = {
   calculateOfferScore,
   getEnabledChannels,
   isChannelEnabled,
-  getChannelsForCategory,
+  getChannelsForSource,
   findOfferIdByMercadoLivreId,
   findExistingDeliveryChannels,
   sentOfferExistsByTitleAndPrice,
@@ -152,7 +152,7 @@ export async function processOffer(
 function resolveOfferChannels(rawOffer: RawOffer, deps: ServiceDeps = defaultDeps): Channel[] {
   const enabled = deps.getEnabledChannels();
   if (!rawOffer.sourceCategory) return enabled;
-  const sourceChannels = deps.getChannelsForCategory(rawOffer.sourceCategory);
+  const sourceChannels = deps.getChannelsForSource(rawOffer.sourceCategory);
   return enabled.filter((channel) => sourceChannels.includes(channel));
 }
 
@@ -208,7 +208,7 @@ async function collectPool(category: string): Promise<RawOffer[]> {
   const pool: RawOffer[] = [];
   let pages = 0;
 
-  for await (const page of iterateScrapedPages(category)) {
+  for await (const page of iterateSourcePages(category)) {
     // Marcamos a fonte em cada oferta para o dispatch saber a quais canais ela
     // pertence, mesmo depois de os pools serem embaralhados juntos no sorteio.
     for (const offer of page) offer.sourceCategory = category;
@@ -231,7 +231,7 @@ async function collectPool(category: string): Promise<RawOffer[]> {
  * reconta (ver dedup por canal em processOffer).
  */
 export async function collectNewOffers(): Promise<{ total: number; enqueued: number }> {
-  await hydrateMlSourcesCache();
+  await hydrateAllSourcesCaches();
   const target = getSearchLimit();
   const channels = getEnabledChannels();
 
@@ -251,7 +251,7 @@ async function collectForChannel(
   channel: Channel,
   target: number,
 ): Promise<{ total: number; enqueued: number }> {
-  const categories = getActiveMlCategoriesForChannel(channel);
+  const categories = getActiveSourcesForChannel(channel);
   if (categories.length === 0) {
     logger.info({ channel }, 'Nenhuma fonte ativa para o canal — nada a coletar');
     return { total: 0, enqueued: 0 };
@@ -312,13 +312,13 @@ async function collectForChannel(
 
 /** Fan-out: enfileira um job por fonte ativa — permite paralelismo entre fontes na fila. */
 export async function orchestrateOfferCollection(triggeredAt: string): Promise<{ jobs: number }> {
-  await hydrateMlSourcesCache();
+  await hydrateAllSourcesCaches();
   const target = getSearchLimit();
   const channels = getEnabledChannels();
   let jobs = 0;
 
   for (const channel of channels) {
-    const categories = getActiveMlCategoriesForChannel(channel);
+    const categories = getActiveSourcesForChannel(channel);
     if (categories.length === 0) continue;
 
     const quota = Math.max(1, Math.floor(target / categories.length));

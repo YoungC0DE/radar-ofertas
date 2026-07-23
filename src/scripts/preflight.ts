@@ -2,6 +2,10 @@ import { telegramPublisher } from '../channels/telegram-publisher.js';
 import { env } from '../config/env.js';
 import { prisma } from '../database/client.js';
 import { buildMlCategoryRows, hydrateMlSourcesCache } from '../config/ml-sources-config.js';
+import {
+  buildAmazonSourceRows,
+  hydrateAmazonSourcesCache,
+} from '../config/amazon-sources-config.js';
 import { hasValidSession, loadSessionMeta, loadStorageState } from '../mercado-livre/session.js';
 import { getCollectorQueue, isRedisEnabled, closeAllQueues } from '../queue/index.js';
 import { formatIsoInTimezone } from '../utils/datetime.js';
@@ -159,12 +163,36 @@ async function checkAffiliateTag(): Promise<PreflightItem> {
   if (!tag) {
     return {
       ok: false,
-      label: 'Tag afiliado',
+      label: 'Tag afiliado (Mercado Livre)',
       detail: 'AFFILIATE_CONFIG.tag vazio',
-      fix: 'Defina AFFILIATE_CONFIG={"tag":"sua-tag"} no .env',
+      fix: 'Defina AFFILIATE_CONFIG={"tag":"sua-tag-ml"} no .env (tag do programa ML, não da Amazon)',
     };
   }
-  return { ok: true, label: 'Tag afiliado', detail: tag };
+  return { ok: true, label: 'Tag afiliado (Mercado Livre)', detail: tag };
+}
+
+async function checkAmazonStoreId(): Promise<PreflightItem> {
+  await hydrateAmazonSourcesCache();
+  const activeAmazon = buildAmazonSourceRows().filter((row) => row.channels.length > 0);
+  if (activeAmazon.length === 0) {
+    return {
+      ok: true,
+      label: 'ID da loja (Amazon)',
+      detail: 'Nenhuma fonte Amazon ativa — opcional',
+    };
+  }
+
+  const storeId = env.AMAZON_AFFILIATE_STORE_ID.trim();
+  if (!storeId) {
+    return {
+      ok: false,
+      label: 'ID da loja (Amazon)',
+      detail: 'AMAZON_AFFILIATE_STORE_ID vazio',
+      fix: 'Defina AMAZON_AFFILIATE_STORE_ID=mercadaodasfa-20 no .env (ID da loja em Compartilhar links de afiliados)',
+    };
+  }
+
+  return { ok: true, label: 'ID da loja (Amazon)', detail: storeId };
 }
 
 async function checkCategories(): Promise<PreflightItem> {
@@ -192,6 +220,38 @@ async function checkCategories(): Promise<PreflightItem> {
   };
 }
 
+async function checkAmazonSources(): Promise<PreflightItem> {
+  await hydrateAmazonSourcesCache();
+  const rows = buildAmazonSourceRows().filter((row) => row.channels.length > 0);
+  const invalid = rows.filter((row) => !row.valid);
+
+  if (invalid.length > 0) {
+    return {
+      ok: false,
+      label: 'Fontes Amazon',
+      detail: `${invalid.length} inválida(s): ${invalid.map((c) => c.source).join(', ')}`,
+      fix: 'Ajuste AMAZON_SOURCES no .env ou remova links extras inválidos no painel',
+    };
+  }
+
+  if (rows.length === 0) {
+    return {
+      ok: true,
+      label: 'Fontes Amazon',
+      detail: 'Nenhuma fonte ativa',
+    };
+  }
+
+  const envCount = rows.filter((row) => row.fromEnv).length;
+  const customCount = rows.filter((row) => !row.fromEnv).length;
+
+  return {
+    ok: true,
+    label: 'Fontes Amazon',
+    detail: `${rows.length} ativa(s) — ${envCount} do .env, ${customCount} extra(s)`,
+  };
+}
+
 async function runChecks(profile: PreflightProfile): Promise<PreflightItem[]> {
   const items: PreflightItem[] = [];
 
@@ -209,6 +269,7 @@ async function runChecks(profile: PreflightProfile): Promise<PreflightItem[]> {
 
   if (profile === 'all' || profile === 'collector' || profile === 'manager') {
     items.push(await checkCategories());
+    items.push(await checkAmazonSources());
   }
 
   if (profile === 'all' || profile === 'worker-telegram') {
@@ -218,6 +279,7 @@ async function runChecks(profile: PreflightProfile): Promise<PreflightItem[]> {
   if (profile === 'all' || profile === 'collector') {
     items.push(await checkMercadoLivre());
     items.push(await checkAffiliateTag());
+    items.push(await checkAmazonStoreId());
   }
 
   return items;

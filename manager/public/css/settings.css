@@ -367,3 +367,88 @@
         word-break: break-all;
         font-size: 0.85rem;
       }
+      .affiliate-programs-section {
+        margin-top: 32px;
+      }
+      .settings-accordions {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .settings-accordion {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+      .settings-accordion-summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 18px;
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+        font-weight: 600;
+        font-size: 1.05rem;
+        background: #f9fafb;
+        border-bottom: 1px solid transparent;
+        transition: background 0.15s ease;
+      }
+      .settings-accordion-summary::-webkit-details-marker {
+        display: none;
+      }
+      .settings-accordion-summary::marker {
+        content: '';
+      }
+      .settings-accordion[open] > .settings-accordion-summary {
+        border-bottom-color: var(--border);
+      }
+      .settings-accordion-summary:hover {
+        background: #f3f4f6;
+      }
+      .settings-accordion-heading {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--text);
+      }
+      .settings-accordion-chevron {
+        width: 10px;
+        height: 10px;
+        border-right: 2px solid var(--text-muted);
+        border-bottom: 2px solid var(--text-muted);
+        transform: rotate(45deg);
+        transition: transform 0.2s ease;
+        flex-shrink: 0;
+        margin-top: -4px;
+      }
+      .settings-accordion[open] .settings-accordion-chevron {
+        transform: rotate(-135deg);
+        margin-top: 4px;
+      }
+      .settings-accordion-body {
+        padding: 18px;
+      }
+      .settings-accordion-body > .meta:first-child {
+        margin-top: 0;
+      }
+      .affiliate-panel-grid {
+        display: grid;
+        grid-template-columns: minmax(260px, 360px) 1fr;
+        gap: 20px;
+        align-items: start;
+      }
+      .affiliate-panel-config .config-row:last-child {
+        border-bottom: none;
+      }
+      .affiliate-coming-soon {
+        padding: 8px 0;
+      }
+      @media (max-width: 900px) {
+        .affiliate-panel-grid {
+          grid-template-columns: 1fr;
+        }
+      }
