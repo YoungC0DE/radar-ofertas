@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { hostname } from 'node:os';
 import { getEnabledAccountIdsForChannel } from '../../src/accounts/channel-accounts.js';
 import { resolveAccountAuthPath } from '../../src/accounts/paths.js';
-import { findAccountById, loadAccounts } from '../../src/accounts/repository.js';
+import { findAccount, loadAccounts } from '../../src/accounts/repository.js';
 import { DEFAULT_ACCOUNT_ID } from '../../src/accounts/types.js';
 import type { Channel } from '../../src/channels/types.js';
 import { env } from '../../src/config/env.js';
@@ -220,7 +220,7 @@ export async function listWorkerStates(channel: Channel): Promise<AccountWorkerS
 
   return Promise.all(
     accountIds.map(async (accountId) => {
-      const account = accounts.find((row) => row.id === accountId);
+      const account = accounts.find((row) => row.id === accountId && row.platform === channel);
       const label = account?.label ?? accountId;
       return {
         accountId,
@@ -244,7 +244,7 @@ export async function startWorker(channel: Channel, accountId?: string): Promise
     return deriveExternalWorkerState(channel, resolvedAccountId);
   }
 
-  const account = await findAccountById(resolvedAccountId);
+  const account = await findAccount(resolvedAccountId, channel);
   if (!account) {
     return {
       status: 'error',

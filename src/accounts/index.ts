@@ -18,6 +18,7 @@ export type {
 export { resolveAccountAuthPath, resolveAccountsDataRoot } from './paths.js';
 export { buildDefaultAccountsFromEnv } from './default-accounts.js';
 export {
+  findAccount,
   findAccountById,
   findAccountsByPlatform,
   getDefaultAccountForPlatform,

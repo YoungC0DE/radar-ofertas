@@ -66,7 +66,7 @@ async function sendTextMessageNow(channel: Channel, text: string): Promise<void>
 
   for (const accountId of accountIds) {
     if (channel === 'whatsapp' && accountId === DEFAULT_ACCOUNT_ID && getWhatsAppSocket()) {
-      const account = await findAccountById(accountId);
+      const account = await findAccountById(accountId, 'whatsapp');
       if (account?.platform === 'whatsapp') {
         const sock = await requireWhatsAppSocket();
         await sendOffer(sock, account.config.channelId, null, text);

@@ -83,14 +83,16 @@ model AutoMessage {
 }
 
 /// Conta de envio ou sessão (WhatsApp, Telegram, Mercado Livre afiliado).
+/// O mesmo `id` (ex.: default) pode existir em plataformas diferentes.
 model Account {
-  id        String   @id
+  id        String
   platform  String
   label     String
   enabled   Boolean  @default(true)
   config    Json
   createdAt DateTime @default(now()) @map("created_at")
 
+  @@id([id, platform])
   @@index([platform, enabled])
   @@map("accounts")
 }

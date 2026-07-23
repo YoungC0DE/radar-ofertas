@@ -3,7 +3,7 @@ import type { ChannelPublisher } from '../channels/types.js';
 import { env } from '../config/env.js';
 import { setWhatsAppAuthPath } from '../whatsapp/index.js';
 import { resolveAccountAuthPath } from './paths.js';
-import { findAccountById } from './repository.js';
+import { findAccount } from './repository.js';
 import { DEFAULT_ACCOUNT_ID, type Account, type AccountPlatform } from './types.js';
 
 export function resolveWorkerAccountId(): string {
@@ -26,7 +26,7 @@ function assertAccountPlatform(
 /** Carrega a conta do worker e configura paths de sessão antes de conectar. */
 export async function loadWorkerPublisher(platform: AccountPlatform): Promise<ChannelPublisher> {
   const accountId = resolveWorkerAccountId();
-  const account = await findAccountById(accountId);
+  const account = await findAccount(accountId, platform);
   if (!account) {
     throw new Error(`Conta "${accountId}" não encontrada`);
   }

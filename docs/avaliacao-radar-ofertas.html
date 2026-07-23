@@ -62,12 +62,36 @@
     .bar-value { width: 36px; text-align: right; font-weight: 600; }
     code { background: #f1f5f9; padding: 1px 5px; border-radius: 4px; font-size: 9pt; }
     .page-break { page-break-before: always; }
+    .scores-extended {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      margin: 20px 0;
+    }
+    .scores-extended .score-card { padding: 10px; }
+    .scores-extended .score-card .value { font-size: 18pt; }
+    .scores-extended .score-card .label { font-size: 7.5pt; line-height: 1.2; }
+    .part-header {
+      background: #f1f5f9;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin: 28px 0 16px;
+      border-left: 4px solid #6366f1;
+    }
+    .part-header h2 { border: none; margin: 0 0 6px; padding: 0; }
+    .dim-question {
+      font-style: italic;
+      color: #64748b;
+      font-size: 10pt;
+      margin: 4px 0 12px;
+    }
+    .neutral { color: #92400e; }
   </style>
 </head>
 <body>
 
 <h1>Avaliação Técnica</h1>
-<p class="subtitle">Radar Ofertas · Node.js / TypeScript · Julho 2026 · Análise pós Fases 1–4 + hardening (qualidade e escalabilidade)</p>
+<p class="subtitle">Radar Ofertas · Node.js / TypeScript · Julho 2026 · 5 pilares + 10 dimensões complementares</p>
 
 <div class="scores">
   <div class="score-card"><div class="value">8,0</div><div class="label">Arquitetura</div></div>
@@ -137,13 +161,14 @@
   <tr><td>Acoplamento residual</td><td>Moderado — manager/process-model, Telegram token global</td></tr>
 </table>
 
-<h2>2. Qualidade de código — 7,5 / 10</h2>
+<h2>2. Qualidade de código — 8,0 / 10</h2>
 
 <h3>Pontos fortes</h3>
 <ul>
-  <li class="pro"><strong>TypeScript strict:</strong> <code>strict: true</code>, <code>noUnusedLocals</code>, <code>verbatimModuleSyntax</code>.</li>
+  <li class="pro"><strong>TypeScript strict:</strong> <code>strict: true</code>, <code>noUnusedLocals</code>, <code>verbatimModuleSyntax</code>; <code>tsc</code> limpo em <code>src/</code> + <code>manager/</code>.</li>
+  <li class="pro"><strong>Gate de qualidade:</strong> CI com <code>tsc</code>, ESLint, Prettier e 111 testes unitários (21 arquivos).</li>
   <li class="pro"><strong>ENV com Zod:</strong> validação centralizada em <code>config/env.ts</code> com lazy proxy e stub para testes.</li>
-  <li class="pro"><strong>Testabilidade:</strong> <code>ServiceDeps</code> injetável; <code>service.test.ts</code> com 10+ casos.</li>
+  <li class="pro"><strong>Testabilidade:</strong> <code>ServiceDeps</code> injetável; cobertura em offers/, ML, jobs/, whatsapp/ e manager/http.</li>
   <li class="pro"><strong>Validação de contas:</strong> Zod em <code>account-config.ts</code> — shape tipado na leitura/gravação.</li>
   <li class="pro"><strong>Error handling:</strong> <code>DelayedError</code> para pacing, circuit breaker ML, retries BullMQ (5x, backoff 30s).</li>
   <li class="pro"><strong>Logger centralizado:</strong> pino em <code>utils/logger.ts</code> + log-store Redis.</li>
@@ -200,7 +225,7 @@
   <tr><td>manager/</td><td>62</td><td>Painel MVC (~54 rotas)</td></tr>
 </table>
 
-<h2>4. Escalabilidade — 7,0 / 10</h2>
+<h2>4. Escalabilidade — 8,0 / 10</h2>
 
 <h3>Já ok</h3>
 <ul>
@@ -332,22 +357,348 @@
 
 <div class="page-break"></div>
 
-<h2>Comparativo — antes vs depois das Fases 1–4</h2>
+<div class="part-header">
+  <h2>Parte II — Dimensões complementares</h2>
+  <p style="margin:0;font-size:10pt;color:#475569">
+    Além dos 5 pilares (arquitetura, qualidade, organização, escalabilidade, segurança), estas dimensões
+    avaliam como o projeto se comporta <strong>em operação</strong> — diagnóstico, resiliência, custo, dados,
+    DX, testes em profundidade, riscos de negócio, painel, entrega e débito técnico.
+  </p>
+</div>
+
+<div class="scores-extended">
+  <div class="score-card"><div class="value">7,5</div><div class="label">Operabilidade</div></div>
+  <div class="score-card"><div class="value">8,0</div><div class="label">Confiabilidade</div></div>
+  <div class="score-card"><div class="value">7,5</div><div class="label">Performance</div></div>
+  <div class="score-card"><div class="value">8,0</div><div class="label">Dados</div></div>
+  <div class="score-card"><div class="value">8,0</div><div class="label">DX</div></div>
+  <div class="score-card"><div class="value">7,0</div><div class="label">Testes (estratégia)</div></div>
+  <div class="score-card"><div class="value">6,0</div><div class="label">Riscos produto</div></div>
+  <div class="score-card"><div class="value">7,0</div><div class="label">UX painel</div></div>
+  <div class="score-card"><div class="value">6,5</div><div class="label">CI/CD</div></div>
+  <div class="score-card"><div class="value">7,0</div><div class="label">Débito técnico</div></div>
+</div>
+
+<div class="average" style="background:#312e81;margin-bottom:24px">
+  <div class="value">7,25</div>
+  <div class="label">Média das 10 dimensões complementares</div>
+</div>
+
+<h2>6. Operabilidade (Ops / SRE) — 7,5 / 10</h2>
+<p class="dim-question">Pergunta central: um operador consegue diagnosticar e recuperar sem abrir o código?</p>
+
+<h3>Pontos fortes</h3>
+<ul>
+  <li class="pro"><strong>Preflight por profile:</strong> <code>src/scripts/preflight.ts</code> valida ENV/DB/Redis antes de collector, worker, manager e scheduler.</li>
+  <li class="pro"><strong>Orquestração local:</strong> <code>npm run up</code> sobe collector + manager; Docker Compose com serviços separados (collector, scheduler, workers).</li>
+  <li class="pro"><strong>Logs estruturados:</strong> pino em <code>utils/logger.ts</code> + <code>log-store</code> Redis — página de logs no painel com filtros.</li>
+  <li class="pro"><strong>Métricas centralizadas:</strong> <code>utils/metrics.ts</code> em Redis; API <code>/manager/api/metrics</code>.</li>
+  <li class="pro"><strong>Estado compartilhado:</strong> QR WhatsApp, heartbeat worker e connect state em <code>redis-state.ts</code> — visível no painel cross-process.</li>
+  <li class="pro"><strong>Health check:</strong> <code>GET /manager/health</code> para load balancer.</li>
+  <li class="pro"><strong>Graceful shutdown:</strong> SIGINT/SIGTERM em <code>app.ts</code>, <code>worker-runner.ts</code>, <code>scheduler.ts</code>; fecha filas, Redis, browser pool.</li>
+</ul>
+
+<h3>Pontos fracos</h3>
+<ul>
+  <li class="con">Sem alertas proativos (PagerDuty, webhook, e-mail) — depende de olhar o painel ou logs.</li>
+  <li class="con">Sem runbooks formais no repositório — conhecimento operacional em <code>.cursor/docs/</code> e memória do time.</li>
+  <li class="con">Login ML via Playwright no manager — difícil de operar em cluster sem sessão compartilhada.</li>
+  <li class="con">Workers extras em Docker ainda exigem override manual (<code>docker-compose.accounts.example.yml</code>) ou terminal.</li>
+  <li class="con">Sem tracing distribuído (OpenTelemetry) — correlacionar job BullMQ → envio → scraping é manual.</li>
+</ul>
+
+<table>
+  <tr><th>Capacidade</th><th>Status</th></tr>
+  <tr><td>Subir ambiente do zero</td><td>Bom — preflight + setup guide</td></tr>
+  <tr><td>Ver filas e workers</td><td>Bom — dashboard + Settings → Operações</td></tr>
+  <tr><td>Recuperar WA deslogado</td><td>Moderado — limpar creds + novo QR via painel</td></tr>
+  <tr><td>Recuperar ML sem sessão</td><td>Moderado — <code>ml:login</code> ou fluxo no manager</td></tr>
+  <tr><td>Alertar antes do usuário perceber</td><td>Fraco — não implementado</td></tr>
+</table>
+
+<h2>7. Confiabilidade e resiliência — 8,0 / 10</h2>
+<p class="dim-question">Pergunta central: se um componente cair, o que quebra de verdade e o que se recupera sozinho?</p>
+
+<h3>Pontos fortes</h3>
+<ul>
+  <li class="pro"><strong>Delivery-first:</strong> <code>OfferDelivery</code> criado antes do enqueue — rastreio de pendente/enviado/falha por canal/conta.</li>
+  <li class="pro"><strong>Job IDs determinísticos:</strong> <code>senderJobId</code>, <code>collectorSourceJobId</code> — evita duplicata na fila.</li>
+  <li class="pro"><strong>Retries BullMQ:</strong> 5 tentativas, backoff 30s; <code>DelayedError</code> para pacing e janela operacional.</li>
+  <li class="pro"><strong>Circuit breaker ML:</strong> HTTP bloqueado após falhas; half-open com cooldown exponencial.</li>
+  <li class="pro"><strong>Pacing atômico:</strong> <code>sender-pacing.ts</code> via Redis Lua — seguro com concorrência &gt; 1.</li>
+  <li class="pro"><strong>WhatsApp owner.lock:</strong> impede dois processos na mesma sessão; detecção de conflito (<code>connectionReplaced</code>).</li>
+  <li class="pro"><strong>Fan-out isolado:</strong> falha em um canal/conta no <code>dispatchOffer</code> não impede os demais.</li>
+  <li class="pro"><strong>Affiliate link com timeout:</strong> 10s no envio — sessão ML lenta não segura a fila indefinidamente.</li>
+</ul>
+
+<h3>Pontos fracos</h3>
+<ul>
+  <li class="con">Sem dead-letter queue explícita documentada — jobs falhos dependem do retry BullMQ + painel de filas.</li>
+  <li class="con"><code>accounts/repository.ts</code> silencia erro de DB e cai para ENV — pode mascarar estado inconsistente.</li>
+  <li class="con">Redis single point of failure — sem fallback se BullMQ indisponível (coleta/envio param).</li>
+  <li class="con">Reconexão WhatsApp automática após disconnect pode entrar em loop se credenciais inválidas.</li>
+</ul>
+
+<table>
+  <tr><th>Cenário de falha</th><th>Comportamento</th></tr>
+  <tr><td>Worker cai no meio do envio</td><td>Delivery fica pendente ou com erro; retry BullMQ</td></tr>
+  <tr><td>Oferta já enviada</td><td>Sender ignora se <code>delivery.sentAt</code> preenchido</td></tr>
+  <tr><td>ML HTTP bloqueado</td><td>Circuit breaker → fallback Playwright ou skip</td></tr>
+  <tr><td>Dois workers mesma conta WA</td><td>owner.lock + <code>connectionReplaced</code></td></tr>
+  <tr><td>Postgres indisponível</td><td>Processos falham no preflight ou em runtime — sem degrade gracioso</td></tr>
+</table>
+
+<h2>8. Performance e custo — 7,5 / 10</h2>
+<p class="dim-question">Pergunta central: quantas contas/fontes o hardware atual aguenta antes de degradar?</p>
+
+<h3>Pontos fortes</h3>
+<ul>
+  <li class="pro"><strong>HTTP primeiro:</strong> scraping ML tenta HTTP antes de Playwright — menor CPU/RAM na maioria dos casos.</li>
+  <li class="pro"><strong>Browser pool:</strong> 1 Chromium compartilhado por processo collector (<code>browser-pool.ts</code>).</li>
+  <li class="pro"><strong>Collector sharded:</strong> jobs <code>collect-source</code> em paralelo (concurrency 2) por fonte.</li>
+  <li class="pro"><strong>Pacing configurável:</strong> delay entre envios via settings — protege rate limit WhatsApp/Telegram.</li>
+  <li class="pro"><strong>Pool de filas:</strong> <code>getQueue()</code> reutilizável — sem overhead de conexão a cada enqueue.</li>
+  <li class="pro"><strong>Affiliate lazy:</strong> link gerado sob demanda no envio com timeout — não bloqueia coleta.</li>
+</ul>
+
+<h3>Pontos fracos</h3>
+<ul>
+  <li class="con">Playwright ainda é o gargalo de RAM quando fallback dispara em muitas fontes.</li>
+  <li class="con">1 processo Baileys por conta WhatsApp — custo linear em memória com multi-conta.</li>
+  <li class="con">Shard por fonte usa quota igual (<code>floor(target/N)</code>) — não proporcional ao tamanho do pool ML.</li>
+  <li class="con">Sem profiling/benchmarks automatizados — limites de capacidade são empíricos.</li>
+  <li class="con">Paginação no manager pode carregar listas grandes sem virtualização.</li>
+</ul>
+
+<table>
+  <tr><th>Recurso</th><th>Principal consumidor</th><th>Alavanca</th></tr>
+  <tr><td>RAM</td><td>Chromium + Baileys por conta</td><td>Browser pool; 1 worker WA/conta</td></tr>
+  <tr><td>CPU</td><td>Playwright + parsing HTML</td><td>HTTP first; circuit breaker</td></tr>
+  <tr><td>Rede</td><td>Scraping ML + envio imagem WA</td><td>Intervalo collector; pacing sender</td></tr>
+  <tr><td>Redis</td><td>BullMQ + estado + métricas</td><td>TTL em chaves efêmeras (parcial)</td></tr>
+  <tr><td>Postgres</td><td>Ofertas + deliveries</td><td>Índices em <code>offer_deliveries</code></td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<h2>9. Modelagem de dados e integridade — 8,0 / 10</h2>
+<p class="dim-question">Pergunta central: o banco é fonte da verdade confiável em multi-conta e multi-canal?</p>
+
+<h3>Pontos fortes</h3>
+<ul>
+  <li class="pro"><strong>OfferDelivery como verdade por canal:</strong> unique <code>(offer_id, channel, account_id)</code> — granular e idempotente.</li>
+  <li class="pro"><strong>Schema claro:</strong> comentários Prisma explicam denormalização de <code>sentAt</code> em Offer.</li>
+  <li class="pro"><strong>Índices adequados:</strong> <code>offer_deliveries(channel, sent_at)</code>, <code>(account_id, channel, sent_at)</code>.</li>
+  <li class="pro"><strong>Migrations versionadas:</strong> histórico em <code>prisma/migrations/</code> incluindo tabela <code>accounts</code>.</li>
+  <li class="pro"><strong>Settings key-value:</strong> flexível para templates, score, horários sem migration a cada toggle.</li>
+  <li class="pro"><strong>Cascade on delete:</strong> deliveries removidas com a oferta — sem órfãos.</li>
+</ul>
+
+<h3>Pontos fracos</h3>
+<ul>
+  <li class="con"><code>accounts</code> ainda sem FK em <code>offer_deliveries.account_id</code> — integridade só na aplicação.</li>
+  <li class="con">Settings JSON + cache local — risco de drift entre réplicas sem pub/sub (mitigado por <code>cache-coherence</code>).</li>
+  <li class="con">Sem política de retenção/arquivamento — ofertas e logs crescem indefinidamente.</li>
+  <li class="con">Credenciais sensíveis em <code>accounts.config</code> JSON e em disco (<code>data/auth_*</code>) — fora do modelo relacional.</li>
+</ul>
+
+<table>
+  <tr><th>Entidade</th><th>Papel</th><th>Integridade</th></tr>
+  <tr><td>offers</td><td>Catálogo de ofertas coletadas</td><td>unique mercado_livre_id</td></tr>
+  <tr><td>offer_deliveries</td><td>Estado de envio por canal/conta</td><td>unique composto; índices</td></tr>
+  <tr><td>accounts</td><td>Multi-conta runtime</td><td>Zod na app; sem FK ainda</td></tr>
+  <tr><td>settings</td><td>Config runtime</td><td>Key-value; cache + pub/sub</td></tr>
+  <tr><td>auto_messages</td><td>Mensagens agendadas</td><td>Schedule fields tipados</td></tr>
+</table>
+
+<h2>10. Developer Experience (DX) — 8,0 / 10</h2>
+<p class="dim-question">Pergunta central: alguém novo consegue subir collector + worker + manager em um dia?</p>
+
+<h3>Pontos fortes</h3>
+<ul>
+  <li class="pro"><strong>Onboarding scriptado:</strong> <code>npm run setup</code>, <code>npm run up</code>, profiles preflight.</li>
+  <li class="pro"><strong>Documentação interna:</strong> <code>.cursor/docs/</code> — architecture, accounts, queues, deployment, whatsapp.</li>
+  <li class="pro"><strong>Regras Cursor:</strong> <code>.cursor/rules/*.mdc</code> — convenções automáticas para o agente/IDE.</li>
+  <li class="pro"><strong>ENV tipado:</strong> Zod + <code>.env.example</code> + stub para testes (<code>env-stub.ts</code>).</li>
+  <li class="pro"><strong>Gate local espelha CI:</strong> <code>tsc</code>, lint, format, test — feedback antes do push.</li>
+  <li class="pro"><strong>Hot reload dev:</strong> <code>tsx watch</code> em collector, workers e manager.</li>
+</ul>
+
+<h3>Pontos fracos</h3>
+<ul>
+  <li class="con">Dependências pesadas no postinstall — Playwright Chromium + Prisma generate.</li>
+  <li class="con">Manager não compila com <code>tsc</code> — roda via <code>tsx</code>; tipos checados só em <code>tsconfig.check.json</code>.</li>
+  <li class="con">Multi-conta em Docker ainda manual — exemplo em override, não padrão no compose principal.</li>
+  <li class="con">Windows exigiu ajustes (test runner, paths) — Linux/CI é o caminho feliz.</li>
+</ul>
+
+<h2>11. Estratégia de testes — 7,0 / 10</h2>
+<p class="dim-question">Pergunta central: o que mais dói em produção ainda não tem rede de segurança?</p>
+
+<h3>Camadas</h3>
+<table>
+  <tr><th>Camada</th><th>Cobertura</th><th>Exemplos</th></tr>
+  <tr><td>Unitário</td><td><strong>Boa</strong> — 111 casos, 21 arquivos</td><td>offers/, ML parsers, jobs helpers, manager/http</td></tr>
+  <tr><td>Contrato / fixtures</td><td><strong>Boa</strong> em ML</td><td>parser.test, coupon-parser, fixtures HTML ofertas</td></tr>
+  <tr><td>Integração fila</td><td><strong>Fraca</strong></td><td>Sem teste collector → queue → sender mock</td></tr>
+  <tr><td>Integração HTTP manager</td><td><strong>Fraca</strong></td><td>Sem supertest no router completo</td></tr>
+  <tr><td>E2E</td><td><strong>Mínima</strong></td><td><code>run-e2e-test.ts</code> — escopo limitado</td></tr>
+  <tr><td>Baileys / WA real</td><td><strong>Nenhuma</strong></td><td>Só helpers (<code>channel-id</code>, <code>channel-cache</code>)</td></tr>
+</table>
+
+<h3>Prioridades de teste</h3>
+<ol>
+  <li>Integração <code>dispatchOffer</code> → BullMQ (Redis de teste ou mock).</li>
+  <li>Router manager com supertest — auth, CSRF futuro, rotas críticas.</li>
+  <li>Regressão de templates/cupons — snapshots de mensagem formatada.</li>
+  <li>E2E feliz: coleta mock → enqueue → sender com publisher fake.</li>
+</ol>
+
+<h2>12. Riscos de produto e compliance — 6,0 / 10</h2>
+<p class="dim-question">Pergunta central: o que pode derrubar o negócio mesmo com código perfeito?</p>
+
+<h3>Riscos externos</h3>
+<table>
+  <tr><th>Risco</th><th>Severidade</th><th>Mitigação atual</th></tr>
+  <tr><td>WhatsApp / Baileys — ToS, banimento</td><td><strong>Alta</strong></td><td>Pacing; 1 sessão/processo; não é API oficial</td></tr>
+  <tr><td>Mercado Livre — scraping sem API</td><td><strong>Alta</strong></td><td>HTTP + Playwright; circuit breaker; sessão afiliado</td></tr>
+  <tr><td>Mudança de HTML ML</td><td><strong>Média–Alta</strong></td><td>Parser + fixtures; testes de regressão parciais</td></tr>
+  <tr><td>Rate limit / bloqueio IP</td><td><strong>Média</strong></td><td>User-agent configurável; intervalo collector</td></tr>
+  <tr><td>Perda de sessão afiliado</td><td><strong>Média</strong></td><td>Login manual; detecção em cupons/scraping</td></tr>
+  <tr><td>Telegram Bot API limits</td><td><strong>Baixa–Média</strong></td><td>API oficial; token global hoje</td></tr>
+</table>
+
+<ul>
+  <li class="con">Não há camada legal/compliance documentada — uso de scraping e Baileys é decisão de negócio do operador.</li>
+  <li class="con">Backup de credenciais (<code>data/auth_*</code>, <code>ML_AUTH_PATH</code>) não automatizado no repo.</li>
+  <li class="neutral">Afiliado ML é requisito de receita — dependência estrutural do produto.</li>
+</ul>
+
+<div class="page-break"></div>
+
+<h2>13. UX do painel (manager) — 7,0 / 10</h2>
+<p class="dim-question">Pergunta central: o operador resolve 80% dos problemas só pelo painel?</p>
+
+<h3>Pontos fortes</h3>
+<ul>
+  <li class="pro"><strong>Cobertura funcional ampla:</strong> ~54 rotas — ofertas, cupons, fontes ML, templates, contas, logs, settings.</li>
+  <li class="pro"><strong>Operações em tempo real:</strong> polling (<code>polling.js</code>) para QR WhatsApp, status worker, filas.</li>
+  <li class="pro"><strong>Spawn por conta:</strong> cards em Settings → Operações com start/stop por <code>(canal, accountId)</code>.</li>
+  <li class="pro"><strong>Feedback de erro:</strong> <code>error-message.ts</code>, alerts em settings, badges de status.</li>
+  <li class="pro"><strong>Confirmações destrutivas:</strong> <code>radarConfirm</code> em deletes — reduz clique acidental.</li>
+</ul>
+
+<h3>Pontos fracos</h3>
+<ul>
+  <li class="con">UI server-rendered sem SPA — full page reload em muitas ações.</li>
+  <li class="con">Settings densos (score, horários, brand, fontes, conexões) — curva de aprendizado alta.</li>
+  <li class="con">Login ML ainda depende de fluxo Playwright — não é “um clique” como Telegram.</li>
+  <li class="con">JS legado em <code>manager/public/js/</code> sem bundler — manutenção mais difícil.</li>
+  <li class="con">Sem mobile-first — operação assume desktop.</li>
+</ul>
+
+<h2>14. CI/CD e entrega — 6,5 / 10</h2>
+<p class="dim-question">Pergunta central: qual é o caminho reproduzível da máquina do dev até produção?</p>
+
+<h3>O que existe</h3>
+<ul>
+  <li class="pro"><strong>CI GitHub Actions:</strong> <code>tsc</code> + lint + format:check + test em push/PR.</li>
+  <li class="pro"><strong>Dockerfile + compose:</strong> collector, scheduler, postgres, redis, manager.</li>
+  <li class="pro"><strong>Migrations:</strong> <code>prisma migrate</code> / <code>migrate:deploy</code> para schema.</li>
+  <li class="pro"><strong>Build src:</strong> <code>tsc</code> gera <code>build/</code> para workers em produção Node puro.</li>
+</ul>
+
+<h3>O que falta</h3>
+<ul>
+  <li class="con">Sem pipeline de deploy (staging/prod) — compose manual ou VPS ad hoc.</li>
+  <li class="con">Manager não entra no artefato <code>build/</code> — imagem Docker precisa <code>tsx</code> ou passo extra.</li>
+  <li class="con">Sem versionamento semântico de releases / changelog automatizado.</li>
+  <li class="con">Secrets só via <code>.env</code> — sem integração Vault/SSM.</li>
+  <li class="con">Sem smoke test pós-deploy automatizado.</li>
+</ul>
+
+<table>
+  <tr><th>Etapa</th><th>Estado</th></tr>
+  <tr><td>Lint/test no PR</td><td>✓ CI</td></tr>
+  <tr><td>Build imagem</td><td>Manual / compose</td></tr>
+  <tr><td>Migrate DB</td><td>Script existe; não no pipeline</td></tr>
+  <tr><td>Rollout workers por conta</td><td>Override manual</td></tr>
+  <tr><td>Rollback</td><td>Não documentado</td></tr>
+</table>
+
+<h2>15. Evolução e débito técnico — 7,0 / 10</h2>
+<p class="dim-question">Pergunta central: o que está “pronto para N contas” vs “só funciona em dev local”?</p>
+
+<h3>Pronto / em progresso</h3>
+<ul>
+  <li class="ok"><span class="tag tag-ok">pronto</span> Filas e dispatch multi-conta WhatsApp.</li>
+  <li class="ok"><span class="tag tag-ok">pronto</span> Contas em Prisma + spawn worker por conta (dev).</li>
+  <li class="ok"><span class="tag tag-ok">pronto</span> Manager stateless com Redis.</li>
+  <li class="ok"><span class="tag tag-ok">pronto</span> Collector sharded + scheduler separado.</li>
+</ul>
+
+<h3>Débito consciente</h3>
+<ul>
+  <li class="con"><strong>Telegram multi-conta:</strong> <code>TELEGRAM_BOT_TOKEN</code> global — publisher não lê token por conta.</li>
+  <li class="con"><strong>Publishers legados:</strong> <code>telegram-publisher.ts</code> vs <code>publisher-factory.ts</code>.</li>
+  <li class="con"><strong>Rotas duplicadas:</strong> <code>manager/routes/</code> re-export de <code>http/routes/</code>.</li>
+  <li class="con"><strong>Docker breaking change:</strong> serviço <code>app</code> → <code>collector</code> — docs/compose alinhados, mas migração necessária.</li>
+  <li class="con"><strong>Spawn Docker:</strong> painel spawna workers em dev; produção usa override ou processo externo.</li>
+</ul>
+
+<table>
+  <tr><th>Item</th><th>Dev local</th><th>Docker / prod</th></tr>
+  <tr><td>Worker WA por conta</td><td>Painel spawna</td><td>Override compose ou manual</td></tr>
+  <tr><td>Login ML</td><td>Manager + Playwright</td><td>Stateful; 1 réplica</td></tr>
+  <tr><td>Manager N réplicas</td><td>N/A</td><td>Sim, com Redis</td></tr>
+  <tr><td>Telegram N bots</td><td>Não</td><td>Não — token único</td></tr>
+</table>
+
+<h2>Mapa consolidado — todas as dimensões</h2>
+<table>
+  <tr><th>#</th><th>Dimensão</th><th>Nota</th><th>Grupo</th></tr>
+  <tr><td>1</td><td>Arquitetura</td><td>8,0</td><td>Pilares</td></tr>
+  <tr><td>2</td><td>Qualidade de código</td><td>8,0</td><td>Pilares</td></tr>
+  <tr><td>3</td><td>Organização</td><td>8,5</td><td>Pilares</td></tr>
+  <tr><td>4</td><td>Escalabilidade</td><td>8,0</td><td>Pilares</td></tr>
+  <tr><td>5</td><td>Segurança</td><td>5,5</td><td>Pilares</td></tr>
+  <tr><td>6</td><td>Operabilidade</td><td>7,5</td><td>Complementar</td></tr>
+  <tr><td>7</td><td>Confiabilidade</td><td>8,0</td><td>Complementar</td></tr>
+  <tr><td>8</td><td>Performance / custo</td><td>7,5</td><td>Complementar</td></tr>
+  <tr><td>9</td><td>Dados / integridade</td><td>8,0</td><td>Complementar</td></tr>
+  <tr><td>10</td><td>Developer Experience</td><td>8,0</td><td>Complementar</td></tr>
+  <tr><td>11</td><td>Estratégia de testes</td><td>7,0</td><td>Complementar</td></tr>
+  <tr><td>12</td><td>Riscos de produto</td><td>6,0</td><td>Complementar</td></tr>
+  <tr><td>13</td><td>UX do painel</td><td>7,0</td><td>Complementar</td></tr>
+  <tr><td>14</td><td>CI/CD e entrega</td><td>6,5</td><td>Complementar</td></tr>
+  <tr><td>15</td><td>Débito técnico</td><td>7,0</td><td>Complementar</td></tr>
+  <tr><td colspan="2"><strong>Média pilares (1–5)</strong></td><td><strong>7,6</strong></td><td></td></tr>
+  <tr><td colspan="2"><strong>Média complementares (6–15)</strong></td><td><strong>7,25</strong></td><td></td></tr>
+  <tr><td colspan="2"><strong>Média geral (15 dimensões)</strong></td><td><strong>7,4</strong></td><td></td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<h2>Comparativo — antes vs depois</h2>
 <table>
   <tr><th>Aspecto</th><th>Antes</th><th>Depois</th></tr>
   <tr><td>Filas BullMQ</td><td>Criar/fechar Queue a cada enqueue</td><td>Pool reutilizável (<code>getQueue</code>)</td></tr>
   <tr><td>Multi-conta</td><td>Só dispatch; worker usava default</td><td>Fila + sender + publisher por accountId</td></tr>
   <tr><td>Contas</td><td>JSON em settings</td><td>Tabela Prisma + Zod</td></tr>
-  <tr><td>Manager</td><td>Estado em memória (workers, QR)</td><td>Redis + owner.lock; spawn condicional</td></tr>
-  <tr><td>Escalabilidade manager</td><td>1 réplica</td><td>N réplicas possíveis</td></tr>
+  <tr><td>Manager</td><td>Estado em memória (workers, QR)</td><td>Redis + owner.lock; spawn por conta</td></tr>
+  <tr><td>Collector</td><td>Singleton + repeat job único</td><td>Shard <code>collect-source</code> + Playwright pooled</td></tr>
+  <tr><td>Qualidade CI</td><td><code>tsc</code> falhando; sem lint</td><td><code>tsc</code> + ESLint + Prettier + 111 testes</td></tr>
+  <tr><td>Nota média</td><td>7,3</td><td><strong>7,6</strong></td></tr>
 </table>
 
-<h2>Top 6 prioridades</h2>
+<h2>Top prioridades (visão 15 dimensões)</h2>
 <ol>
-  <li><strong>Endurecer segurança do painel</strong> — CSRF, <code>MANAGER_TOKEN</code> obrigatório, fix XSS em <code>accounts.ts</code>.</li>
-  <li><strong>Telegram multi-conta</strong> — <code>botToken</code> por conta no publisher.</li>
-  <li><strong>Expandir testes</strong> — integração queue/sender e router HTTP do manager; E2E Telegram.</li>
-  <li><strong>Limitar <code>readFormBody</code></strong> e adicionar rate limiting no manager.</li>
+  <li><strong>Segurança do painel</strong> — CSRF, <code>MANAGER_TOKEN</code> obrigatório, fix XSS (nota 5,5 puxa a média).</li>
+  <li><strong>Telegram multi-conta</strong> — <code>botToken</code> por conta (débito técnico + arquitetura).</li>
+  <li><strong>Testes de integração</strong> — fila/sender e router HTTP (estratégia de testes 7,0).</li>
+  <li><strong>CI/CD deploy</strong> — pipeline staging/prod, smoke pós-deploy (entrega 6,5).</li>
+  <li><strong>Alertas operacionais</strong> — fila crescendo, worker morto, WA deslogado (operabilidade 7,5).</li>
+  <li><strong>Limitar <code>readFormBody</code></strong> e rate limiting no manager.</li>
 </ol>
 
 <h2>Conclusão</h2>
@@ -357,15 +708,26 @@
   affiliate link lazy, scraping híbrido). A organização é um dos pontos mais fortes do projeto.
 </p>
 <p>
-  A qualidade de código é boa no núcleo (<code>src/</code>), com TypeScript rigoroso e testes nos domínios críticos,
-  mas perde pontos por cobertura ainda parcial em workers e router HTTP
-  (helpers de <code>jobs/</code>, <code>whatsapp/</code> e <code>manager/http</code> já têm testes unitários; <code>tsc</code> limpo).
+  A qualidade de código subiu com <code>tsc</code> limpo, ESLint/Prettier no CI e 111 testes unitários —
+  ainda sem integração end-to-end de workers Baileys e router HTTP completo.
 </p>
 <p>
-  A escalabilidade melhorou significativamente com as Fases 1–4 e os itens marcados como <em>já ok</em> na seção 4
-  (filas por conta, manager stateless, collector sharded, pacing atômico, spawn por conta, caches coerentes).
-  Limites reais restantes: WhatsApp é intrinsecamente single-process por sessão, e em produção/Docker workers
-  adicionais ainda usam override ou terminal.
+  A escalabilidade passou de 7,0 para <strong>8,0</strong>: 12 itens críticos resolvidos (filas por conta,
+  collector sharded, pacing atômico, spawn por conta, caches coerentes). Limite estrutural do WhatsApp permanece.
+</p>
+<p>
+  A média geral sobe de <strong>7,3 → 7,6</strong> nos 5 pilares porque qualidade e escalabilidade melhoraram;
+  <strong>segurança (5,5)</strong> permanece o principal freio.
+</p>
+<p>
+  Na <strong>Parte II</strong>, operabilidade (7,5) e confiabilidade (8,0) mostram que o bot é operável 24/7 com logs,
+  métricas e padrões de resiliência maduros — mas faltam alertas e runbooks. Performance (7,5) e riscos de produto (6,0)
+  lembram que Playwright + Baileys + scraping ML são limites de negócio, não só de código. CI/CD (6,5) é o gap mais
+  claro entre “repo saudável” e “deploy reproduzível”.
+</p>
+<p>
+  <strong>Média global (15 dimensões): 7,4</strong> — projeto sólido para operação controlada; próximo salto vem de
+  segurança do painel, entrega automatizada e testes de integração.
 </p>
 <p>
   Em <strong>segurança</strong>, o projeto está adequado para uso em ambiente controlado (localhost, VPN, rede interna),
