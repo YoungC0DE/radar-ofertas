@@ -161,7 +161,11 @@ export async function rescheduleCollectorJob(): Promise<void> {
   const repeatables = await queue.getRepeatableJobs();
 
   for (const job of repeatables) {
-    if (job.id === 'offer-collector-repeat' || job.name === 'collect-orchestrate' || job.name === 'collect') {
+    if (
+      job.id === 'offer-collector-repeat' ||
+      job.name === 'collect-orchestrate' ||
+      job.name === 'collect'
+    ) {
       await queue.removeRepeatableByKey(job.key);
     }
   }
@@ -180,7 +184,11 @@ export const SENDER_JOB_OPTIONS = {
   removeOnFail: 100,
 } as const;
 
-export async function enqueueOfferSend(channel: Channel, offerId: string, accountId = 'default'): Promise<void> {
+export async function enqueueOfferSend(
+  channel: Channel,
+  offerId: string,
+  accountId = 'default',
+): Promise<void> {
   assertRedisEnabled('enfileiramento de envio');
   await getSenderQueue(channel, accountId).add(
     'send',

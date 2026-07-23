@@ -21,8 +21,13 @@ export function toUserErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     const msg = error.message.trim();
     if (msg.length > 280) {
-      const firstLine = msg.split('\n').find((line) => line.trim())?.trim();
-      return firstLine && firstLine.length < 200 ? firstLine : 'Ocorreu um erro inesperado. Tente novamente.';
+      const firstLine = msg
+        .split('\n')
+        .find((line) => line.trim())
+        ?.trim();
+      return firstLine && firstLine.length < 200
+        ? firstLine
+        : 'Ocorreu um erro inesperado. Tente novamente.';
     }
     return msg || 'Ocorreu um erro inesperado. Tente novamente.';
   }

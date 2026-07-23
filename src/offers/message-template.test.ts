@@ -68,7 +68,10 @@ describe('message-template', () => {
 
   it('linha do desconto some quando a oferta não tem desconto', () => {
     const semDesconto = { ...sampleOffer, discount: null };
-    const result = formatOfferMessageFromTemplate('{{name}}\n🏷️ {{discount}}\n{{price}}', semDesconto);
+    const result = formatOfferMessageFromTemplate(
+      '{{name}}\n🏷️ {{discount}}\n{{price}}',
+      semDesconto,
+    );
     assert.doesNotMatch(result, /🏷️/);
     assert.match(result, /Mouse Gamer RGB/);
   });
@@ -77,7 +80,10 @@ describe('message-template', () => {
     assert.equal(formatOfferMessageFromTemplate('{{best_seller}}', sampleOffer), '🏆 MAIS VENDIDO');
 
     const semSelo = { ...sampleOffer, bestSeller: false };
-    assert.equal(formatOfferMessageFromTemplate('📦 {{qty_sold}}\n{{best_seller}}', semSelo), '📦 200 vendidos');
+    assert.equal(
+      formatOfferMessageFromTemplate('📦 {{qty_sold}}\n{{best_seller}}', semSelo),
+      '📦 200 vendidos',
+    );
   });
 
   it('top_sold fica vazio sem ranking', () => {
@@ -91,10 +97,7 @@ describe('message-template', () => {
     const formatted = formatTopSoldLabel(
       '419º em outros meiosChegará grátis amanhãDisponível em 12',
     );
-    assert.equal(
-      formatted,
-      '419º em outros meios - Chegará grátis amanhã - Disponível em 12x',
-    );
+    assert.equal(formatted, '419º em outros meios - Chegará grátis amanhã - Disponível em 12x');
   });
 
   it('preserva linhas em branco no template', () => {

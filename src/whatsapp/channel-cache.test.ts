@@ -8,7 +8,10 @@ describe('normalizeInviteLink', () => {
   });
 
   it('monta URL completa a partir do código do canal', () => {
-    assert.equal(normalizeInviteLink('AbCdEfGhIjKlMn'), 'https://whatsapp.com/channel/AbCdEfGhIjKlMn');
+    assert.equal(
+      normalizeInviteLink('AbCdEfGhIjKlMn'),
+      'https://whatsapp.com/channel/AbCdEfGhIjKlMn',
+    );
   });
 
   it('preserva URL já completa', () => {

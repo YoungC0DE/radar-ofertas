@@ -1,5 +1,7 @@
 export function pageStyles(...files: string[]): string {
-  return files.map((file) => `<link rel="stylesheet" href="/manager/assets/css/${file}">`).join('\n');
+  return files
+    .map((file) => `<link rel="stylesheet" href="/manager/assets/css/${file}">`)
+    .join('\n');
 }
 
 export function pageScripts(...files: string[]): string {

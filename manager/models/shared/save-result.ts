@@ -1,6 +1,9 @@
 export type SaveResult<T = void> = { ok: true; value?: T } | { ok: false; error: string };
 
-export async function runSave<T>(fn: () => Promise<T>, fallbackError: string): Promise<SaveResult<T>> {
+export async function runSave<T>(
+  fn: () => Promise<T>,
+  fallbackError: string,
+): Promise<SaveResult<T>> {
   try {
     const value = await fn();
     return { ok: true, value };

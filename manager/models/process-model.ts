@@ -6,10 +6,7 @@ import { findAccountById, loadAccounts } from '../../src/accounts/repository.js'
 import { DEFAULT_ACCOUNT_ID } from '../../src/accounts/types.js';
 import type { Channel } from '../../src/channels/types.js';
 import { env } from '../../src/config/env.js';
-import {
-  getWorkerHeartbeat,
-  isWorkerHeartbeatFresh,
-} from '../../src/utils/redis-state.js';
+import { getWorkerHeartbeat, isWorkerHeartbeatFresh } from '../../src/utils/redis-state.js';
 import { getWhatsAppOwnerStatusAtPath } from '../../src/whatsapp/index.js';
 import { logger } from '../../src/utils/logger.js';
 
@@ -125,7 +122,10 @@ async function whatsappAuthPath(accountId: string): Promise<string> {
   return resolveAccountAuthPath(accountId, 'whatsapp');
 }
 
-async function syncWhatsAppFromExternalOwner(current: WorkerSlot, accountId: string): Promise<boolean> {
+async function syncWhatsAppFromExternalOwner(
+  current: WorkerSlot,
+  accountId: string,
+): Promise<boolean> {
   if (hasLocalWorker(current)) return false;
 
   const owner = await getWhatsAppOwnerStatusAtPath(await whatsappAuthPath(accountId));
@@ -154,7 +154,10 @@ async function stopWhatsAppExternalOwner(accountId: string): Promise<void> {
   killPidTree(owner.pid);
 }
 
-async function deriveExternalWorkerState(channel: Channel, accountId: string): Promise<WorkerState> {
+async function deriveExternalWorkerState(
+  channel: Channel,
+  accountId: string,
+): Promise<WorkerState> {
   if (channel === 'whatsapp') {
     const owner = await getWhatsAppOwnerStatusAtPath(await whatsappAuthPath(accountId));
     if (owner.active) {
@@ -283,7 +286,10 @@ export async function startWorker(channel: Channel, accountId?: string): Promise
       current.externalOwner = true;
       current.detail = externalOwnerDetail(owner.pid!, owner.host);
       current.startedAt = new Date().toISOString();
-      logger.info({ channel, accountId: resolvedAccountId, pid: owner.pid }, 'Worker WhatsApp já ativo em outro processo');
+      logger.info(
+        { channel, accountId: resolvedAccountId, pid: owner.pid },
+        'Worker WhatsApp já ativo em outro processo',
+      );
       return getWorkerState(channel, resolvedAccountId);
     }
   }
@@ -307,7 +313,10 @@ export async function startWorker(channel: Channel, accountId?: string): Promise
       current.status = 'running';
       current.externalOwner = false;
     }
-    logger.info({ channel, accountId: resolvedAccountId, pid: proc.pid }, 'Worker iniciado pelo painel');
+    logger.info(
+      { channel, accountId: resolvedAccountId, pid: proc.pid },
+      'Worker iniciado pelo painel',
+    );
   });
 
   proc.on('error', (error) => {
@@ -316,7 +325,10 @@ export async function startWorker(channel: Channel, accountId?: string): Promise
     current.detail = error.message;
     current.proc = undefined;
     current.externalOwner = false;
-    logger.error({ channel, accountId: resolvedAccountId, error }, 'Falha ao iniciar worker pelo painel');
+    logger.error(
+      { channel, accountId: resolvedAccountId, error },
+      'Falha ao iniciar worker pelo painel',
+    );
   });
 
   proc.on('exit', (code, signal) => {
@@ -326,7 +338,10 @@ export async function startWorker(channel: Channel, accountId?: string): Promise
       if (channel === 'whatsapp' && code === 0) {
         const synced = await syncWhatsAppFromExternalOwner(current, resolvedAccountId);
         if (synced) {
-          logger.info({ channel, accountId: resolvedAccountId }, 'Worker duplicado encerrado — sessão mantida em outro processo');
+          logger.info(
+            { channel, accountId: resolvedAccountId },
+            'Worker duplicado encerrado — sessão mantida em outro processo',
+          );
           return;
         }
       }

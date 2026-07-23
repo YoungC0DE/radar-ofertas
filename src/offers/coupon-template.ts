@@ -67,8 +67,10 @@ function formatExpiresAt(expiresAt: string | null): string {
 
 function formatCouponTitle(coupon: MlCoupon): string {
   const storeName = coupon.storeName ?? '';
-  if (storeName && storeName !== coupon.discountLabel && storeName !== coupon.code) return storeName;
-  if (!coupon.title || coupon.title === coupon.discountLabel || coupon.title === coupon.code) return '';
+  if (storeName && storeName !== coupon.discountLabel && storeName !== coupon.code)
+    return storeName;
+  if (!coupon.title || coupon.title === coupon.discountLabel || coupon.title === coupon.code)
+    return '';
   return coupon.title;
 }
 
@@ -157,7 +159,9 @@ export async function loadCouponPlaceholderVisibility(): Promise<CouponPlacehold
   return { ...DEFAULT_COUPON_PLACEHOLDER_VISIBILITY };
 }
 
-export async function saveCouponPlaceholderVisibility(visibility: CouponPlaceholderVisibility): Promise<void> {
+export async function saveCouponPlaceholderVisibility(
+  visibility: CouponPlaceholderVisibility,
+): Promise<void> {
   const json = JSON.stringify(visibility);
   await prisma.setting.upsert({
     where: { key: KEYS.placeholders },
@@ -167,7 +171,9 @@ export async function saveCouponPlaceholderVisibility(visibility: CouponPlacehol
   placeholderCache = visibility;
 }
 
-export function parseCouponPlaceholderVisibilityFromForm(form: Record<string, string>): CouponPlaceholderVisibility {
+export function parseCouponPlaceholderVisibilityFromForm(
+  form: Record<string, string>,
+): CouponPlaceholderVisibility {
   const visibility = {} as CouponPlaceholderVisibility;
 
   for (const placeholder of COUPON_PLACEHOLDERS) {

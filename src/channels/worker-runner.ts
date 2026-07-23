@@ -40,11 +40,17 @@ export async function runChannelWorker(publisher: ChannelPublisher): Promise<voi
     if (verification.duplicate) {
       // Outro processo já é dono da conexão. Não é erro de config: encerramos em
       // silêncio para o Docker não reiniciar em loop.
-      logger.error({ channel, accountId }, `${label}: ${verification.detail} — encerrando este worker duplicado.`);
+      logger.error(
+        { channel, accountId },
+        `${label}: ${verification.detail} — encerrando este worker duplicado.`,
+      );
       process.exit(0);
     }
 
-    logger.error({ channel, accountId }, `${label} não pôde ser verificado: ${verification.detail}`);
+    logger.error(
+      { channel, accountId },
+      `${label} não pôde ser verificado: ${verification.detail}`,
+    );
     process.exit(1);
   }
 
@@ -57,7 +63,8 @@ export async function runChannelWorker(publisher: ChannelPublisher): Promise<voi
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ channel, accountId, signal }, `Shutting down ${label} sender worker`);
     stopHeartbeat();
-    await publisher.shutdown?.().catch(() => {});    await worker.close();
+    await publisher.shutdown?.().catch(() => {});
+    await worker.close();
     await closeAllQueues();
     process.exit(0);
   };

@@ -19,7 +19,11 @@ export function renderBrandSection(data: SettingsData): string {
       </div>
     </div>`;
 
-  return configRow('Identidade visual', brandValue, 'Nome e ícone exibidos na barra lateral do painel');
+  return configRow(
+    'Identidade visual',
+    brandValue,
+    'Nome e ícone exibidos na barra lateral do painel',
+  );
 }
 
 export function renderBrandRemoveLogoField(data: SettingsData): string {

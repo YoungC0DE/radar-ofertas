@@ -40,15 +40,18 @@ export async function handleAutoMessageCreate(form: Record<string, string>): Pro
   if (!result.ok) {
     return showTemplatePage(null, result.error);
   }
-    return showTemplatePage(null, null, result.summary);
+  return showTemplatePage(null, null, result.summary);
 }
 
-export async function handleAutoMessageUpdate(id: string, form: Record<string, string>): Promise<string> {
+export async function handleAutoMessageUpdate(
+  id: string,
+  form: Record<string, string>,
+): Promise<string> {
   const result = await updateAutoMessageFromForm(id, form);
   if (!result.ok) {
     return showTemplatePage(null, result.error);
   }
-    return showTemplatePage(null, null, result.summary);
+  return showTemplatePage(null, null, result.summary);
 }
 
 export async function handleAutoMessageDelete(id: string): Promise<string> {

@@ -9,14 +9,8 @@ import {
 
 describe('category-url — ofertas', () => {
   it('detects offers listing URL', () => {
-    assert.equal(
-      isOffersListingUrl('https://www.mercadolivre.com.br/ofertas'),
-      true,
-    );
-    assert.equal(
-      isOffersListingUrl('https://www.mercadolivre.com.br/ofertas?page=2'),
-      true,
-    );
+    assert.equal(isOffersListingUrl('https://www.mercadolivre.com.br/ofertas'), true);
+    assert.equal(isOffersListingUrl('https://www.mercadolivre.com.br/ofertas?page=2'), true);
     assert.equal(
       isOffersListingUrl('https://lista.mercadolivre.com.br/_CategoryId_MLB1648'),
       false,

@@ -6,7 +6,8 @@ import { hasValidSession, loadSessionMeta, loadStorageState } from '../mercado-l
 import { getCollectorQueue, isRedisEnabled, closeAllQueues } from '../queue/index.js';
 import { formatIsoInTimezone } from '../utils/datetime.js';
 
-export type PreflightProfile = 'all' | 'collector' | 'worker' | 'worker-telegram' | 'manager' | 'scheduler';
+export type PreflightProfile =
+  'all' | 'collector' | 'worker' | 'worker-telegram' | 'manager' | 'scheduler';
 
 export interface PreflightItem {
   ok: boolean;
@@ -68,7 +69,11 @@ async function checkOfferDeliverySchema(): Promise<PreflightItem> {
       };
     }
 
-    return { ok: true, label: 'Schema do banco', detail: 'offer_deliveries com suporte a multi-conta' };
+    return {
+      ok: true,
+      label: 'Schema do banco',
+      detail: 'offer_deliveries com suporte a multi-conta',
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
@@ -193,7 +198,12 @@ async function runChecks(profile: PreflightProfile): Promise<PreflightItem[]> {
   items.push(await checkDatabase());
   items.push(await checkOfferDeliverySchema());
 
-  if (profile === 'all' || profile === 'collector' || profile === 'worker' || profile === 'worker-telegram') {
+  if (
+    profile === 'all' ||
+    profile === 'collector' ||
+    profile === 'worker' ||
+    profile === 'worker-telegram'
+  ) {
     items.push(await checkRedis());
   }
 
@@ -252,7 +262,13 @@ export async function runPreflight(profile: PreflightProfile = 'all'): Promise<P
 function parseProfile(argv: string[]): PreflightProfile {
   const arg = argv.find((a) => a.startsWith('--profile='));
   const value = arg?.split('=')[1];
-  if (value === 'collector' || value === 'worker' || value === 'worker-telegram' || value === 'manager' || value === 'scheduler') {
+  if (
+    value === 'collector' ||
+    value === 'worker' ||
+    value === 'worker-telegram' ||
+    value === 'manager' ||
+    value === 'scheduler'
+  ) {
     return value;
   }
   return 'all';

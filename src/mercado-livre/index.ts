@@ -169,13 +169,15 @@ export async function* iterateScrapedPages(category: string): AsyncGenerator<Raw
 
 export async function searchConfiguredCategories(): Promise<RawOffer[]> {
   await hydrateMlSourcesCache();
-  const categories = getActiveMlCategories().map((category) => {
-    const validation = validateCategoryConfig(category);
-    if (!validation.valid) {
-      logger.error({ category, reason: validation.reason }, 'Invalid ML category config');
-    }
-    return validation;
-  }).filter((validation) => validation.valid);
+  const categories = getActiveMlCategories()
+    .map((category) => {
+      const validation = validateCategoryConfig(category);
+      if (!validation.valid) {
+        logger.error({ category, reason: validation.reason }, 'Invalid ML category config');
+      }
+      return validation;
+    })
+    .filter((validation) => validation.valid);
 
   if (categories.length === 0) {
     logger.error('No valid ML categories configured');

@@ -6,7 +6,12 @@ export function endHourForForm(end: number): number {
   return end === 0 ? 24 : end;
 }
 
-export function renderHourInput(name: string, id: string, value: number, kind: 'start' | 'end'): string {
+export function renderHourInput(
+  name: string,
+  id: string,
+  value: number,
+  kind: 'start' | 'end',
+): string {
   const min = kind === 'start' ? 0 : 1;
   const max = kind === 'start' ? 23 : 24;
 

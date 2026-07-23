@@ -27,13 +27,19 @@ function channelSendOrder(channels: Channel[]): Channel[] {
   });
 }
 
-async function sendTextMessageViaQueue(channel: Channel, accountId: string, text: string): Promise<void> {
+async function sendTextMessageViaQueue(
+  channel: Channel,
+  accountId: string,
+  text: string,
+): Promise<void> {
   if (!isRedisEnabled()) {
     throw new Error('Inicie o worker em Configuração para enviar cupons.');
   }
 
   const queue = getSenderQueue(channel, accountId);
-  const queueEvents = new QueueEvents(getSenderQueueName(channel, accountId), { connection: getQueueConnection() });
+  const queueEvents = new QueueEvents(getSenderQueueName(channel, accountId), {
+    connection: getQueueConnection(),
+  });
   const suffix = `coupon-${Date.now()}-${accountId}`;
 
   try {

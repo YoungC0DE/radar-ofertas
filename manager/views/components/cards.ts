@@ -1,6 +1,5 @@
 import { escapeHtml } from '../helpers.js';
 import { workerStatusBadge } from './badges.js';
-import { renderConnectCard } from './cards.js';
 
 export interface ConnectCardOptions {
   service: 'ml' | 'wa' | 'telegram' | 'worker' | 'prisma';
@@ -15,7 +14,8 @@ export interface ConnectCardOptions {
 }
 
 export function renderConnectCard(options: ConnectCardOptions): string {
-  const { service, name, icon, detail, badgeHtml, actionsHtml, buttonHtml, extraHtml, detailId } = options;
+  const { service, name, icon, detail, badgeHtml, actionsHtml, buttonHtml, extraHtml, detailId } =
+    options;
   const detailAttr = detailId ? ` id="${detailId}"` : '';
 
   return `<div class="connect-card">

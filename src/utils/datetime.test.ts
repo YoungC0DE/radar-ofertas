@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import {
-  isValidTimezone,
-  isWithinOperatingHours,
-  msUntilOperatingWindow,
-} from './datetime.js';
+import { isValidTimezone, isWithinOperatingHours, msUntilOperatingWindow } from './datetime.js';
 
 const SP = 'America/Sao_Paulo';
 const HOURS = { startHour: 9, endHour: 0 };

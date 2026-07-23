@@ -44,7 +44,10 @@ export async function findOfferIdByMercadoLivreId(mercadoLivreId: string): Promi
 }
 
 /** Canais que já têm registro de entrega (pendente ou enviada) para a oferta em uma conta. */
-export async function findExistingDeliveryChannels(offerId: string, accountId = 'default'): Promise<Channel[]> {
+export async function findExistingDeliveryChannels(
+  offerId: string,
+  accountId = 'default',
+): Promise<Channel[]> {
   const rows = await prisma.offerDelivery.findMany({
     where: { offerId, accountId },
     select: { channel: true },
@@ -52,7 +55,10 @@ export async function findExistingDeliveryChannels(offerId: string, accountId = 
   return rows.map((row) => row.channel as Channel);
 }
 
-export async function sentOfferExistsByTitleAndPrice(title: string, price: number): Promise<boolean> {
+export async function sentOfferExistsByTitleAndPrice(
+  title: string,
+  price: number,
+): Promise<boolean> {
   const count = await prisma.offer.count({
     where: {
       title,
@@ -105,7 +111,11 @@ function toDeliveryRecord(delivery: PrismaOfferDelivery): DeliveryRecord {
  * a linha com sentAt nulo é o registro de "esta oferta deve ir para este canal".
  * Idempotente: reenfileirar limpa o erro anterior sem apagar um envio concluído.
  */
-export async function openOfferDelivery(offerId: string, channel: Channel, accountId = 'default'): Promise<void> {
+export async function openOfferDelivery(
+  offerId: string,
+  channel: Channel,
+  accountId = 'default',
+): Promise<void> {
   await prisma.offerDelivery.upsert({
     where: { offerId_channel_accountId: { offerId, channel, accountId } },
     update: { error: null },
@@ -155,7 +165,11 @@ export async function markOfferDeliveryFailed(
   });
 }
 
-export async function findDelivery(offerId: string, channel: Channel, accountId = 'default'): Promise<DeliveryRecord | null> {
+export async function findDelivery(
+  offerId: string,
+  channel: Channel,
+  accountId = 'default',
+): Promise<DeliveryRecord | null> {
   const delivery = await prisma.offerDelivery.findUnique({
     where: { offerId_channel_accountId: { offerId, channel, accountId } },
   });
@@ -190,7 +204,11 @@ export async function findDeliveriesByOfferIds(
   return byOffer;
 }
 
-export async function offerWasSentTo(offerId: string, channel: Channel, accountId = 'default'): Promise<boolean> {
+export async function offerWasSentTo(
+  offerId: string,
+  channel: Channel,
+  accountId = 'default',
+): Promise<boolean> {
   const count = await prisma.offerDelivery.count({
     where: { offerId, channel, accountId, sentAt: { not: null } },
   });

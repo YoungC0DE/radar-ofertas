@@ -104,10 +104,7 @@ export function formatStoredLocalDate(value: Date): string {
   }).format(value);
 }
 
-export function formatIsoInTimezone(
-  iso: string | null | undefined,
-  timeZone: string,
-): string {
+export function formatIsoInTimezone(iso: string | null | undefined, timeZone: string): string {
   if (!iso) return '—';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
@@ -162,41 +159,29 @@ export function msUntilOperatingWindow(
   const current = minutesSinceMidnight(hour, minute, second);
   const start = hours.startHour * 60;
 
-  const minutesToWait =
-    current < start ? start - current : 24 * 60 - current + start;
+  const minutesToWait = current < start ? start - current : 24 * 60 - current + start;
 
   return Math.max(60_000, Math.ceil(minutesToWait * 60 * 1000));
 }
 
 function storedLocalMinutesSinceMidnight(stored: Date): number {
-  return (
-    stored.getUTCHours() * 60 +
-    stored.getUTCMinutes() +
-    stored.getUTCSeconds() / 60
-  );
+  return stored.getUTCHours() * 60 + stored.getUTCMinutes() + stored.getUTCSeconds() / 60;
 }
 
 /** Janela operacional para datas gravadas via nowInTimezone (componentes no UTC do Date). */
-export function isWithinOperatingHoursStored(
-  hours: OperatingHours,
-  stored: Date,
-): boolean {
+export function isWithinOperatingHoursStored(hours: OperatingHours, stored: Date): boolean {
   const current = storedLocalMinutesSinceMidnight(stored);
   const start = hours.startHour * 60;
   const end = endMinutes(hours.endHour);
   return current >= start && current < end;
 }
 
-export function msUntilOperatingWindowStored(
-  hours: OperatingHours,
-  stored: Date,
-): number {
+export function msUntilOperatingWindowStored(hours: OperatingHours, stored: Date): number {
   if (isWithinOperatingHoursStored(hours, stored)) return 0;
 
   const current = storedLocalMinutesSinceMidnight(stored);
   const start = hours.startHour * 60;
-  const minutesToWait =
-    current < start ? start - current : 24 * 60 - current + start;
+  const minutesToWait = current < start ? start - current : 24 * 60 - current + start;
 
   return Math.max(60_000, Math.ceil(minutesToWait * 60 * 1000));
 }

@@ -145,7 +145,11 @@ async function pushToRedis(entry: LogEntry): Promise<void> {
       await redis.connect();
     }
     const payload = JSON.stringify(entry);
-    await redis.multi().lpush(REDIS_KEY, payload).ltrim(REDIS_KEY, 0, MAX_LOGS - 1).exec();
+    await redis
+      .multi()
+      .lpush(REDIS_KEY, payload)
+      .ltrim(REDIS_KEY, 0, MAX_LOGS - 1)
+      .exec();
   } catch {
     redisFailed = true;
   }
@@ -261,9 +265,7 @@ export async function getRecentLogs(filters: LogFilters = {}): Promise<LogEntry[
   const limit = Math.min(Math.max(filters.limit ?? 200, 1), MAX_LOGS);
   const all = await getMergedLogs();
 
-  return all
-    .filter((entry) => matchesFilters(entry, filters))
-    .slice(-limit);
+  return all.filter((entry) => matchesFilters(entry, filters)).slice(-limit);
 }
 
 export interface MlScrapeLogFilters {

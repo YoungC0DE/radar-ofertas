@@ -1,4 +1,7 @@
-import type { ClassifiedLogEntry, ClassifiedMlScrapeEntry } from '../../models/logs/log-classifier.js';
+import type {
+  ClassifiedLogEntry,
+  ClassifiedMlScrapeEntry,
+} from '../../models/logs/log-classifier.js';
 import type { LogsPageData } from '../../models/logs-model.js';
 import { escapeHtml } from '../helpers.js';
 import { renderLayout } from '../layout.js';

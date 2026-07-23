@@ -2,7 +2,11 @@ import { access } from 'node:fs/promises';
 import path from 'node:path';
 import { telegramPublisher } from '../../src/channels/telegram-publisher.js';
 import { env } from '../../src/config/env.js';
-import { loadSessionMeta, loadStorageState, hasValidSession } from '../../src/mercado-livre/session.js';
+import {
+  loadSessionMeta,
+  loadStorageState,
+  hasValidSession,
+} from '../../src/mercado-livre/session.js';
 import { formatIsoInTimezone } from '../../src/utils/datetime.js';
 
 export interface SessionStatus {

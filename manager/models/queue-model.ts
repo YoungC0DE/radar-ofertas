@@ -1,4 +1,4 @@
-import { Queue } from 'bullmq';
+import type { Queue } from 'bullmq';
 import { getEnabledChannels } from '../../src/channels/index.js';
 import { CHANNEL_LABELS, type Channel } from '../../src/channels/types.js';
 import { getCollectorQueue, getSenderQueue, isRedisEnabled } from '../../src/queue/index.js';

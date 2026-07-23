@@ -28,14 +28,17 @@ function parseDataUrl(dataUrl: string): string | null {
 function parseBrandFromJson(raw: string): BrandSettings {
   const parsed = JSON.parse(raw) as Record<string, unknown>;
   return {
-    name: typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name.trim() : DEFAULT_BRAND.name,
+    name:
+      typeof parsed.name === 'string' && parsed.name.trim()
+        ? parsed.name.trim()
+        : DEFAULT_BRAND.name,
     subtitle:
       typeof parsed.subtitle === 'string' && parsed.subtitle.trim()
         ? parsed.subtitle.trim()
         : DEFAULT_BRAND.subtitle,
     logoBase64:
       typeof parsed.logoBase64 === 'string' && parsed.logoBase64.trim()
-        ? parseDataUrl(parsed.logoBase64.trim()) ?? parsed.logoBase64.trim()
+        ? (parseDataUrl(parsed.logoBase64.trim()) ?? parsed.logoBase64.trim())
         : null,
   };
 }
@@ -50,7 +53,9 @@ export async function hydrateBrandCache(): Promise<void> {
     if (row) {
       brandCache = parseBrandFromJson(row.value);
     }
-  } catch { /* fallback to defaults */ }
+  } catch {
+    /* fallback to defaults */
+  }
 }
 
 export function getBrandName(): string {

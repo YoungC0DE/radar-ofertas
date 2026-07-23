@@ -17,10 +17,7 @@ function isBlockedHtml(html: string): boolean {
   return /captcha|challenge|account-verification|suspicious-traffic/i.test(html);
 }
 
-function mergeUniqueItems(
-  unique: Map<string, ScrapedItem>,
-  items: ScrapedItem[],
-): number {
+function mergeUniqueItems(unique: Map<string, ScrapedItem>, items: ScrapedItem[]): number {
   let added = 0;
   for (const item of items) {
     if (!unique.has(item.id)) {
@@ -125,7 +122,13 @@ export async function fetchCategoryViaBrowser(category: string): Promise<Scraped
       }
 
       logger.info(
-        { category: validation.category, url, count: items.length, listingKind: 'category', method: 'browser' },
+        {
+          category: validation.category,
+          url,
+          count: items.length,
+          listingKind: 'category',
+          method: 'browser',
+        },
         'Category scraped',
       );
       return items;

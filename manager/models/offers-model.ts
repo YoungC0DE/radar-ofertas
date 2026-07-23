@@ -61,7 +61,10 @@ export async function loadAffiliateLinkDelaySettings(): Promise<AffiliateLinkDel
   return { delayMs, backlogDelayMinutes, backlogThreshold };
 }
 
-export async function loadOffersPage(filter: OfferSentFilter, page: number): Promise<OffersPageData> {
+export async function loadOffersPage(
+  filter: OfferSentFilter,
+  page: number,
+): Promise<OffersPageData> {
   const result = await withDatabase(
     async () => {
       const total = await countOffers(filter);
@@ -101,10 +104,9 @@ export async function loadOffersPage(filter: OfferSentFilter, page: number): Pro
   };
 }
 
-export async function loadOfferDetail(id: string): Promise<{ offer: OfferRecord | null; database: DatabaseSnapshot }> {
-  const result = await withDatabase(
-    async () => findOfferById(id),
-    null,
-  );
+export async function loadOfferDetail(
+  id: string,
+): Promise<{ offer: OfferRecord | null; database: DatabaseSnapshot }> {
+  const result = await withDatabase(async () => findOfferById(id), null);
   return { offer: result.data, database: result.database };
 }

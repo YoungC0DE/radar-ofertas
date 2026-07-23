@@ -1,4 +1,10 @@
-import { loadCouponsPage, refreshCoupons, getCouponsJson, sendCouponToChannels, updateCouponStoreLink } from '../models/coupons-model.js';
+import {
+  loadCouponsPage,
+  refreshCoupons,
+  getCouponsJson,
+  sendCouponToChannels,
+  updateCouponStoreLink,
+} from '../models/coupons-model.js';
 import { renderCouponsPage } from '../views/coupons.js';
 
 export async function showCouponsPage(

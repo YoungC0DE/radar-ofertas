@@ -25,7 +25,8 @@ async function main(): Promise<void> {
   logger.info('Conectando ao WhatsApp para consultar canal...');
   const sock = await connectWhatsApp();
 
-  const raw = process.argv[2] ?? (await ask('Cole o link ou código do canal (whatsapp.com/channel/...): '));
+  const raw =
+    process.argv[2] ?? (await ask('Cole o link ou código do canal (whatsapp.com/channel/...): '));
   const inviteCode = extractInviteCode(raw);
 
   if (!inviteCode) {
@@ -48,7 +49,9 @@ async function main(): Promise<void> {
 
 main().catch((error) => {
   if (error instanceof WhatsAppOwnedElsewhereError) {
-    logger.error('A sessão do WhatsApp já está ativa em outro processo. Pare o worker antes de rodar npm run wa:channel.');
+    logger.error(
+      'A sessão do WhatsApp já está ativa em outro processo. Pare o worker antes de rodar npm run wa:channel.',
+    );
     process.exit(1);
   }
   logger.error({ error }, 'Falha ao consultar canal');

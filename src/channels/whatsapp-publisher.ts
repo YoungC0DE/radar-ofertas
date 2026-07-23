@@ -21,7 +21,8 @@ export const whatsappPublisher: ChannelPublisher = {
     if (isPlaceholderChannelId(env.WHATSAPP_CHANNEL_ID)) {
       return {
         ok: false,
-        detail: 'WHATSAPP_CHANNEL_ID é placeholder — rode npm run wa:channel com o link do seu canal',
+        detail:
+          'WHATSAPP_CHANNEL_ID é placeholder — rode npm run wa:channel com o link do seu canal',
       };
     }
 

@@ -9,7 +9,9 @@ async function main(): Promise<void> {
 
 main().catch((error) => {
   if (error instanceof WhatsAppOwnedElsewhereError) {
-    logger.error('A sessão do WhatsApp já está ativa em outro processo. Pare o worker antes de parear novamente (npm run wa:login).');
+    logger.error(
+      'A sessão do WhatsApp já está ativa em outro processo. Pare o worker antes de parear novamente (npm run wa:login).',
+    );
     process.exit(1);
   }
   logger.error({ error }, 'Login WhatsApp falhou');

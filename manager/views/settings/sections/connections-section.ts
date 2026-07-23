@@ -64,10 +64,11 @@ function renderAccountWorkerCard(
   const channelLabel = channel === 'whatsapp' ? 'WhatsApp' : 'Telegram';
   const running = worker.state.status === 'running' || worker.state.status === 'starting';
   const detail =
-    worker.state.detail ??
-    (running ? 'Processo de envio em execução' : 'Processo de envio parado');
+    worker.state.detail ?? (running ? 'Processo de envio em execução' : 'Processo de envio parado');
   const accountSuffix =
-    worker.accountId === 'default' ? '' : ` — ${escapeHtml(worker.label)} (${escapeHtml(worker.accountId)})`;
+    worker.accountId === 'default'
+      ? ''
+      : ` — ${escapeHtml(worker.label)} (${escapeHtml(worker.accountId)})`;
 
   return renderWorkerCard({
     prefix: worker.prefix,
@@ -88,7 +89,9 @@ function renderChannelWorkerCards(
   spawnEnabled: boolean,
 ): string {
   if (workers.length === 0) return '';
-  return workers.map((worker) => renderAccountWorkerCard(channel, worker, icon, spawnEnabled)).join('');
+  return workers
+    .map((worker) => renderAccountWorkerCard(channel, worker, icon, spawnEnabled))
+    .join('');
 }
 
 export function renderOperationsSection(data: SettingsData): string {
@@ -108,7 +111,8 @@ export function renderOperationsSection(data: SettingsData): string {
           name: 'Prisma Client',
           icon: PRISMA_ICON,
           detail: 'Regenera o client do Prisma (<code>npm run prisma</code>)',
-          actionsHtml: '<button type="button" class="btn primary" id="prisma-generate">Gerar Prisma Client</button>',
+          actionsHtml:
+            '<button type="button" class="btn primary" id="prisma-generate">Gerar Prisma Client</button>',
         })}
       </div>
     </section>`;

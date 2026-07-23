@@ -99,7 +99,8 @@ function parseSourcesFromJson(raw: string): MlCustomSource[] {
 
     sources.push({
       id: typeof row.id === 'string' && row.id.trim() ? row.id.trim() : randomUUID(),
-      label: typeof row.label === 'string' && row.label.trim() ? row.label.trim() : deriveLabel(url),
+      label:
+        typeof row.label === 'string' && row.label.trim() ? row.label.trim() : deriveLabel(url),
       url,
       channels,
     });
@@ -132,7 +133,9 @@ function normalizeCategoryKey(category: string): string {
 }
 
 export function categoryJobKey(category: string): string {
-  return normalizeCategoryKey(category).replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 120);
+  return normalizeCategoryKey(category)
+    .replace(/[^a-zA-Z0-9_-]+/g, '_')
+    .slice(0, 120);
 }
 
 export function getCustomMlSources(): MlCustomSource[] {
@@ -145,7 +148,9 @@ export function getEnvMlCategories(): string[] {
 
 /** Fontes que alimentam pelo menos um canal — o que o collector precisa raspar. */
 export function getActiveMlCategories(): string[] {
-  const envActive = env.ML_CATEGORIES.filter((category) => getEnvCategoryChannels(category).length > 0);
+  const envActive = env.ML_CATEGORIES.filter(
+    (category) => getEnvCategoryChannels(category).length > 0,
+  );
   const custom = getCustomMlSources()
     .filter((source) => source.channels.length > 0)
     .map((source) => source.url.trim());
@@ -154,7 +159,9 @@ export function getActiveMlCategories(): string[] {
 
 /** Fontes que alimentam um canal específico. */
 export function getActiveMlCategoriesForChannel(channel: Channel): string[] {
-  const envActive = env.ML_CATEGORIES.filter((category) => getEnvCategoryChannels(category).includes(channel));
+  const envActive = env.ML_CATEGORIES.filter((category) =>
+    getEnvCategoryChannels(category).includes(channel),
+  );
   const custom = getCustomMlSources()
     .filter((source) => source.channels.includes(channel))
     .map((source) => source.url.trim());
@@ -297,7 +304,9 @@ export async function addCustomMlSource(
   return { ok: true };
 }
 
-export async function removeCustomMlSource(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function removeCustomMlSource(
+  id: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const sources = getCustomMlSources();
   const next = sources.filter((source) => source.id !== id);
   if (next.length === sources.length) {

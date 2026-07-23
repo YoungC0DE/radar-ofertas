@@ -1,11 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { stubEnv } from '../test/env-stub.js';
-import {
-  collectorSourceJobId,
-  getSenderQueueName,
-  senderJobId,
-} from './index.js';
+import { collectorSourceJobId, getSenderQueueName, senderJobId } from './index.js';
 
 stubEnv();
 
@@ -23,7 +19,10 @@ describe('getSenderQueueName', () => {
 describe('senderJobId', () => {
   it('gera id determinístico por canal e oferta', () => {
     assert.equal(senderJobId('telegram', 'offer-42', 'default'), 'send-offer-telegram-offer-42');
-    assert.equal(senderJobId('whatsapp', 'offer-42', 'loja-1'), 'send-offer-whatsapp-loja-1-offer-42');
+    assert.equal(
+      senderJobId('whatsapp', 'offer-42', 'loja-1'),
+      'send-offer-whatsapp-loja-1-offer-42',
+    );
   });
 });
 

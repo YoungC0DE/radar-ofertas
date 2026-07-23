@@ -42,7 +42,9 @@ function placeholderTable(visibility: TemplatePageData['placeholderVisibility'])
     .join('');
 }
 
-function couponPlaceholderChips(visibility: TemplatePageData['couponPlaceholderVisibility']): string {
+function couponPlaceholderChips(
+  visibility: TemplatePageData['couponPlaceholderVisibility'],
+): string {
   return getCouponPlaceholderHelp()
     .filter((p) => visibility[p.key])
     .map(
@@ -52,7 +54,9 @@ function couponPlaceholderChips(visibility: TemplatePageData['couponPlaceholderV
     .join('\n');
 }
 
-function couponPlaceholderTable(visibility: TemplatePageData['couponPlaceholderVisibility']): string {
+function couponPlaceholderTable(
+  visibility: TemplatePageData['couponPlaceholderVisibility'],
+): string {
   return getCouponPlaceholderHelp()
     .map((p) => {
       const checked = visibility[p.key] ? ' checked' : '';
@@ -181,10 +185,7 @@ function renderAutoMessagesSection(data: TemplatePageData): string {
       </table>`;
 }
 
-function isAccordionOpen(
-  section: 'offer' | 'coupon' | 'auto',
-  data: TemplatePageData,
-): boolean {
+function isAccordionOpen(section: 'offer' | 'coupon' | 'auto', data: TemplatePageData): boolean {
   if (data.savedSection === 'offer') return section === 'offer';
   if (data.savedSection === 'coupon') return section === 'coupon';
   if (data.autoMessageNotice) return section === 'auto';

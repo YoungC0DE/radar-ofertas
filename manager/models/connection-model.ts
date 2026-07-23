@@ -14,12 +14,7 @@ import { canManagerSpawnWorkers, getWorkerState, startWorker } from './process-m
 // Em produção o worker é dono da sessão e publica QR/status no Redis.
 // O painel apenas lê e renderiza (stateless, replicável).
 
-export type WhatsAppConnectStatus =
-  | 'idle'
-  | 'connecting'
-  | 'qr'
-  | 'connected'
-  | 'error';
+export type WhatsAppConnectStatus = 'idle' | 'connecting' | 'qr' | 'connected' | 'error';
 
 export interface WhatsAppConnectState {
   status: WhatsAppConnectStatus;
@@ -42,7 +37,11 @@ export async function getWhatsAppConnectionState(): Promise<WhatsAppConnectState
 
 export async function startWhatsAppConnection(): Promise<WhatsAppConnectState> {
   const current = await getWhatsAppConnectionState();
-  if (current.status === 'connecting' || current.status === 'qr' || current.status === 'connected') {
+  if (
+    current.status === 'connecting' ||
+    current.status === 'qr' ||
+    current.status === 'connected'
+  ) {
     return current;
   }
 
@@ -52,9 +51,7 @@ export async function startWhatsAppConnection(): Promise<WhatsAppConnectState> {
       await startWorker('whatsapp');
     }
     const after = await getWhatsAppConnectionState();
-    return after.status === 'idle'
-      ? { status: 'connecting', qr: null, error: null }
-      : after;
+    return after.status === 'idle' ? { status: 'connecting', qr: null, error: null } : after;
   }
 
   const worker = await getWorkerState('whatsapp');
@@ -73,12 +70,7 @@ export async function startWhatsAppConnection(): Promise<WhatsAppConnectState> {
 // Fluxo stateful com Playwright — operação single-node/dev. Não replicável.
 
 export type MercadoLivreConnectStatus =
-  | 'idle'
-  | 'opening'
-  | 'awaiting-login'
-  | 'saving'
-  | 'connected'
-  | 'error';
+  'idle' | 'opening' | 'awaiting-login' | 'saving' | 'connected' | 'error';
 
 export interface MercadoLivreConnectState {
   status: MercadoLivreConnectStatus;
@@ -116,7 +108,8 @@ export function startMercadoLivreConnection(): MercadoLivreConnectState {
       mlStatus = 'awaiting-login';
     } catch (error: unknown) {
       mlStatus = 'error';
-      mlError = error instanceof Error ? error.message : 'Falha ao abrir navegador do Mercado Livre';
+      mlError =
+        error instanceof Error ? error.message : 'Falha ao abrir navegador do Mercado Livre';
       logger.error({ error }, 'Mercado Livre login browser failed to open');
     }
   })();

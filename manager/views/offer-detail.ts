@@ -41,4 +41,3 @@ export function renderNotFound(message: string): string {
   const body = `<section><h2>Não encontrado</h2><p>${escapeHtml(message)}</p><p><a class="link" href="/manager">Dashboard</a></p></section>`;
   return renderLayout('404', body);
 }
-1

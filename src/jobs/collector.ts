@@ -2,7 +2,11 @@ import { Worker, type Job } from 'bullmq';
 import { hydrateBrandCache } from '../config/brand-config.js';
 import { env } from '../config/env.js';
 import { hydrateMlSourcesCache } from '../config/ml-sources-config.js';
-import { getOperatingHoursStart, getOperatingHoursEnd, hydrateQueueConfigCache } from '../config/queue-config-store.js';
+import {
+  getOperatingHoursStart,
+  getOperatingHoursEnd,
+  hydrateQueueConfigCache,
+} from '../config/queue-config-store.js';
 import { closeBrowserPool } from '../mercado-livre/browser-pool.js';
 import { collectFromSource, orchestrateOfferCollection } from '../offers/service.js';
 import { getQueueConnection, QUEUE_NAMES, type CollectorJobData } from '../queue/index.js';
@@ -40,7 +44,10 @@ export function startCollectorWorker(): Worker<CollectorJobData> {
 
         try {
           const result = await collectFromSource(channel, category, quota);
-          logger.info({ jobId: job.id, channel, category, ...result }, 'Source collection completed');
+          logger.info(
+            { jobId: job.id, channel, category, ...result },
+            'Source collection completed',
+          );
           return result;
         } finally {
           await closeBrowserPool();

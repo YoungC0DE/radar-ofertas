@@ -47,12 +47,14 @@ export interface DashboardData {
   collectError?: string;
 }
 
-export async function loadDashboardData(options: {
-  sendNowMessage?: string;
-  sendNowError?: string;
-  collectMessage?: string;
-  collectError?: string;
-} = {}): Promise<DashboardData> {
+export async function loadDashboardData(
+  options: {
+    sendNowMessage?: string;
+    sendNowError?: string;
+    collectMessage?: string;
+    collectError?: string;
+  } = {},
+): Promise<DashboardData> {
   await hydrateQueueConfigCache();
   const operatingHours = {
     start: getOperatingHoursStart(),

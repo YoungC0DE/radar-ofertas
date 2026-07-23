@@ -86,7 +86,9 @@ function extractListaLinksFromHtml(html: string): string[] {
   const normalized = html.replace(/\\\//g, '/');
   const links = new Set<string>();
 
-  for (const match of normalized.matchAll(/https?:\/\/lista\.mercadolivre\.com\.br\/_Container_[^\s"'<>\\]+/gi)) {
+  for (const match of normalized.matchAll(
+    /https?:\/\/lista\.mercadolivre\.com\.br\/_Container_[^\s"'<>\\]+/gi,
+  )) {
     links.add(normalizeStoreUrl(match[0]));
   }
 
@@ -106,7 +108,8 @@ function findUrlNearCouponInHtml(html: string, couponId: string): string | null 
     const match =
       chunk.match(/https?:\/\/lista\.mercadolivre\.com\.br\/_Container_[^\s"'<>"]+/i) ??
       chunk.match(/lista\.mercadolivre\.com\.br\/_Container_[^\s"'<>"]+/i);
-    if (match?.[0]) return normalizeStoreUrl(match[0].startsWith('http') ? match[0] : `https://${match[0]}`);
+    if (match?.[0])
+      return normalizeStoreUrl(match[0].startsWith('http') ? match[0] : `https://${match[0]}`);
   }
   return null;
 }
@@ -188,14 +191,21 @@ function findStoreUrlDeep(node: unknown, depth = 0): string | null {
 }
 
 function resolveStoreName(record: Record<string, unknown>): string | null {
-  return pickFirstString(record, ['seller', 'container_name', 'store_name', 'shop_name', 'nickname']);
+  return pickFirstString(record, [
+    'seller',
+    'container_name',
+    'store_name',
+    'shop_name',
+    'nickname',
+  ]);
 }
 
 function normalizeStatus(raw: string | null): MlCoupon['status'] {
   if (!raw) return 'unknown';
   const lower = raw.toLowerCase();
   if (/expir|vencid|inactive|inativ/i.test(lower)) return 'expired';
-  if (/gerad|created|active|ativ|dispon/i.test(lower)) return /gerad|created/i.test(lower) ? 'generated' : 'available';
+  if (/gerad|created|active|ativ|dispon/i.test(lower))
+    return /gerad|created/i.test(lower) ? 'generated' : 'available';
   if (/available|dispon/i.test(lower)) return 'available';
   return 'unknown';
 }
@@ -224,10 +234,29 @@ function mapCouponRecord(record: Record<string, unknown>, index: number): MlCoup
       'saving',
     ]) ?? '';
 
-  const code = pickFirstString(record, ['code', 'coupon_code', 'couponCode', 'promo_code', 'promoCode']);
+  const code = pickFirstString(record, [
+    'code',
+    'coupon_code',
+    'couponCode',
+    'promo_code',
+    'promoCode',
+  ]);
   const description =
-    pickFirstString(record, ['description', 'subtitle', 'detail', 'details', 'summary', 'conditions']) ?? '';
-  const category = pickFirstString(record, ['category', 'category_name', 'categoryName', 'segment', 'type']);
+    pickFirstString(record, [
+      'description',
+      'subtitle',
+      'detail',
+      'details',
+      'summary',
+      'conditions',
+    ]) ?? '';
+  const category = pickFirstString(record, [
+    'category',
+    'category_name',
+    'categoryName',
+    'segment',
+    'type',
+  ]);
   const minPurchase = pickFirstString(record, [
     'min_purchase',
     'minPurchase',
@@ -246,7 +275,13 @@ function mapCouponRecord(record: Record<string, unknown>, index: number): MlCoup
     'end_date',
     'endDate',
   ]);
-  const rawStatus = pickFirstString(record, ['status', 'state', 'availability', 'coupon_status', 'couponStatus']);
+  const rawStatus = pickFirstString(record, [
+    'status',
+    'state',
+    'availability',
+    'coupon_status',
+    'couponStatus',
+  ]);
   const id =
     pickFirstString(record, ['id', 'coupon_id', 'couponId', 'campaign_id', 'campaignId']) ??
     `${title}-${code ?? discountLabel}-${index}`;
@@ -254,7 +289,9 @@ function mapCouponRecord(record: Record<string, unknown>, index: number): MlCoup
   const hasCouponSignal =
     Boolean(code) ||
     Boolean(discountLabel) ||
-    /cupom|coupon|voucher|promo|desconto/i.test(`${title} ${description} ${JSON.stringify(record)}`);
+    /cupom|coupon|voucher|promo|desconto/i.test(
+      `${title} ${description} ${JSON.stringify(record)}`,
+    );
 
   if (!hasCouponSignal) return null;
 
@@ -281,13 +318,19 @@ function isAffiliateCouponRecord(record: Record<string, unknown>): boolean {
   if (!title || (typeof id !== 'number' && typeof id !== 'string')) return false;
 
   const hasAffiliateFields =
-    'expiration_date' in record || 'remaining_budget' in record || 'seller' in record || 'alias' in record;
+    'expiration_date' in record ||
+    'remaining_budget' in record ||
+    'seller' in record ||
+    'alias' in record;
   const looksLikeDiscount = /%|OFF|R\$/i.test(title);
 
   return hasAffiliateFields && looksLikeDiscount;
 }
 
-function resolveAffiliateCouponStatus(record: Record<string, unknown>, code: string | null): MlCoupon['status'] {
+function resolveAffiliateCouponStatus(
+  record: Record<string, unknown>,
+  code: string | null,
+): MlCoupon['status'] {
   const rawStatus = pickFirstString(record, ['status']);
   if (rawStatus) return normalizeStatus(rawStatus);
   if (record.in_use === true) return 'generated';
@@ -403,7 +446,13 @@ function looksLikeCouponObject(record: Record<string, unknown>): boolean {
   const hasCouponKey = /coupon|cupom|voucher|promo|campaign|benefit/.test(keys);
   const title = pickFirstString(record, ['title', 'name', 'headline', 'coupon_name', 'couponName']);
   const code = pickFirstString(record, ['code', 'coupon_code', 'couponCode', 'alias']);
-  const discount = pickFirstString(record, ['discount', 'discount_label', 'benefit', 'amount', 'value']);
+  const discount = pickFirstString(record, [
+    'discount',
+    'discount_label',
+    'benefit',
+    'amount',
+    'value',
+  ]);
   return Boolean(title) && (hasCouponKey || Boolean(code) || Boolean(discount));
 }
 
@@ -462,15 +511,17 @@ function parseDomCoupons(html: string): MlCoupon[] {
 
       const title =
         el.find('h1,h2,h3,h4,[class*="title"]').first().text().trim() ||
-        text.split('\n').find((line) => line.trim().length > 3)?.trim() ||
+        text
+          .split('\n')
+          .find((line) => line.trim().length > 3)
+          ?.trim() ||
         text.slice(0, 80);
 
       const code =
         text.match(/(?:c[oó]digo|code)\s*:?\s*([A-Z0-9]{4,})/i)?.[1] ??
         (el.find('[class*="code"]').first().text().trim() || null);
 
-      const discountLabel =
-        text.match(/\d+\s*%|\d+\s*OFF|R\$\s*[\d.,]+/i)?.[0] ?? '';
+      const discountLabel = text.match(/\d+\s*%|\d+\s*OFF|R\$\s*[\d.,]+/i)?.[0] ?? '';
 
       coupons.push({
         id: `dom-${selector}-${index}-${title.slice(0, 24)}`,
@@ -503,7 +554,8 @@ function couponPriority(coupon: MlCoupon): number {
   const codeScore = coupon.code ? 5 : 0;
   const storeScore = coupon.storeName ? 3 : 0;
   const urlScore = coupon.storeUrl ? 2 : 0;
-  const sellerScore = coupon.title && coupon.title !== coupon.code && coupon.title !== coupon.discountLabel ? 1 : 0;
+  const sellerScore =
+    coupon.title && coupon.title !== coupon.code && coupon.title !== coupon.discountLabel ? 1 : 0;
   return (statusScore[coupon.status] ?? 0) + codeScore + storeScore + urlScore + sellerScore;
 }
 
@@ -526,7 +578,9 @@ function mergeCouponDetails(primary: MlCoupon, secondary: MlCoupon): MlCoupon {
     storeUrl,
     sellerId,
     title: storeName || primary.title || secondary.title,
-    description: storeName ? primary.discountLabel || secondary.discountLabel : primary.description || secondary.description,
+    description: storeName
+      ? primary.discountLabel || secondary.discountLabel
+      : primary.description || secondary.description,
   };
 }
 

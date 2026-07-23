@@ -15,7 +15,6 @@ import {
   getZonedTimeOfDay,
   parseDatetimeLocalValue,
   parseTimeInputValue,
-  toDatetimeLocalInputValue,
 } from '../utils/datetime.js';
 import { logger } from '../utils/logger.js';
 import { toUserErrorMessage } from '../utils/user-error.js';
@@ -30,7 +29,11 @@ import {
   type CreateAutoMessageInput,
   type UpdateAutoMessageInput,
 } from './repository.js';
-import { AUTO_MESSAGE_SCHEDULE_TYPES, type AutoMessageRecord, type AutoMessageScheduleType } from './types.js';
+import {
+  AUTO_MESSAGE_SCHEDULE_TYPES,
+  type AutoMessageRecord,
+  type AutoMessageScheduleType,
+} from './types.js';
 
 export function parseScheduleType(value: string): AutoMessageScheduleType | null {
   return AUTO_MESSAGE_SCHEDULE_TYPES.includes(value as AutoMessageScheduleType)
@@ -69,7 +72,12 @@ export async function listAutoMessages(): Promise<AutoMessageRecord[]> {
   return findAllAutoMessages();
 }
 
-function buildScheduleSummary(scheduleType: AutoMessageScheduleType, scheduledAt: Date | null, dailyHour: number | null, dailyMinute: number | null): string {
+function buildScheduleSummary(
+  scheduleType: AutoMessageScheduleType,
+  scheduledAt: Date | null,
+  dailyHour: number | null,
+  dailyMinute: number | null,
+): string {
   if (scheduleType === 'once' && scheduledAt) {
     return `Envio programado para ${formatStoredLocalDate(scheduledAt)}.`;
   }
@@ -84,67 +92,77 @@ export async function saveAutoMessageFromForm(
   id?: string,
 ): Promise<{ ok: true; id: string; summary: string } | { ok: false; error: string }> {
   try {
-  const title = form.title?.trim() ?? '';
-  const content = form.content?.trim() ?? '';
-  if (!title) return { ok: false, error: 'Informe um título para a mensagem.' };
-  if (!content) return { ok: false, error: 'Informe o texto da mensagem.' };
+    const title = form.title?.trim() ?? '';
+    const content = form.content?.trim() ?? '';
+    if (!title) return { ok: false, error: 'Informe um título para a mensagem.' };
+    if (!content) return { ok: false, error: 'Informe o texto da mensagem.' };
 
-  const scheduleType = parseScheduleType(form.scheduleType ?? 'manual') ?? 'manual';
-  const enabled = !('enabled' in form) || form.enabled === '1';
+    const scheduleType = parseScheduleType(form.scheduleType ?? 'manual') ?? 'manual';
+    const enabled = !('enabled' in form) || form.enabled === '1';
 
-  let scheduledAt: Date | null = null;
-  let dailyHour: number | null = null;
-  let dailyMinute: number | null = null;
+    let scheduledAt: Date | null = null;
+    let dailyHour: number | null = null;
+    let dailyMinute: number | null = null;
 
-  if (scheduleType === 'once') {
-    const raw = form.scheduledAt?.trim();
-    if (!raw) return { ok: false, error: 'Informe data e hora para programar o envio.' };
-    scheduledAt = parseDatetimeLocalValue(raw);
-    if (!scheduledAt) return { ok: false, error: 'Data/hora inválida.' };
-    if (scheduledAt.getTime() <= Date.now()) {
-      return { ok: false, error: 'A data/hora deve ser no futuro.' };
+    if (scheduleType === 'once') {
+      const raw = form.scheduledAt?.trim();
+      if (!raw) return { ok: false, error: 'Informe data e hora para programar o envio.' };
+      scheduledAt = parseDatetimeLocalValue(raw);
+      if (!scheduledAt) return { ok: false, error: 'Data/hora inválida.' };
+      if (scheduledAt.getTime() <= Date.now()) {
+        return { ok: false, error: 'A data/hora deve ser no futuro.' };
+      }
     }
-  }
 
-  if (scheduleType === 'daily') {
-    const parsed = parseTimeInputValue(form.dailyTime ?? '08:00');
-    if (!parsed) return { ok: false, error: 'Informe um horário válido (ex: 08:00).' };
-    dailyHour = parsed.hour;
-    dailyMinute = parsed.minute;
-  }
+    if (scheduleType === 'daily') {
+      const parsed = parseTimeInputValue(form.dailyTime ?? '08:00');
+      if (!parsed) return { ok: false, error: 'Informe um horário válido (ex: 08:00).' };
+      dailyHour = parsed.hour;
+      dailyMinute = parsed.minute;
+    }
 
-  const payload: CreateAutoMessageInput & UpdateAutoMessageInput = {
-    title,
-    content,
-    scheduleType,
-    scheduledAt: scheduleType === 'once' ? scheduledAt : null,
-    dailyHour: scheduleType === 'daily' ? dailyHour : null,
-    dailyMinute: scheduleType === 'daily' ? dailyMinute : 0,
-    enabled,
-    ...(scheduleType === 'once' ? { lastSentAt: null } : {}),
-  };
+    const payload: CreateAutoMessageInput & UpdateAutoMessageInput = {
+      title,
+      content,
+      scheduleType,
+      scheduledAt: scheduleType === 'once' ? scheduledAt : null,
+      dailyHour: scheduleType === 'daily' ? dailyHour : null,
+      dailyMinute: scheduleType === 'daily' ? dailyMinute : 0,
+      enabled,
+      ...(scheduleType === 'once' ? { lastSentAt: null } : {}),
+    };
 
-  if (id) {
-    await cancelScheduledAutoMessageJobs(id);
-    const updated = await updateAutoMessage(id, payload);
-    if (!updated) return { ok: false, error: 'Mensagem não encontrada.' };
+    if (id) {
+      await cancelScheduledAutoMessageJobs(id);
+      const updated = await updateAutoMessage(id, payload);
+      if (!updated) return { ok: false, error: 'Mensagem não encontrada.' };
+      if (scheduleType === 'once' && scheduledAt) {
+        await scheduleAutoMessage(updated.id, scheduledAt);
+      }
+      return {
+        ok: true,
+        id: updated.id,
+        summary: buildScheduleSummary(scheduleType, scheduledAt, dailyHour, dailyMinute),
+      };
+    }
+
+    const created = await createAutoMessage(payload);
     if (scheduleType === 'once' && scheduledAt) {
-      await scheduleAutoMessage(updated.id, scheduledAt);
+      await scheduleAutoMessage(created.id, scheduledAt);
     }
-    return { ok: true, id: updated.id, summary: buildScheduleSummary(scheduleType, scheduledAt, dailyHour, dailyMinute) };
-  }
-
-  const created = await createAutoMessage(payload);
-  if (scheduleType === 'once' && scheduledAt) {
-    await scheduleAutoMessage(created.id, scheduledAt);
-  }
-  return { ok: true, id: created.id, summary: buildScheduleSummary(scheduleType, scheduledAt, dailyHour, dailyMinute) };
+    return {
+      ok: true,
+      id: created.id,
+      summary: buildScheduleSummary(scheduleType, scheduledAt, dailyHour, dailyMinute),
+    };
   } catch (error) {
     return { ok: false, error: toUserErrorMessage(error) };
   }
 }
 
-export async function removeAutoMessage(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function removeAutoMessage(
+  id: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const existing = await findAutoMessageById(id);
   if (!existing) return { ok: false, error: 'Mensagem não encontrada.' };
   await cancelScheduledAutoMessageJobs(id);
@@ -167,7 +185,9 @@ export async function dispatchAutoMessage(
   for (const channel of channels) {
     const accountIds = await getEnabledAccountIdsForChannel(channel);
     for (const accountId of accountIds) {
-      await enqueueAutoMessageSend(channel, autoMessageId, accountId, { force: options.force === true });
+      await enqueueAutoMessageSend(channel, autoMessageId, accountId, {
+        force: options.force === true,
+      });
     }
   }
 
@@ -208,7 +228,10 @@ export async function scheduleAutoMessage(
     }
   }
 
-  logger.info({ autoMessageId, scheduledAt: scheduledAt.toISOString(), channels }, 'Auto message scheduled');
+  logger.info(
+    { autoMessageId, scheduledAt: scheduledAt.toISOString(), channels },
+    'Auto message scheduled',
+  );
   return { ok: true };
 }
 
@@ -223,7 +246,12 @@ export async function markAutoMessageSent(autoMessageId: string): Promise<void> 
 }
 
 function isSameLocalDay(a: Date, b: Date, timeZone: string): boolean {
-  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
   return fmt.format(a) === fmt.format(b);
 }
 

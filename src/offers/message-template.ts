@@ -12,7 +12,11 @@ export const MESSAGE_PLACEHOLDERS = [
   { key: 'best_seller', label: 'Selo de mais vendido', example: '🏆 MAIS VENDIDO' },
   { key: 'top_sold', label: 'Ranking de vendas', example: '4º em Impressoras' },
   { key: 'store', label: 'Vendedor no Mercado Livre', example: 'Mega Mamute ✅ Loja oficial' },
-  { key: 'product_link', label: 'Link de compra (afiliado)', example: 'https://mercadolivre.com/sec/abc123' },
+  {
+    key: 'product_link',
+    label: 'Link de compra (afiliado)',
+    example: 'https://mercadolivre.com/sec/abc123',
+  },
 ] as const;
 
 export type MessagePlaceholderKey = (typeof MESSAGE_PLACEHOLDERS)[number]['key'];
@@ -221,7 +225,9 @@ export async function loadPlaceholderVisibility(): Promise<PlaceholderVisibility
       placeholderCache = mergePlaceholderVisibility(parsed);
       return placeholderCache;
     }
-  } catch { /* fallback */ }
+  } catch {
+    /* fallback */
+  }
   return { ...DEFAULT_PLACEHOLDER_VISIBILITY };
 }
 
@@ -235,7 +241,9 @@ export async function savePlaceholderVisibility(visibility: PlaceholderVisibilit
   placeholderCache = visibility;
 }
 
-export function parsePlaceholderVisibilityFromForm(form: Record<string, string>): PlaceholderVisibility {
+export function parsePlaceholderVisibilityFromForm(
+  form: Record<string, string>,
+): PlaceholderVisibility {
   const visibility = {} as PlaceholderVisibility;
 
   for (const placeholder of MESSAGE_PLACEHOLDERS) {
@@ -259,7 +267,9 @@ export async function loadMessageTemplate(): Promise<string> {
         return trimmed;
       }
     }
-  } catch { /* fallback */ }
+  } catch {
+    /* fallback */
+  }
   return DEFAULT_MESSAGE_TEMPLATE;
 }
 

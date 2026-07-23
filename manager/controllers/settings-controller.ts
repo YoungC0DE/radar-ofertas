@@ -1,4 +1,13 @@
-import { loadSettingsData, saveBrandIdentity, saveChannelInviteLink, saveCouponsUrlSettings, saveOperatingHoursSettings, saveScoreSettings, saveSendIntervalMinutes, saveSenderDelay } from '../models/settings-model.js';
+import {
+  loadSettingsData,
+  saveBrandIdentity,
+  saveChannelInviteLink,
+  saveCouponsUrlSettings,
+  saveOperatingHoursSettings,
+  saveScoreSettings,
+  saveSendIntervalMinutes,
+  saveSenderDelay,
+} from '../models/settings-model.js';
 import type { SettingsSaveType } from '../models/settings-model.js';
 import { renderSettingsPage } from '../views/settings.js';
 
@@ -72,4 +81,3 @@ export async function handleOperatingHoursSave(form: Record<string, string>): Pr
   }
   return showSettingsPage('hours', null);
 }
-

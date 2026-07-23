@@ -1,13 +1,9 @@
-import readline from "node:readline";
-import { stdin, stdout } from "node:process";
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
-import { env } from "../config/env.js";
-import { logger } from "../utils/logger.js";
-import {
-  ensureAuthDir,
-  saveStorageState,
-  updateSessionMeta,
-} from "./session.js";
+import readline from 'node:readline';
+import { stdin, stdout } from 'node:process';
+import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import { env } from '../config/env.js';
+import { logger } from '../utils/logger.js';
+import { ensureAuthDir, saveStorageState, updateSessionMeta } from './session.js';
 
 export interface AffiliateLoginSession {
   browser: Browser;
@@ -15,10 +11,8 @@ export interface AffiliateLoginSession {
   page: Page;
 }
 
-const AFFILIATE_LOGIN_URL =
-  "https://www.mercadolivre.com.br/afiliados/linkbuilder#hub";
-const LOGIN_PAGE_PATTERN =
-  /login|registration|account-verification|jms\/mlb\/lgz/i;
+const AFFILIATE_LOGIN_URL = 'https://www.mercadolivre.com.br/afiliados/linkbuilder#hub';
+const LOGIN_PAGE_PATTERN = /login|registration|account-verification|jms\/mlb\/lgz/i;
 
 async function waitForEnter(prompt: string): Promise<void> {
   const rl = readline.createInterface({ input: stdin, output: stdout });
@@ -42,10 +36,7 @@ export async function isAffiliatePortalReady(page: Page): Promise<boolean> {
     .isVisible()
     .catch(() => false);
 
-  return (
-    hasLinkBuilder ||
-    /afiliados\/link-builder|afiliados-home|affiliate-program/i.test(url)
-  );
+  return hasLinkBuilder || /afiliados\/link-builder|afiliados-home|affiliate-program/i.test(url);
 }
 
 export async function openAffiliateLoginSession(): Promise<AffiliateLoginSession> {
@@ -54,29 +45,25 @@ export async function openAffiliateLoginSession(): Promise<AffiliateLoginSession
   const browser = await chromium.launch({ headless: false });
   const context = await browser.newContext({
     userAgent: env.ML_SCRAPER_USER_AGENT,
-    locale: "pt-BR",
+    locale: 'pt-BR',
   });
   const page = await context.newPage();
 
-  logger.info(
-    "Abrindo portal de afiliados — faça login manualmente no navegador",
-  );
+  logger.info('Abrindo portal de afiliados — faça login manualmente no navegador');
   await page.goto(AFFILIATE_LOGIN_URL, {
-    waitUntil: "domcontentloaded",
+    waitUntil: 'domcontentloaded',
     timeout: env.ML_HTTP_TIMEOUT_MS,
   });
 
   logger.info(
-    "O navegador permanecerá aberto até você confirmar. " +
-      "Conclua o login e acesse o Gerador de Links antes de continuar.",
+    'O navegador permanecerá aberto até você confirmar. ' +
+      'Conclua o login e acesse o Gerador de Links antes de continuar.',
   );
 
   return { browser, context, page };
 }
 
-export async function persistAffiliateSession(
-  context: BrowserContext,
-): Promise<void> {
+export async function persistAffiliateSession(context: BrowserContext): Promise<void> {
   const storageState = await context.storageState();
   await saveStorageState(storageState);
   await updateSessionMeta({
@@ -84,10 +71,7 @@ export async function persistAffiliateSession(
     lastError: null,
   });
 
-  logger.info(
-    { path: env.ML_AUTH_PATH },
-    "Sessão de afiliado salva com sucesso",
-  );
+  logger.info({ path: env.ML_AUTH_PATH }, 'Sessão de afiliado salva com sucesso');
 }
 
 export async function loginAffiliateSession(): Promise<void> {
@@ -96,14 +80,14 @@ export async function loginAffiliateSession(): Promise<void> {
   try {
     while (true) {
       await waitForEnter(
-        "\nQuando estiver logado no portal de afiliados, pressione Enter para salvar a sessão... ",
+        '\nQuando estiver logado no portal de afiliados, pressione Enter para salvar a sessão... ',
       );
 
       if (await isAffiliatePortalReady(page)) break;
 
       logger.warn(
         { url: page.url() },
-        "Login ainda não detectado — complete o login no navegador e pressione Enter novamente",
+        'Login ainda não detectado — complete o login no navegador e pressione Enter novamente',
       );
     }
 

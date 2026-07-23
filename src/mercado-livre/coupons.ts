@@ -3,12 +3,14 @@ import { getCouponsUrlFromDb } from '../config/coupons-config-store.js';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { withPooledBrowserContext } from './browser-pool.js';
-import { collectCouponsFromUnknown, finalizeParsedCoupons, isLoginHtml, parseCouponsHtml, parseCouponsJson } from './coupon-parser.js';
 import {
-  cookiesToHeader,
-  hasValidSession,
-  loadStorageState,
-} from './session.js';
+  collectCouponsFromUnknown,
+  finalizeParsedCoupons,
+  isLoginHtml,
+  parseCouponsHtml,
+  parseCouponsJson,
+} from './coupon-parser.js';
+import { cookiesToHeader, hasValidSession, loadStorageState } from './session.js';
 import type { CouponScrapeResult, MlCoupon } from './types.js';
 
 const DEFAULT_HEADERS = {
@@ -123,7 +125,10 @@ async function fetchCouponsViaBrowser(): Promise<MlCoupon[]> {
           const before = collected.length;
           collectCouponsFromUnknown(data, collected);
           if (collected.length > before) {
-            logger.debug({ responseUrl, added: collected.length - before }, 'Coupons captured from API response');
+            logger.debug(
+              { responseUrl, added: collected.length - before },
+              'Coupons captured from API response',
+            );
           }
         } catch {
           // resposta não-JSON
@@ -134,9 +139,12 @@ async function fetchCouponsViaBrowser(): Promise<MlCoupon[]> {
       await page.waitForTimeout(3000);
 
       try {
-        await page.waitForSelector('[class*="coupon"], [data-testid*="coupon"], [class*="cupom"], article', {
-          timeout: 8000,
-        });
+        await page.waitForSelector(
+          '[class*="coupon"], [data-testid*="coupon"], [class*="cupom"], article',
+          {
+            timeout: 8000,
+          },
+        );
       } catch {
         // página pode não ter seletores conhecidos
       }
@@ -149,7 +157,7 @@ async function fetchCouponsViaBrowser(): Promise<MlCoupon[]> {
       }
 
       const embeddedState = await page.evaluate(() => {
-        const globals = window as unknown as Record<string, unknown>;
+        const globals = globalThis as unknown as Record<string, unknown>;
         return globals.__PRELOADED_STATE__ ?? globals.__NORDIC_STATE__ ?? null;
       });
 
@@ -184,7 +192,9 @@ export async function scrapeAffiliateCoupons(): Promise<CouponScrapeResult> {
     if (sessionRequired) {
       throw new Error('Sessão de afiliado necessária — conecte o Mercado Livre em Configuração.');
     }
-    throw new Error('Nenhum cupom encontrado via HTTP. Ative ML_USE_BROWSER_FALLBACK=true no .env.');
+    throw new Error(
+      'Nenhum cupom encontrado via HTTP. Ative ML_USE_BROWSER_FALLBACK=true no .env.',
+    );
   }
 
   const browserCoupons = await fetchCouponsViaBrowser();
@@ -197,7 +207,9 @@ export async function scrapeAffiliateCoupons(): Promise<CouponScrapeResult> {
         sessionRequired,
       };
     }
-    throw new Error('Nenhum cupom encontrado. Verifique a sessão de afiliado e a URL de cupons em Configuração.');
+    throw new Error(
+      'Nenhum cupom encontrado. Verifique a sessão de afiliado e a URL de cupons em Configuração.',
+    );
   }
 
   return {

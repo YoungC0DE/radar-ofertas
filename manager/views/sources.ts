@@ -10,7 +10,9 @@ function listingKindLabel(kind: string): string {
 
 function statusBadge(row: MlCategoryRow, active: boolean): string {
   if (!row.valid) return '<span class="badge err">Inválida</span>';
-  return active ? '<span class="badge ok">Coletando</span>' : '<span class="badge warn">Fora</span>';
+  return active
+    ? '<span class="badge ok">Coletando</span>'
+    : '<span class="badge warn">Fora</span>';
 }
 
 /** Quais OUTROS canais também coletam esta fonte — ajuda a ver o cenário completo. */
@@ -20,13 +22,11 @@ function otherChannelsHint(row: MlCategoryRow, channel: string): string {
   return `<div class="ml-source-others meta">Também: ${others.join(', ')}</div>`;
 }
 
-function renderRow(
-  row: MlCategoryRow,
-  channel: string,
-  options?: { removable?: boolean },
-): string {
+function renderRow(row: MlCategoryRow, channel: string, options?: { removable?: boolean }): string {
   const active = row.channels.includes(channel as never);
-  const origin = row.fromEnv ? '<span class="badge">.env</span>' : '<span class="badge">Extra</span>';
+  const origin = row.fromEnv
+    ? '<span class="badge">.env</span>'
+    : '<span class="badge">Extra</span>';
   const coletarCell = `<label class="ml-source-flag">
         <input type="checkbox" name="coletar_${escapeHtml(row.id)}" value="1"${active ? ' checked' : ''}>
         Coletar
@@ -81,22 +81,28 @@ export function renderSourcesPage(data: SourcesPageData): string {
   const envRows = data.rows.filter((row) => row.fromEnv);
   const customRows = data.rows.filter((row) => !row.fromEnv);
 
-  const envTable = envRows.length === 0
-    ? '<tr><td colspan="7">Nenhuma categoria no .env.</td></tr>'
-    : envRows.map((row) => renderRow(row, channel)).join('');
+  const envTable =
+    envRows.length === 0
+      ? '<tr><td colspan="7">Nenhuma categoria no .env.</td></tr>'
+      : envRows.map((row) => renderRow(row, channel)).join('');
 
-  const customTable = customRows.length === 0
-    ? '<tr><td colspan="7">Nenhum link extra cadastrado.</td></tr>'
-    : customRows.map((row) => renderRow(row, channel, { removable: true })).join('');
+  const customTable =
+    customRows.length === 0
+      ? '<tr><td colspan="7">Nenhum link extra cadastrado.</td></tr>'
+      : customRows.map((row) => renderRow(row, channel, { removable: true })).join('');
 
   // Abas: só aparecem quando há mais de um canal ligado (senão não há o que trocar).
-  const tabs = data.channels.length > 1
-    ? `<div class="filters sources-tabs">
+  const tabs =
+    data.channels.length > 1
+      ? `<div class="filters sources-tabs">
         ${data.channels
-          .map((c) => `<a href="/manager/sources/${c.channel}" class="${c.active ? 'active' : ''}">${escapeHtml(c.label)}</a>`)
+          .map(
+            (c) =>
+              `<a href="/manager/sources/${c.channel}" class="${c.active ? 'active' : ''}">${escapeHtml(c.label)}</a>`,
+          )
           .join('')}
       </div>`
-    : '';
+      : '';
 
   const body = `
     ${alert}
@@ -154,5 +160,10 @@ export function renderSourcesPage(data: SourcesPageData): string {
 
     ${pageScripts('shared/modal.js', 'sources.js')}`;
 
-  return renderLayout(`Fontes — ${channelLabel}`, body, `sources-${channel}`, pageStyles('sources.css'));
+  return renderLayout(
+    `Fontes — ${channelLabel}`,
+    body,
+    `sources-${channel}`,
+    pageStyles('sources.css'),
+  );
 }

@@ -1,4 +1,9 @@
-import { chromium, type Browser, type BrowserContext, type BrowserContextOptions } from 'playwright';
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type BrowserContextOptions,
+} from 'playwright';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 

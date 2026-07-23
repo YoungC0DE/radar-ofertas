@@ -71,7 +71,11 @@ export async function updateSessionMeta(partial: Partial<SessionMeta>): Promise<
 export function cookiesToHeader(cookies: StorageState['cookies'], domains: string[]): string {
   const allowed = new Set(domains);
   return cookies
-    .filter((cookie) => allowed.has(cookie.domain.replace(/^\./, '')) || [...allowed].some((d) => cookie.domain.endsWith(d)))
+    .filter(
+      (cookie) =>
+        allowed.has(cookie.domain.replace(/^\./, '')) ||
+        [...allowed].some((d) => cookie.domain.endsWith(d)),
+    )
     .map((cookie) => `${cookie.name}=${cookie.value}`)
     .join('; ');
 }
@@ -79,7 +83,9 @@ export function cookiesToHeader(cookies: StorageState['cookies'], domains: strin
 export function hasValidSession(state: StorageState | null): boolean {
   if (!state?.cookies?.length) return false;
   const now = Date.now() / 1000;
-  const sessionCookies = state.cookies.filter((c) => c.name.toLowerCase().includes('session') || c.name === 'ssid');
+  const sessionCookies = state.cookies.filter(
+    (c) => c.name.toLowerCase().includes('session') || c.name === 'ssid',
+  );
   if (sessionCookies.length === 0) return state.cookies.length > 3;
   return sessionCookies.some((c) => !c.expires || c.expires > now);
 }

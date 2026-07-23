@@ -8,7 +8,12 @@ export function configRow(label: string, value: string, hint?: string): string {
   </div>`;
 }
 
-export function renderEditableValue(label: string, display: string, editButtonId: string, editIcon: string): string {
+export function renderEditableValue(
+  label: string,
+  display: string,
+  editButtonId: string,
+  editIcon: string,
+): string {
   return `<div class="channel-inline">
     <span class="channel-name">${escapeHtml(display)}</span>
     <div class="channel-actions">

@@ -80,7 +80,8 @@ export async function hydrateQueueConfigCache(): Promise<void> {
     if (row.key === KEYS.opHoursEnd) cache.operatingHoursEnd = val;
     if (row.key === KEYS.searchLimit) cache.searchLimit = val;
     if (row.key === KEYS.affiliateLinkDelayMs) cache.affiliateLinkDelayMs = val;
-    if (row.key === KEYS.affiliateLinkBacklogDelayMinutes) cache.affiliateLinkBacklogDelayMinutes = val;
+    if (row.key === KEYS.affiliateLinkBacklogDelayMinutes)
+      cache.affiliateLinkBacklogDelayMinutes = val;
     if (row.key === KEYS.affiliateLinkBacklogThreshold) cache.affiliateLinkBacklogThreshold = val;
   }
 }
@@ -177,7 +178,9 @@ export async function getAffiliateLinkBacklogDelayMinutesFromDb(): Promise<numbe
 }
 
 export function getAffiliateLinkBacklogDelayMinutesCached(): number {
-  return cache.affiliateLinkBacklogDelayMinutes ?? env.QUEUE_CONFIG.affiliateLinkBacklogDelayMinutes;
+  return (
+    cache.affiliateLinkBacklogDelayMinutes ?? env.QUEUE_CONFIG.affiliateLinkBacklogDelayMinutes
+  );
 }
 
 export async function getAffiliateLinkBacklogThresholdFromDb(): Promise<number> {
@@ -202,7 +205,11 @@ export async function saveAffiliateLinkDelaySettings(
   if (!Number.isInteger(delayMs) || delayMs < 0 || delayMs > 60_000) {
     throw new Error('Informe um delay normal entre 0 e 60000 ms');
   }
-  if (!Number.isInteger(backlogDelayMinutes) || backlogDelayMinutes < 1 || backlogDelayMinutes > 60) {
+  if (
+    !Number.isInteger(backlogDelayMinutes) ||
+    backlogDelayMinutes < 1 ||
+    backlogDelayMinutes > 60
+  ) {
     throw new Error('Informe um delay de backlog entre 1 e 60 minutos');
   }
   if (!Number.isInteger(backlogThreshold) || backlogThreshold < 1 || backlogThreshold > 100) {

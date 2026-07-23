@@ -55,7 +55,10 @@ describe('allocateProportionalWithMin', () => {
     // Tamanhos medidos no ML: relâmpago, esportes, moda, perfumes, som, mercado, watch.
     const quotas = allocateProportionalWithMin([40, 29, 8, 48, 45, 46, 45], 10);
     assert.equal(sum(quotas), 10);
-    assert.ok(quotas.every((q) => q >= 1), 'toda seção ativa entra no sorteio');
+    assert.ok(
+      quotas.every((q) => q >= 1),
+      'toda seção ativa entra no sorteio',
+    );
   });
 });
 
@@ -64,7 +67,10 @@ describe('shuffle', () => {
     const original = [1, 2, 3, 4, 5];
     const result = shuffle(original);
     assert.deepEqual(original, [1, 2, 3, 4, 5]);
-    assert.deepEqual([...result].sort((a, b) => a - b), original);
+    assert.deepEqual(
+      [...result].sort((a, b) => a - b),
+      original,
+    );
   });
 
   it('embaralha de fato ao longo de várias execuções', () => {

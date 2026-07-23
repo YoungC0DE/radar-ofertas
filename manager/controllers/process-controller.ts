@@ -29,7 +29,10 @@ export async function startWorkerJson(
   return JSON.stringify(await startWorker(channel, accountId));
 }
 
-export async function stopWorkerJson(channel: Channel = 'whatsapp', accountId?: string): Promise<string> {
+export async function stopWorkerJson(
+  channel: Channel = 'whatsapp',
+  accountId?: string,
+): Promise<string> {
   return JSON.stringify(await stopWorker(channel, accountId));
 }
 
@@ -40,7 +43,10 @@ export async function restartWorkerJson(
   return JSON.stringify(await restartWorker(channel, accountId));
 }
 
-export async function getWorkerJson(channel: Channel = 'whatsapp', accountId?: string): Promise<string> {
+export async function getWorkerJson(
+  channel: Channel = 'whatsapp',
+  accountId?: string,
+): Promise<string> {
   return JSON.stringify(await getWorkerState(channel, accountId));
 }
 

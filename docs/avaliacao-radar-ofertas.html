@@ -67,25 +67,25 @@
 <body>
 
 <h1>Avaliação Técnica</h1>
-<p class="subtitle">Radar Ofertas · Node.js / TypeScript · Julho 2026 · Análise pós Fases 1–4 (escalabilidade)</p>
+<p class="subtitle">Radar Ofertas · Node.js / TypeScript · Julho 2026 · Análise pós Fases 1–4 + hardening (qualidade e escalabilidade)</p>
 
 <div class="scores">
   <div class="score-card"><div class="value">8,0</div><div class="label">Arquitetura</div></div>
-  <div class="score-card"><div class="value">7,5</div><div class="label">Qualidade</div></div>
+  <div class="score-card"><div class="value">8,0</div><div class="label">Qualidade</div></div>
   <div class="score-card"><div class="value">8,5</div><div class="label">Organização</div></div>
-  <div class="score-card"><div class="value">7,0</div><div class="label">Escalabilidade</div></div>
+  <div class="score-card"><div class="value">8,0</div><div class="label">Escalabilidade</div></div>
   <div class="score-card"><div class="value">5,5</div><div class="label">Segurança</div></div>
 </div>
 
 <div class="average">
-  <div class="value">7,3</div>
+  <div class="value">7,6</div>
   <div class="label">Média geral (5 dimensões)</div>
 </div>
 
 <div class="bar-row"><span class="bar-label">Arquitetura</span><div class="bar-track"><div class="bar-fill" style="width:80%"></div></div><span class="bar-value">8,0</span></div>
-<div class="bar-row"><span class="bar-label">Qualidade</span><div class="bar-track"><div class="bar-fill" style="width:75%"></div></div><span class="bar-value">7,5</span></div>
+<div class="bar-row"><span class="bar-label">Qualidade</span><div class="bar-track"><div class="bar-fill" style="width:80%"></div></div><span class="bar-value">8,0</span></div>
 <div class="bar-row"><span class="bar-label">Organização</span><div class="bar-track"><div class="bar-fill" style="width:85%"></div></div><span class="bar-value">8,5</span></div>
-<div class="bar-row"><span class="bar-label">Escalabilidade</span><div class="bar-track"><div class="bar-fill" style="width:70%"></div></div><span class="bar-value">7,0</span></div>
+<div class="bar-row"><span class="bar-label">Escalabilidade</span><div class="bar-track"><div class="bar-fill" style="width:80%"></div></div><span class="bar-value">8,0</span></div>
 <div class="bar-row"><span class="bar-label">Segurança</span><div class="bar-track"><div class="bar-fill" style="width:55%; background: linear-gradient(90deg, #f59e0b, #ef4444)"></div></div><span class="bar-value">5,5</span></div>
 
 <h2>Resumo executivo</h2>
@@ -95,18 +95,18 @@
   organização por domínio com separação clara entre regras de negócio, integrações e orquestração.
 </p>
 <p>
-  Após as Fases 1–4 de escalabilidade (pool de filas, multi-conta runtime, contas em Prisma, manager stateless),
-  o projeto evoluiu de um MVP operacional para uma base sólida single-tenant com caminho claro para N contas.
-  Os maiores gaps restantes são operacionais (spawn por conta, token Telegram) e de <strong>segurança</strong>
-  (painel sem CSRF, auth opcional, XSS em atributos JS) — adequado para rede confiável/VPN, não para exposição pública sem hardening.
+  Após as Fases 1–4 e o hardening recente (collector sharded, spawn por conta, caches coerentes,
+  <code>tsc</code> limpo, ESLint/Prettier, 111 testes), o projeto evoluiu de MVP operacional para base
+  sólida multi-conta com gate de CI completo. Os maiores gaps restantes são <strong>segurança do painel</strong>
+  (CSRF, auth opcional, XSS) e Telegram multi-conta — adequado para rede confiável/VPN, não para exposição pública.
 </p>
 
 <p>
   <span class="tag">~102 arquivos src/</span>
   <span class="tag">~62 arquivos manager/</span>
-  <span class="tag">20 testes unitários</span>
+  <span class="tag">21 arquivos de teste · 111 casos</span>
   <span class="tag">TS strict</span>
-  <span class="tag">CI: tsc + test</span>
+  <span class="tag">CI: tsc + lint + format + test</span>
 </p>
 
 <h2>1. Arquitetura — 8,0 / 10</h2>
@@ -152,10 +152,10 @@
 
 <h3>Pontos fracos</h3>
 <ul>
-  <li class="con"><code>tsc</code> falha em ~14 erros (Baileys types, cheerio, manager unused imports) — gate de CI configurado mas código não limpo.</li>
-  <li class="con">Cobertura ainda parcial em <code>jobs/</code>, <code>whatsapp/</code> e <code>manager/</code> — helpers e regras puras testados; workers Baileys e rotas HTTP sem testes de integração.</li>
+  <li class="ok"><span class="tag tag-ok">já ok</span> <strong><code>tsc</code> limpo:</strong> <code>npx tsc -p tsconfig.check.json</code> passa em <code>src/</code> + <code>manager/</code> (Baileys, cheerio/domhandler, imports manager).</li>
+  <li class="con">Cobertura ainda parcial — workers Baileys, filas end-to-end e router HTTP completo sem testes de integração (helpers de <code>jobs/</code>, <code>whatsapp/</code> e <code>manager/http</code> já cobertos).</li>
   <li class="ok"><span class="tag tag-ok">já ok</span> <strong><code>npm test</code> cross-platform:</strong> runner em <code>src/test/run-tests.ts</code> descobre <code>*.test.ts</code> em <code>src/</code> e <code>manager/</code> (funciona no Windows).</li>
-  <li class="con">Sem ESLint/Prettier — estilo depende de convenção manual.</li>
+  <li class="ok"><span class="tag tag-ok">já ok</span> <strong>ESLint + Prettier:</strong> <code>npm run lint</code>, <code>npm run format:check</code> em <code>src/</code> + <code>manager/</code>; gate no CI.</li>
   <li class="con"><code>accounts/repository.ts</code> silencia erro de DB e cai para ENV — pode mascarar falhas.</li>
 </ul>
 
@@ -166,8 +166,8 @@
   <tr><td>Contas / Redis / filas</td><td>account-config.test.ts, redis-state.test.ts, queue-names.test.ts</td></tr>
   <tr><td>Jobs / pacing</td><td>sender.test.ts, collector.test.ts, sender-pacing.test.ts</td></tr>
   <tr><td>WhatsApp</td><td>channel-cache.test.ts, channel-id.test.ts</td></tr>
-  <tr><td>Manager</td><td>static-path.test.ts, operating-hours-section.test.ts</td></tr>
-  <tr><td>Sem testes</td><td>telegram/, rotas HTTP do manager, conexão Baileys end-to-end</td></tr>
+  <tr><td>Manager</td><td>request.test.ts, static-path.test.ts, operating-hours-section.test.ts</td></tr>
+  <tr><td>Sem testes</td><td>telegram/, router HTTP completo, conexão Baileys end-to-end</td></tr>
 </table>
 
 <div class="page-break"></div>
@@ -345,9 +345,8 @@
 <h2>Top 6 prioridades</h2>
 <ol>
   <li><strong>Endurecer segurança do painel</strong> — CSRF, <code>MANAGER_TOKEN</code> obrigatório, fix XSS em <code>accounts.ts</code>.</li>
-  <li><strong>Corrigir <code>tsc</code></strong> — erros Baileys/cheerio/manager bloqueiam gate de qualidade.</li>
   <li><strong>Telegram multi-conta</strong> — <code>botToken</code> por conta no publisher.</li>
-  <li><strong>Expandir testes</strong> — integração queue/sender e rotas do manager; E2E Telegram.</li>
+  <li><strong>Expandir testes</strong> — integração queue/sender e router HTTP do manager; E2E Telegram.</li>
   <li><strong>Limitar <code>readFormBody</code></strong> e adicionar rate limiting no manager.</li>
 </ol>
 
@@ -359,8 +358,8 @@
 </p>
 <p>
   A qualidade de código é boa no núcleo (<code>src/</code>), com TypeScript rigoroso e testes nos domínios críticos,
-  mas perde pontos por dívidas de tipagem no manager/Baileys e cobertura ainda parcial em workers e rotas HTTP
-  (helpers de <code>jobs/</code>, <code>whatsapp/</code> e <code>manager/</code> já têm testes unitários).
+  mas perde pontos por cobertura ainda parcial em workers e router HTTP
+  (helpers de <code>jobs/</code>, <code>whatsapp/</code> e <code>manager/http</code> já têm testes unitários; <code>tsc</code> limpo).
 </p>
 <p>
   A escalabilidade melhorou significativamente com as Fases 1–4 e os itens marcados como <em>já ok</em> na seção 4

@@ -63,7 +63,9 @@ function formatPreviewCount(shown: number, total: number): string {
 
 export function renderDashboard(data: DashboardData): string {
   const hoursLabel = `${String(data.operatingHours.start).padStart(2, '0')}:00 – ${
-    data.operatingHours.end === 0 ? '24:00' : `${String(data.operatingHours.end).padStart(2, '0')}:00`
+    data.operatingHours.end === 0
+      ? '24:00'
+      : `${String(data.operatingHours.end).padStart(2, '0')}:00`
   }`;
 
   const lastSentLabel = data.lastSentAt

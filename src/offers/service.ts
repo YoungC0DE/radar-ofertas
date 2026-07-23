@@ -21,7 +21,11 @@ import {
 import { runWithConcurrency } from '../utils/concurrency.js';
 import { logger } from '../utils/logger.js';
 import { allocateProportionalWithMin, shuffle } from './sampling.js';
-import { formatOfferMessageFromTemplate, loadMessageTemplate, loadPlaceholderVisibility } from './message-template.js';
+import {
+  formatOfferMessageFromTemplate,
+  loadMessageTemplate,
+  loadPlaceholderVisibility,
+} from './message-template.js';
 import {
   createOffer,
   deletePendingOfferById,
@@ -74,7 +78,10 @@ export async function formatOfferMessage(offer: OfferRecord): Promise<string> {
   return formatOfferMessageFromTemplate(template, offer, visibility);
 }
 
-export async function processOffer(rawOffer: RawOffer, deps: ServiceDeps = defaultDeps): Promise<string | null> {
+export async function processOffer(
+  rawOffer: RawOffer,
+  deps: ServiceDeps = defaultDeps,
+): Promise<string | null> {
   const scoreConfig = deps.getRuntimeScoreConfig();
   const score = deps.calculateOfferScore(rawOffer);
 
@@ -93,16 +100,25 @@ export async function processOffer(rawOffer: RawOffer, deps: ServiceDeps = defau
     const already = await deps.findExistingDeliveryChannels(existingId);
     const missing = targetChannels.filter((channel) => !already.includes(channel));
     if (missing.length === 0) {
-      logger.debug({ mercadoLivreId: rawOffer.mercadoLivreId }, 'Offer already dispatched to its channels');
+      logger.debug(
+        { mercadoLivreId: rawOffer.mercadoLivreId },
+        'Offer already dispatched to its channels',
+      );
       return null;
     }
     await dispatchOffer(existingId, missing, deps);
-    logger.info({ offerId: existingId, channels: missing }, 'Existing offer dispatched to missing channels');
+    logger.info(
+      { offerId: existingId, channels: missing },
+      'Existing offer dispatched to missing channels',
+    );
     return existingId;
   }
 
   if (await deps.sentOfferExistsByTitleAndPrice(rawOffer.title, rawOffer.price)) {
-    logger.debug({ title: rawOffer.title, price: rawOffer.price }, 'Duplicate sent offer (same title+price)');
+    logger.debug(
+      { title: rawOffer.title, price: rawOffer.price },
+      'Duplicate sent offer (same title+price)',
+    );
     return null;
   }
 
@@ -148,15 +164,19 @@ function resolveOfferChannels(rawOffer: RawOffer, deps: ServiceDeps = defaultDep
  * Cada canal falha por conta própria — um Redis recusando o job do Telegram não
  * pode impedir o WhatsApp de receber o seu.
  */
-export async function dispatchOffer(offerId: string, channels?: Channel[], deps: ServiceDeps = defaultDeps): Promise<Channel[]> {
-  const targets = (channels ?? deps.getEnabledChannels()).filter((channel) => deps.isChannelEnabled(channel));
+export async function dispatchOffer(
+  offerId: string,
+  channels?: Channel[],
+  deps: ServiceDeps = defaultDeps,
+): Promise<Channel[]> {
+  const targets = (channels ?? deps.getEnabledChannels()).filter((channel) =>
+    deps.isChannelEnabled(channel),
+  );
   const dispatched: Channel[] = [];
 
   for (const channel of targets) {
     const accounts = await deps.findAccountsByPlatform(channel);
-    const accountIds = accounts.length > 0
-      ? accounts.map((a) => a.id)
-      : ['default'];
+    const accountIds = accounts.length > 0 ? accounts.map((a) => a.id) : ['default'];
 
     for (const accountId of accountIds) {
       try {
@@ -255,7 +275,10 @@ async function collectForChannel(
     return { total: 0, enqueued: 0 };
   }
 
-  const quotas = allocateProportionalWithMin(filled.map((pool) => pool.offers.length), target);
+  const quotas = allocateProportionalWithMin(
+    filled.map((pool) => pool.offers.length),
+    target,
+  );
 
   logger.info(
     {

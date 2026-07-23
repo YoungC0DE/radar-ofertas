@@ -1,7 +1,6 @@
 import { Redis } from 'ioredis';
 
 import type { Channel } from '../channels/types.js';
-import type { Channel } from '../channels/types.js';
 import { env } from '../config/env.js';
 
 const RESERVE_SLOT_SCRIPT = `
@@ -48,7 +47,10 @@ async function acquireInProcess(key: string, delayMs: number): Promise<number> {
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
-  memoryChains.set(key, prev.then(() => gate));
+  memoryChains.set(
+    key,
+    prev.then(() => gate),
+  );
 
   await prev;
 
@@ -84,13 +86,7 @@ export async function acquireSenderPacingSlot(
   if (redis) {
     try {
       if (redis.status !== 'ready') await redis.connect();
-      const waitMs = await redis.eval(
-        RESERVE_SLOT_SCRIPT,
-        1,
-        key,
-        String(delayMs),
-        String(now),
-      );
+      const waitMs = await redis.eval(RESERVE_SLOT_SCRIPT, 1, key, String(delayMs), String(now));
       const parsed = Number(waitMs);
       return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
     } catch {

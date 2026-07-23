@@ -88,7 +88,6 @@ export function renderCouponsPage(data: CouponsPageData): string {
         ? `<p class="alert ok">${data.coupons.length} cupom(ns) encontrado(s)${data.source ? ` via ${data.source}` : ''}.</p>`
         : '';
 
-
   const meta = data.scrapedAt
     ? `<p class="meta">Última busca: ${formatDateTimeString(data.scrapedAt, env.APP_TIMEZONE)}</p>`
     : '';

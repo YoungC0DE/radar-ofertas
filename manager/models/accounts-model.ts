@@ -1,7 +1,4 @@
-import {
-  loadAccounts,
-  saveAccounts,
-} from '../../src/accounts/repository.js';
+import { loadAccounts, saveAccounts } from '../../src/accounts/repository.js';
 import { resolveAccountAuthPath } from '../../src/accounts/paths.js';
 import {
   ACCOUNT_PLATFORMS,
@@ -24,9 +21,10 @@ export async function loadAccountsData(
   error: string | null = null,
 ): Promise<AccountsPageData> {
   const accounts = await loadAccounts();
-  const platforms = ACCOUNT_PLATFORMS
-    .filter((p) => p !== 'mercado_livre')
-    .map((p) => ({ id: p, label: accountPlatformLabel(p) }));
+  const platforms = ACCOUNT_PLATFORMS.filter((p) => p !== 'mercado_livre').map((p) => ({
+    id: p,
+    label: accountPlatformLabel(p),
+  }));
 
   return { accounts, platforms, saved, error };
 }
@@ -44,29 +42,30 @@ export async function addAccount(form: Record<string, string>): Promise<SaveResu
   const accounts = await loadAccounts();
   const id = `${platform}-${Date.now().toString(36)}`;
 
-  const newAccount: Account = platform === 'whatsapp'
-    ? {
-        id,
-        platform: 'whatsapp',
-        label: label.trim(),
-        enabled: true,
-        config: { channelId: '', authPath: resolveAccountAuthPath(id, 'whatsapp') },
-      }
-    : platform === 'telegram'
+  const newAccount: Account =
+    platform === 'whatsapp'
       ? {
           id,
-          platform: 'telegram',
+          platform: 'whatsapp',
           label: label.trim(),
           enabled: true,
-          config: { botToken: '', chatId: '' },
+          config: { channelId: '', authPath: resolveAccountAuthPath(id, 'whatsapp') },
         }
-      : {
-          id,
-          platform: 'mercado_livre',
-          label: label.trim(),
-          enabled: true,
-          config: { authPath: resolveAccountAuthPath(id, 'mercado_livre') },
-        };
+      : platform === 'telegram'
+        ? {
+            id,
+            platform: 'telegram',
+            label: label.trim(),
+            enabled: true,
+            config: { botToken: '', chatId: '' },
+          }
+        : {
+            id,
+            platform: 'mercado_livre',
+            label: label.trim(),
+            enabled: true,
+            config: { authPath: resolveAccountAuthPath(id, 'mercado_livre') },
+          };
 
   accounts.push(newAccount);
   await saveAccounts(accounts);

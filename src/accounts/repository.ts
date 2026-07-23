@@ -85,7 +85,9 @@ export async function findAccountsByPlatform(platform: AccountPlatform): Promise
   return accounts.filter((account) => account.platform === platform && account.enabled);
 }
 
-export async function getDefaultAccountForPlatform(platform: AccountPlatform): Promise<Account | null> {
+export async function getDefaultAccountForPlatform(
+  platform: AccountPlatform,
+): Promise<Account | null> {
   const accounts = await findAccountsByPlatform(platform);
   return accounts.find((account) => account.id === DEFAULT_ACCOUNT_ID) ?? accounts[0] ?? null;
 }

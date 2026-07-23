@@ -42,9 +42,7 @@ export async function estimatePendingSendTimes(offerIds?: string[]): Promise<Map
   const storedNowMs = nowInTimezone(env.APP_TIMEZONE).getTime();
 
   const lastSentAt = await findLastSentAt();
-  let cursor = lastSentAt
-    ? lastSentAt.getTime() + senderDelayMs
-    : storedNowMs;
+  let cursor = lastSentAt ? lastSentAt.getTime() + senderDelayMs : storedNowMs;
   cursor = Math.max(cursor, storedNowMs);
   cursor = nextOperatingCursor(cursor);
 

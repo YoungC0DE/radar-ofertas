@@ -1,7 +1,10 @@
 import { invalidateAccountsCache } from '../accounts/repository.js';
-import { hydrateBrandCache } from '../config/brand-config.js';
-import { hydrateCouponsConfigCache } from '../config/coupons-config-store.js';
-import { hydrateMlSourcesCache } from '../config/ml-sources-config.js';
+import { hydrateBrandCache, invalidateBrandCache } from '../config/brand-config.js';
+import {
+  hydrateCouponsConfigCache,
+  invalidateCouponsConfigCache,
+} from '../config/coupons-config-store.js';
+import { hydrateMlSourcesCache, invalidateMlSourcesCache } from '../config/ml-sources-config.js';
 import {
   hydrateQueueConfigCache,
   invalidateQueueConfigCache,

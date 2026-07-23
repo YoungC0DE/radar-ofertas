@@ -38,40 +38,40 @@ function defaultMinScore(): number {
 
 function buildDefaultScoreConfig(): ScoreConfig {
   return {
-  minScore: defaultMinScore(),
-  discount: {
-    enabled: true,
-    cumulative: false,
-    tiers: [
-      { enabled: true, threshold: 30, points: 30 },
-      { enabled: true, threshold: 20, points: 20 },
-      { enabled: true, threshold: 10, points: 10 },
-    ],
-  },
-  rating: {
-    enabled: true,
-    cumulative: false,
-    tiers: [
-      { enabled: true, threshold: 4.5, points: 20 },
-      { enabled: true, threshold: 4.0, points: 10 },
-    ],
-  },
-  soldQuantity: {
-    enabled: true,
-    cumulative: false,
-    tiers: [
-      { enabled: true, threshold: 100, points: 20 },
-      { enabled: true, threshold: 50, points: 10 },
-    ],
-  },
-  price: {
-    enabled: true,
-    cumulative: true,
-    tiers: [
-      { enabled: true, threshold: 5000, points: 15 },
-      { enabled: true, threshold: 2500, points: 10 },
-    ],
-  },
+    minScore: defaultMinScore(),
+    discount: {
+      enabled: true,
+      cumulative: false,
+      tiers: [
+        { enabled: true, threshold: 30, points: 30 },
+        { enabled: true, threshold: 20, points: 20 },
+        { enabled: true, threshold: 10, points: 10 },
+      ],
+    },
+    rating: {
+      enabled: true,
+      cumulative: false,
+      tiers: [
+        { enabled: true, threshold: 4.5, points: 20 },
+        { enabled: true, threshold: 4.0, points: 10 },
+      ],
+    },
+    soldQuantity: {
+      enabled: true,
+      cumulative: false,
+      tiers: [
+        { enabled: true, threshold: 100, points: 20 },
+        { enabled: true, threshold: 50, points: 10 },
+      ],
+    },
+    price: {
+      enabled: true,
+      cumulative: true,
+      tiers: [
+        { enabled: true, threshold: 5000, points: 15 },
+        { enabled: true, threshold: 2500, points: 10 },
+      ],
+    },
   };
 }
 
@@ -110,7 +110,10 @@ function mergeTier(defaultTier: ScoreTier, override?: Partial<ScoreTier>): Score
   };
 }
 
-function mergeCategory(defaultCategory: ScoreCategory, override?: Partial<ScoreCategory>): ScoreCategory {
+function mergeCategory(
+  defaultCategory: ScoreCategory,
+  override?: Partial<ScoreCategory>,
+): ScoreCategory {
   const tiers = defaultCategory.tiers.map((tier, index) =>
     mergeTier(tier, override?.tiers?.[index]),
   );
@@ -177,8 +180,14 @@ function parseTierFromForm(
   index: number,
 ): ScoreTier {
   const prefix = `${category}Tier${index}`;
-  const threshold = parseNumber(form[`${prefix}Threshold`], `${SCORE_CATEGORY_LABELS[category]} — faixa ${index + 1}`);
-  const points = parseNumber(form[`${prefix}Points`], `${SCORE_CATEGORY_LABELS[category]} — pontos ${index + 1}`);
+  const threshold = parseNumber(
+    form[`${prefix}Threshold`],
+    `${SCORE_CATEGORY_LABELS[category]} — faixa ${index + 1}`,
+  );
+  const points = parseNumber(
+    form[`${prefix}Points`],
+    `${SCORE_CATEGORY_LABELS[category]} — pontos ${index + 1}`,
+  );
 
   if (points < 0 || !Number.isInteger(points)) {
     throw new Error(`Pontos devem ser um inteiro ≥ 0 (${SCORE_CATEGORY_LABELS[category]})`);
@@ -215,9 +224,7 @@ export function parseScoreConfigFromForm(form: Record<string, string>): ScoreCon
 
   for (const key of SCORE_CATEGORY_KEYS) {
     const defaultCategory = current[key];
-    const tiers = defaultCategory.tiers.map((_tier, index) =>
-      parseTierFromForm(form, key, index),
-    );
+    const tiers = defaultCategory.tiers.map((_tier, index) => parseTierFromForm(form, key, index));
     categories[key] = {
       enabled: parseBool(form[`${key}Enabled`]),
       cumulative: defaultCategory.cumulative,
@@ -299,7 +306,8 @@ function applyTiers(
 
 function formatThreshold(category: ScoreCategoryKey, threshold: number): string {
   if (category === 'discount') return `≥ ${threshold}%`;
-  if (category === 'rating') return `≥ ${threshold.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
+  if (category === 'rating')
+    return `≥ ${threshold.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
   if (category === 'soldQuantity') return `≥ ${threshold} un.`;
   return `≤ R$ ${threshold.toLocaleString('pt-BR')}`;
 }

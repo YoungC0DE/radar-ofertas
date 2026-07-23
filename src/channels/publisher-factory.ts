@@ -33,7 +33,8 @@ export function createWhatsAppPublisher(account: WhatsAppAccount): ChannelPublis
       if (isPlaceholderChannelId(config.channelId)) {
         return {
           ok: false,
-          detail: 'WHATSAPP_CHANNEL_ID é placeholder — rode npm run wa:channel com o link do seu canal',
+          detail:
+            'WHATSAPP_CHANNEL_ID é placeholder — rode npm run wa:channel com o link do seu canal',
         };
       }
 

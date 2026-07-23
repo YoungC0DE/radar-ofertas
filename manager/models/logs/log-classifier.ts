@@ -29,7 +29,8 @@ export function inferLogModule(entry: LogEntry): string {
   const meta = entry.meta;
   if (typeof meta.jobId === 'string') return 'jobs.collector';
   if (typeof meta.offerId === 'string') return 'offers.service';
-  if (typeof meta.permalink === 'string' || typeof meta.endpoint === 'string') return 'mercado-livre.affiliate';
+  if (typeof meta.permalink === 'string' || typeof meta.endpoint === 'string')
+    return 'mercado-livre.affiliate';
   if (typeof meta.category === 'string') return 'mercado-livre.scraper';
   if (typeof meta.channelId === 'string') return 'whatsapp.channel';
   if (typeof meta.path === 'string') return 'manager.http';

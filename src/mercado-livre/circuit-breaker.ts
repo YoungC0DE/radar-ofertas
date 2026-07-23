@@ -67,10 +67,7 @@ export function createCircuitBreaker(opts: Partial<CircuitBreakerOptions> = {}):
     state.failures++;
 
     if (state.status === 'half-open') {
-      state.currentCooldownMs = Math.min(
-        state.currentCooldownMs * 2,
-        options.maxCooldownMs,
-      );
+      state.currentCooldownMs = Math.min(state.currentCooldownMs * 2, options.maxCooldownMs);
       state.status = 'open';
       state.openUntil = Date.now() + state.currentCooldownMs;
       recordCircuitBreakerOpen();

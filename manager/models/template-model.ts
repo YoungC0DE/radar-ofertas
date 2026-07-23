@@ -13,7 +13,6 @@ import { formatTimeInputValue, toDatetimeLocalInputValue } from '../../src/utils
 import {
   COUPON_PLACEHOLDERS,
   DEFAULT_COUPON_TEMPLATE,
-  DEFAULT_COUPON_PLACEHOLDER_VISIBILITY,
   type CouponPlaceholderVisibility,
   loadCouponPlaceholderVisibility,
   loadCouponTemplate,
@@ -67,28 +66,34 @@ export async function loadTemplatePage(
   error: string | null = null,
   autoMessageNotice: string | null = null,
 ): Promise<TemplatePageData> {
-  const [template, placeholderVisibility, couponTemplate, couponPlaceholderVisibility, autoMessages] =
-    await Promise.all([
-      loadMessageTemplate(),
-      loadPlaceholderVisibility(),
-      loadCouponTemplate(),
-      loadCouponPlaceholderVisibility(),
-      listAutoMessages(),
-    ]);
+  const [
+    template,
+    placeholderVisibility,
+    couponTemplate,
+    couponPlaceholderVisibility,
+    autoMessages,
+  ] = await Promise.all([
+    loadMessageTemplate(),
+    loadPlaceholderVisibility(),
+    loadCouponTemplate(),
+    loadCouponPlaceholderVisibility(),
+    listAutoMessages(),
+  ]);
 
-  const offerResult = await withDatabase(
-    async () => {
-      const offers = await findOffers({ limit: 1 });
-      return offers[0] ?? null;
-    },
-    null,
-  );
+  const offerResult = await withDatabase(async () => {
+    const offers = await findOffers({ limit: 1 });
+    return offers[0] ?? null;
+  }, null);
 
   const previewOffer = offerResult.data;
   const previewValues = previewOffer ? buildTemplateValues(previewOffer) : sampleTemplateValues();
   const previewText = renderMessageTemplate(template, previewValues, placeholderVisibility);
   const couponPreviewValues = sampleCouponTemplateValues();
-  const couponPreviewText = renderCouponTemplate(couponTemplate, couponPreviewValues, couponPlaceholderVisibility);
+  const couponPreviewText = renderCouponTemplate(
+    couponTemplate,
+    couponPreviewValues,
+    couponPlaceholderVisibility,
+  );
 
   return {
     database: offerResult.database,

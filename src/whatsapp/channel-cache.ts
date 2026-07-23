@@ -17,9 +17,7 @@ export function normalizeInviteLink(input: string): string {
 
   const fromUrl = trimmed.match(/channel\/([A-Za-z0-9]+)/)?.[1];
   if (fromUrl) {
-    return trimmed.startsWith('http')
-      ? trimmed
-      : `https://whatsapp.com/channel/${fromUrl}`;
+    return trimmed.startsWith('http') ? trimmed : `https://whatsapp.com/channel/${fromUrl}`;
   }
 
   return `https://whatsapp.com/channel/${trimmed}`;
@@ -46,9 +44,7 @@ export async function saveWhatsAppChannelCache(
     channelId,
     channelName,
     inviteLink:
-      inviteLink !== undefined
-        ? inviteLink?.trim() || null
-        : existing?.inviteLink ?? null,
+      inviteLink !== undefined ? inviteLink?.trim() || null : (existing?.inviteLink ?? null),
     updatedAt: new Date().toISOString(),
   };
 

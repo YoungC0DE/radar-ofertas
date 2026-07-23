@@ -42,7 +42,9 @@ function renderScoreTierFields(key: ScoreCategoryKey, index: number, tier: Score
 
 export function renderScoreCategoryBlock(key: ScoreCategoryKey, data: SettingsData): string {
   const category = data.scoreConfig[key];
-  const tiers = category.tiers.map((tier, index) => renderScoreTierFields(key, index, tier)).join('');
+  const tiers = category.tiers
+    .map((tier, index) => renderScoreTierFields(key, index, tier))
+    .join('');
 
   return `<div class="score-category">
     <label class="score-category-flag">

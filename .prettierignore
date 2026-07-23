@@ -1,0 +1,8 @@
+build
+node_modules
+data
+docs
+package-lock.json
+prisma/migrations
+manager/public
+src/mercado-livre/fixtures

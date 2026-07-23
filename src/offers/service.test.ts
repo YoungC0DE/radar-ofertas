@@ -54,10 +54,26 @@ const fakeOffer = {
 
 const scoreConfig = {
   minScore: 50,
-  discount: { enabled: true, cumulative: false, tiers: [{ enabled: true, threshold: 30, points: 30 }] },
-  rating: { enabled: true, cumulative: false, tiers: [{ enabled: true, threshold: 4.0, points: 20 }] },
-  soldQuantity: { enabled: true, cumulative: false, tiers: [{ enabled: true, threshold: 100, points: 20 }] },
-  price: { enabled: true, cumulative: true, tiers: [{ enabled: true, threshold: 500, points: 10 }] },
+  discount: {
+    enabled: true,
+    cumulative: false,
+    tiers: [{ enabled: true, threshold: 30, points: 30 }],
+  },
+  rating: {
+    enabled: true,
+    cumulative: false,
+    tiers: [{ enabled: true, threshold: 4.0, points: 20 }],
+  },
+  soldQuantity: {
+    enabled: true,
+    cumulative: false,
+    tiers: [{ enabled: true, threshold: 100, points: 20 }],
+  },
+  price: {
+    enabled: true,
+    cumulative: true,
+    tiers: [{ enabled: true, threshold: 500, points: 10 }],
+  },
 };
 
 function makeDeps(overrides: Partial<ServiceDeps> = {}): ServiceDeps {
@@ -103,7 +119,10 @@ describe('processOffer', () => {
   it('não duplica quando mercadoLivreId já existe com todos os canais cobertos', async () => {
     const deps = makeDeps({
       findOfferIdByMercadoLivreId: mock.fn(async () => 'existing-id'),
-      findExistingDeliveryChannels: mock.fn(async (): Promise<('whatsapp' | 'telegram')[]> => ['whatsapp', 'telegram']),
+      findExistingDeliveryChannels: mock.fn(async (): Promise<('whatsapp' | 'telegram')[]> => [
+        'whatsapp',
+        'telegram',
+      ]),
     });
 
     const result = await processOffer(makeRawOffer(), deps);
@@ -115,7 +134,9 @@ describe('processOffer', () => {
   it('faz dispatch para canal faltante quando mercadoLivreId já existe', async () => {
     const deps = makeDeps({
       findOfferIdByMercadoLivreId: mock.fn(async () => 'existing-id'),
-      findExistingDeliveryChannels: mock.fn(async (): Promise<('whatsapp' | 'telegram')[]> => ['whatsapp']),
+      findExistingDeliveryChannels: mock.fn(async (): Promise<('whatsapp' | 'telegram')[]> => [
+        'whatsapp',
+      ]),
     });
 
     const result = await processOffer(makeRawOffer(), deps);

@@ -1,9 +1,5 @@
 import { escapeHtml } from '../helpers.js';
-import {
-  getBrandInitial,
-  getBrandLogoHref,
-  getBrandSettings,
-} from '../../models/brand-model.js';
+import { getBrandInitial, getBrandLogoHref, getBrandSettings } from '../../models/brand-model.js';
 import { getEnabledChannels } from '../../../src/channels/index.js';
 import { CHANNEL_LABELS } from '../../../src/channels/types.js';
 import { NAV_ICONS } from './nav-icons.js';
@@ -62,7 +58,12 @@ export function renderLayoutShell(
         <div class="nav-section">Fontes de coleta</div>
         ${getEnabledChannels()
           .map((channel) =>
-            navWithIcon(`/manager/sources/${channel}`, CHANNEL_LABELS[channel], `sources-${channel}`, 'sources'),
+            navWithIcon(
+              `/manager/sources/${channel}`,
+              CHANNEL_LABELS[channel],
+              `sources-${channel}`,
+              'sources',
+            ),
           )
           .join('')}
       </nav>

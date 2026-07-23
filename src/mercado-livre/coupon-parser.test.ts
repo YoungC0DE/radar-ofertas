@@ -146,15 +146,14 @@ describe('coupon-parser', () => {
   });
 
   it('detecta página de login real', () => {
-    const html = '<html><head><title>Entrar</title></head><body>Digite seu e-mail ou telefone para iniciar sessão</body></html>';
+    const html =
+      '<html><head><title>Entrar</title></head><body>Digite seu e-mail ou telefone para iniciar sessão</body></html>';
     assert.equal(isLoginHtml(html), true);
   });
 
   it('extrai cupons de resposta JSON direta', () => {
     const coupons = parseCouponsJson({
-      results: [
-        { coupon_name: 'Frete grátis', benefit: 'R$ 30 OFF', coupon_code: 'FRETE30' },
-      ],
+      results: [{ coupon_name: 'Frete grátis', benefit: 'R$ 30 OFF', coupon_code: 'FRETE30' }],
     });
 
     assert.equal(coupons.length, 1);

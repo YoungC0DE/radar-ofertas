@@ -55,7 +55,7 @@ async function enforceSenderPacing(
 }
 
 function resolveJobAccountId(data: SenderJobData, workerAccountId: string): string {
-  return data.accountId ?? workerAccountId ?? DEFAULT_ACCOUNT_ID;
+  return data.accountId ?? (workerAccountId || DEFAULT_ACCOUNT_ID);
 }
 
 /** @internal exportado para testes unitários */
@@ -129,7 +129,10 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
           );
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          logger.error({ channel, accountId, autoMessageId, error: message }, 'Auto message publish failed');
+          logger.error(
+            { channel, accountId, autoMessageId, error: message },
+            'Auto message publish failed',
+          );
           throw error;
         }
 
@@ -137,7 +140,10 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
       }
 
       if (!offerId) {
-        logger.warn({ channel, accountId, jobId: job.id }, 'Sender job without offerId or autoMessageId, skipping');
+        logger.warn(
+          { channel, accountId, jobId: job.id },
+          'Sender job without offerId or autoMessageId, skipping',
+        );
         return;
       }
 
@@ -149,15 +155,23 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
 
       const delivery = await findDelivery(offerId, channel, accountId);
       if (delivery?.sentAt) {
-        logger.info({ channel, accountId, offerId }, 'Offer already sent to this channel/account, skipping');
+        logger.info(
+          { channel, accountId, offerId },
+          'Offer already sent to this channel/account, skipping',
+        );
         return;
       }
 
       if (!offer.affiliateLink && offer.permalink) {
-        const affiliateLink = await buildAffiliateLink(offer.permalink, offer.mercadoLivreId, undefined, {
-          allowBrowser: false,
-          timeoutMs: AFFILIATE_LINK_SEND_TIMEOUT_MS,
-        });
+        const affiliateLink = await buildAffiliateLink(
+          offer.permalink,
+          offer.mercadoLivreId,
+          undefined,
+          {
+            allowBrowser: false,
+            timeoutMs: AFFILIATE_LINK_SEND_TIMEOUT_MS,
+          },
+        );
         await updateOfferAffiliateLink(offerId, affiliateLink);
         offer.affiliateLink = affiliateLink;
         logger.info({ channel, accountId, offerId }, 'Affiliate link gerado sob demanda no envio');
@@ -185,7 +199,10 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
   );
 
   worker.on('failed', (job, error) => {
-    logger.error({ channel, accountId: workerAccountId, jobId: job?.id, error }, 'Sender job failed');
+    logger.error(
+      { channel, accountId: workerAccountId, jobId: job?.id, error },
+      'Sender job failed',
+    );
   });
 
   return worker;

@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio';
+import type { AnyNode } from 'domhandler';
 import type { ScrapedItem } from './types.js';
 
 const EMBEDDED_JSON_PATTERNS = [
@@ -30,7 +31,7 @@ function parseAriaLabelPrice(label: string | undefined): number | null {
   return null;
 }
 
-function parseMoneyFromContainer(container: cheerio.Cheerio<cheerio.AnyNode>): number | null {
+function parseMoneyFromContainer(container: cheerio.Cheerio<AnyNode>): number | null {
   const amountEl = container.find('[data-andes-money-amount="true"]').first();
   const fromAria = parseAriaLabelPrice(amountEl.attr('aria-label'));
   if (fromAria !== null) return fromAria;
@@ -142,7 +143,7 @@ export function parseSalesRankText(raw: string | undefined): string | null {
 
 function parseSalesRankFromCard(
   $: cheerio.CheerioAPI,
-  card: cheerio.Cheerio<cheerio.AnyNode>,
+  card: cheerio.Cheerio<AnyNode>,
 ): string | null {
   const shortTexts: string[] = [];
 
@@ -163,7 +164,7 @@ function parseSalesRankFromCard(
 
 function parseSoldQuantityFromCard(
   $: cheerio.CheerioAPI,
-  card: cheerio.Cheerio<cheerio.AnyNode>,
+  card: cheerio.Cheerio<AnyNode>,
 ): number | null {
   const textSources: string[] = [];
   const soldEl = card
@@ -190,10 +191,7 @@ function parseSoldQuantityFromCard(
  */
 const BEST_SELLER_LABEL = /^mais\s+vendido$/i;
 
-function parseBestSellerFromCard(
-  $: cheerio.CheerioAPI,
-  card: cheerio.Cheerio<cheerio.AnyNode>,
-): boolean {
+function parseBestSellerFromCard($: cheerio.CheerioAPI, card: cheerio.Cheerio<AnyNode>): boolean {
   let found = false;
   card.find('.poly-component__poly-label').each((_, element) => {
     if (BEST_SELLER_LABEL.test($(element).text().trim())) found = true;
@@ -207,7 +205,7 @@ function parseBestSellerFromCard(
  * 1 ponto do que o cliente vê na página. O pill também é usado para frete
  * ("Chegará grátis amanhã"), daí o escopo em .poly-price__labels.
  */
-function parseDiscountPercentFromCard(card: cheerio.Cheerio<cheerio.AnyNode>): number | null {
+function parseDiscountPercentFromCard(card: cheerio.Cheerio<AnyNode>): number | null {
   const pill = card.find('.poly-price__labels .polylabel-pill').first().text().trim();
   const match = pill.match(/(\d{1,3})\s*%/);
   if (!match?.[1]) return null;
@@ -216,7 +214,7 @@ function parseDiscountPercentFromCard(card: cheerio.Cheerio<cheerio.AnyNode>): n
   return Number.isFinite(value) && value > 0 && value <= 100 ? value : null;
 }
 
-function parseSellerFromCard(card: cheerio.Cheerio<cheerio.AnyNode>): {
+function parseSellerFromCard(card: cheerio.Cheerio<AnyNode>): {
   seller: string | null;
   officialStore: boolean;
 } {
@@ -226,7 +224,11 @@ function parseSellerFromCard(card: cheerio.Cheerio<cheerio.AnyNode>): {
   // O selo de loja oficial é um <svg aria-label="Loja oficial"> dentro do span;
   // text() já o ignora, sobrando só o nome do vendedor.
   const officialStore = el.find('svg[aria-label="Loja oficial"]').length > 0;
-  const seller = el.text().replace(/\s+/g, ' ').replace(/^por\s+/i, '').trim();
+  const seller = el
+    .text()
+    .replace(/\s+/g, ' ')
+    .replace(/^por\s+/i, '')
+    .trim();
 
   return { seller: seller || null, officialStore };
 }
@@ -263,7 +265,9 @@ function extractSalesRankFromRecord(raw: Record<string, unknown>): string | null
 
 function normalizePermalink(href: string): string {
   if (href.startsWith('http')) return href.split('#')[0] ?? href;
-  return `https://www.mercadolivre.com.br${href.startsWith('/') ? '' : '/'}${href}`.split('#')[0] ?? href;
+  return (
+    `https://www.mercadolivre.com.br${href.startsWith('/') ? '' : '/'}${href}`.split('#')[0] ?? href
+  );
 }
 
 function extractIdFromPermalink(permalink: string): string | null {
@@ -382,10 +386,14 @@ function parseWithCheerio(html: string): ScrapedItem[] {
       .first();
     const linkEl = card.find('a[href*="mercadolivre"]').first();
     const currentPriceEl = card.find('.poly-price__current').first();
-    const oldPriceEl = card.find('s.andes-money-amount, .poly-price__labels s, .poly-price__original').first();
+    const oldPriceEl = card
+      .find('s.andes-money-amount, .poly-price__labels s, .poly-price__original')
+      .first();
     const imageEl = card.find('img').first();
     const ratingEl = card
-      .find('.ui-search-reviews__rating-number, .poly-reviews__rating, .poly-component__review-compacted')
+      .find(
+        '.ui-search-reviews__rating-number, .poly-reviews__rating, .poly-component__review-compacted',
+      )
       .first();
 
     const href = linkEl.attr('href');
@@ -401,12 +409,12 @@ function parseWithCheerio(html: string): ScrapedItem[] {
 
     const permalink = normalizePermalink(href);
     const id = extractIdFromPermalink(permalink) ?? permalink;
-    const originalPrice = oldPriceEl.length
-      ? parseMoneyFromContainer(oldPriceEl)
-      : null;
+    const originalPrice = oldPriceEl.length ? parseMoneyFromContainer(oldPriceEl) : null;
     const thumbnail = imageEl.attr('src') ?? imageEl.attr('data-src') ?? null;
     const soldQuantity = parseSoldQuantityFromCard($, card);
-    const rating = parseRating(ratingEl.text().trim() || card.find('[aria-label*="estrela"]').attr('aria-label'));
+    const rating = parseRating(
+      ratingEl.text().trim() || card.find('[aria-label*="estrela"]').attr('aria-label'),
+    );
     const salesRank = parseSalesRankFromCard($, card);
     const { seller, officialStore } = parseSellerFromCard(card);
     const bestSeller = parseBestSellerFromCard($, card);

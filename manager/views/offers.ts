@@ -38,26 +38,22 @@ export function renderOffersPage(
   error: string | null = null,
   delaySaved = false,
 ): string {
-  const rows =
-    !data.database.available
-      ? `<tr><td colspan="9">${escapeHtml(data.database.error ?? 'Banco indisponível')}</td></tr>`
-      : data.offers.length === 0
+  const rows = !data.database.available
+    ? `<tr><td colspan="9">${escapeHtml(data.database.error ?? 'Banco indisponível')}</td></tr>`
+    : data.offers.length === 0
       ? `<tr><td colspan="9">Nenhuma oferta encontrada.</td></tr>`
       : data.offers
-          .map(
-            (o) => {
-              const scheduleAt = o.sentAt ? null : data.scheduleByOfferId.get(o.id) ?? null;
-              const scheduleCell = scheduleAt
-                ? formatDate(scheduleAt, env.APP_TIMEZONE)
-                : '—';
+          .map((o) => {
+            const scheduleAt = o.sentAt ? null : (data.scheduleByOfferId.get(o.id) ?? null);
+            const scheduleCell = scheduleAt ? formatDate(scheduleAt, env.APP_TIMEZONE) : '—';
 
-              const deleteButton = o.sentAt
-                ? ''
-                : `<form method="post" action="/manager/offers/${escapeHtml(o.id)}/delete" class="offer-delete-form">
+            const deleteButton = o.sentAt
+              ? ''
+              : `<form method="post" action="/manager/offers/${escapeHtml(o.id)}/delete" class="offer-delete-form">
                     <button type="button" class="btn-trash offer-delete-btn" title="Apagar oferta pendente" aria-label="Apagar oferta">${TRASH_ICON}</button>
                   </form>`;
 
-              return `<tr>
+            return `<tr>
           <td><a class="link" href="/manager/offers/${escapeHtml(o.id)}">${escapeHtml(o.id.slice(0, 10))}…</a></td>
           <td><div class="dest-cell">${renderDestino(data.deliveriesByOfferId.get(o.id))}</div></td>
           <td>${escapeHtml(o.title.slice(0, 50))}${o.title.length > 50 ? '…' : ''}</td>
@@ -73,8 +69,7 @@ export function renderOffersPage(
             </div>
           </td>
         </tr>`;
-            },
-          )
+          })
           .join('');
 
   const prevPage = data.page > 1 ? data.page - 1 : null;
@@ -97,9 +92,10 @@ export function renderOffersPage(
           ? `<p class="alert err">${escapeHtml(error)}</p>`
           : '';
 
-  const delayButtonLabel = data.affiliateDelay.backlogDelayMinutes === 1
-    ? '1 min'
-    : `${data.affiliateDelay.backlogDelayMinutes} min`;
+  const delayButtonLabel =
+    data.affiliateDelay.backlogDelayMinutes === 1
+      ? '1 min'
+      : `${data.affiliateDelay.backlogDelayMinutes} min`;
 
   const searchLimitForm = `
     <form method="post" action="/manager/offers/search-limit" class="inline-form" id="search-limit-form">

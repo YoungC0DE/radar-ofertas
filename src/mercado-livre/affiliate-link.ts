@@ -139,7 +139,10 @@ async function createLinkViaHttp(permalink: string): Promise<AffiliateLinkResult
           const result = extractLinkFromResponse(data);
           if (!result) continue;
 
-          logger.info({ permalink, endpoint, affiliate_source: 'http' }, 'Affiliate link generated');
+          logger.info(
+            { permalink, endpoint, affiliate_source: 'http' },
+            'Affiliate link generated',
+          );
           return result;
         } catch (error) {
           logger.debug({ endpoint, error }, 'createLink HTTP attempt failed');
@@ -160,10 +163,7 @@ async function createLinkViaHttp(permalink: string): Promise<AffiliateLinkResult
     if (result) return result;
   }
 
-  logger.warn(
-    { permalink },
-    'createLink rejected — session may be expired, run npm run ml:login',
-  );
+  logger.warn({ permalink }, 'createLink rejected — session may be expired, run npm run ml:login');
   return null;
 }
 
@@ -188,9 +188,7 @@ async function createLinkViaBrowser(permalink: string): Promise<AffiliateLinkRes
           .first();
         await urlInput.fill(permalink);
 
-        const generateButton = page
-          .getByRole('button', { name: /gerar|criar|generate/i })
-          .first();
+        const generateButton = page.getByRole('button', { name: /gerar|criar|generate/i }).first();
         await generateButton.click();
         await page.waitForTimeout(2000);
 
@@ -203,7 +201,12 @@ async function createLinkViaBrowser(permalink: string): Promise<AffiliateLinkRes
           (await output.inputValue().catch(() => '')) || (await output.textContent()) || '';
 
         if (!generated.includes('mercadolivre') && !generated.includes('mercadolibre')) {
-          if (await page.locator('text=/sess[aã]o|login|entrar/i').isVisible().catch(() => false)) {
+          if (
+            await page
+              .locator('text=/sess[aã]o|login|entrar/i')
+              .isVisible()
+              .catch(() => false)
+          ) {
             logger.warn({ permalink }, 'Link-builder requires login — run npm run ml:login');
           }
           return null;
@@ -277,7 +280,10 @@ async function resolveAffiliateLink(
     }
   }
 
-  logger.warn({ permalink, affiliate_source: 'fallback' }, 'Using fallback affiliate link — run npm run ml:login');
+  logger.warn(
+    { permalink, affiliate_source: 'fallback' },
+    'Using fallback affiliate link — run npm run ml:login',
+  );
   const fallback = fallbackAffiliateLink(permalink).url;
   if (mercadoLivreId) linkCache.set(mercadoLivreId, fallback);
   return fallback;

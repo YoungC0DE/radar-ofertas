@@ -10,7 +10,11 @@ export function resolveWorkerAccountId(): string {
   return env.WORKER_ACCOUNT_ID.trim() || DEFAULT_ACCOUNT_ID;
 }
 
-function assertAccountPlatform(account: Account, platform: AccountPlatform, accountId: string): void {
+function assertAccountPlatform(
+  account: Account,
+  platform: AccountPlatform,
+  accountId: string,
+): void {
   if (account.platform !== platform) {
     throw new Error(`Conta "${accountId}" é ${account.platform}, esperado ${platform}`);
   }

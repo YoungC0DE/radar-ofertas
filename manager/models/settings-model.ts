@@ -51,7 +51,16 @@ import {
   type AccountWorkerState,
 } from './process-model.js';
 
-export type SettingsSaveType = 'channel' | 'interval' | 'brand' | 'score' | 'hours' | 'senderDelay' | 'mlSources' | 'couponsUrl' | null;
+export type SettingsSaveType =
+  | 'channel'
+  | 'interval'
+  | 'brand'
+  | 'score'
+  | 'hours'
+  | 'senderDelay'
+  | 'mlSources'
+  | 'couponsUrl'
+  | null;
 
 export interface SettingsData {
   timezone: string;
@@ -146,9 +155,9 @@ export async function loadSettingsData(
     telegramEnabled: env.TELEGRAM_ENABLED,
     telegramChatId: env.TELEGRAM_CHAT_ID,
     tgSession,
-    workerState: whatsappWorkers[0]?.state ?? await getWorkerState('whatsapp'),
+    workerState: whatsappWorkers[0]?.state ?? (await getWorkerState('whatsapp')),
     whatsappWorkers,
-    telegramWorkerState: telegramWorkers[0]?.state ?? await getWorkerState('telegram'),
+    telegramWorkerState: telegramWorkers[0]?.state ?? (await getWorkerState('telegram')),
     telegramWorkers,
     canSpawnWorkers: canManagerSpawnWorkers(),
     mlCouponsUrl,
@@ -214,4 +223,3 @@ export async function saveScoreSettings(
     await saveScoreConfig(config);
   }, 'Falha ao salvar regras de score');
 }
-

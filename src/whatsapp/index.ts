@@ -5,8 +5,6 @@ import makeWASocket, {
   DisconnectReason,
   isJidNewsletter,
   type WASocket,
-  type ConnectionUpdateEvent,
-  type MessageUpdateEvent,
   type WAMessage,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
@@ -188,7 +186,11 @@ export async function getWhatsAppOwnerStatus(): Promise<WhatsAppOwnerStatus> {
 }
 
 async function writeOwnerLock(): Promise<void> {
-  const payload: OwnerLock = { pid: process.pid, host: hostname(), heartbeat: new Date().toISOString() };
+  const payload: OwnerLock = {
+    pid: process.pid,
+    host: hostname(),
+    heartbeat: new Date().toISOString(),
+  };
   await mkdir(getWhatsAppAuthPath(), { recursive: true }).catch(() => {});
   await writeFile(ownerLockPath(), JSON.stringify(payload)).catch(() => {});
 }
@@ -226,7 +228,9 @@ function printQrCode(qr: string): void {
   console.log('\nEscaneie o QR code abaixo com o WhatsApp (Aparelhos conectados):\n');
   qrcode.generate(qr, { small: true });
   console.log('\nSe o QR não aparecer, abra este link no navegador e escaneie a imagem:\n');
-  console.log(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}\n`);
+  console.log(
+    `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}\n`,
+  );
 }
 
 export function isPlaceholderChannelId(channelId: string): boolean {
@@ -234,7 +238,7 @@ export function isPlaceholderChannelId(channelId: string): boolean {
 }
 
 export function isNewsletterChannelId(channelId: string): boolean {
-  return isJidNewsletter(channelId);
+  return isJidNewsletter(channelId) === true;
 }
 
 export async function hasWhatsAppCredentials(): Promise<boolean> {
@@ -288,9 +292,7 @@ export async function validateWhatsAppChannel(
 
     return {
       valid: true,
-      name:
-        resolveNewsletterName(meta.name) ??
-        resolveNewsletterName(meta.thread_metadata?.name),
+      name: resolveNewsletterName(meta.name) ?? resolveNewsletterName(meta.thread_metadata?.name),
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -317,7 +319,7 @@ async function createSocket(
 
   sock.ev.on('creds.update', saveCreds);
 
-  sock.ev.on('connection.update', (update: ConnectionUpdateEvent) => {
+  sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
@@ -373,7 +375,7 @@ async function createSocket(
     }
   });
 
-  sock.ev.on('messages.update', (updates: MessageUpdateEvent[]) => {
+  sock.ev.on('messages.update', (updates) => {
     for (const update of updates) {
       logger.debug({ update }, 'Message status updated');
     }
@@ -402,7 +404,9 @@ export async function connectWhatsApp(options?: ConnectWhatsAppOptions): Promise
   // (evita o connectionReplaced em loop). Avisamos o chamador — o worker duplicado
   // encerra a si mesmo; o painel apenas mostra que já está logado.
   if (await anotherOwnerAlive()) {
-    logger.warn('WhatsApp já está conectado em outro processo — ignorando novo login e mantendo a sessão existente.');
+    logger.warn(
+      'WhatsApp já está conectado em outro processo — ignorando novo login e mantendo a sessão existente.',
+    );
     allowReconnect = false;
     throw new WhatsAppOwnedElsewhereError();
   }
@@ -416,7 +420,7 @@ export async function connectWhatsApp(options?: ConnectWhatsAppOptions): Promise
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('WhatsApp connection timeout')), 120_000);
 
-    sock.ev.on('connection.update', ({ connection, lastDisconnect }: ConnectionUpdateEvent) => {
+    sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
       if (connection === 'open') {
         clearTimeout(timeout);
         resolve(sock);
@@ -528,7 +532,10 @@ export async function sendOffer(
           return result;
         }
       }
-      logger.warn({ imageUrl, status: response.status }, 'Falha ao baixar imagem — enviando só texto');
+      logger.warn(
+        { imageUrl, status: response.status },
+        'Falha ao baixar imagem — enviando só texto',
+      );
     } catch (error) {
       logger.warn({ error, imageUrl }, 'Erro no envio com imagem — enviando só texto');
     }

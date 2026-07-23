@@ -4,7 +4,6 @@ import {
   getLogTotalCount,
   getMlScrapeLogs,
   getRecentLogs,
-  type LogEntry,
   type LogFilters,
   type LogLevel,
   type LogSource,

@@ -11,13 +11,19 @@ export function renderMlCouponsUrlSection(data: SettingsData): string {
       </div>
     </div>`;
 
-  return configRow('URL de cupons ML', value, 'Página do hub de afiliados usada na busca de cupons');
+  return configRow(
+    'URL de cupons ML',
+    value,
+    'Página do hub de afiliados usada na busca de cupons',
+  );
 }
 
 export function renderSourcesPointer(data: SettingsData): string {
   const links = [
     `<a class="link" href="/manager/sources/whatsapp">Fontes do WhatsApp</a>`,
-    ...(data.telegramEnabled ? [`<a class="link" href="/manager/sources/telegram">Fontes do Telegram</a>`] : []),
+    ...(data.telegramEnabled
+      ? [`<a class="link" href="/manager/sources/telegram">Fontes do Telegram</a>`]
+      : []),
   ].join(' · ');
 
   return configRow(

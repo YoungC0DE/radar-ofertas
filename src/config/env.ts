@@ -23,86 +23,92 @@ const queueConfigSchema = z.object({
   affiliateLinkBacklogThreshold: z.number().int().positive().default(5),
 });
 
-const envSchema = z.object({
-  NODE_ENV: z.enum(['local', 'production']).default('local'),
-  APP_TIMEZONE: z
-    .string()
-    .default('America/Sao_Paulo')
-    .refine(isValidTimezone, { message: 'APP_TIMEZONE must be a valid IANA timezone' }),
-  DATABASE_URL: z.string().url(),
-  REDIS_URL: z.string().min(1),
-  WHATSAPP_CHANNEL_ID: z.string().min(1),
-  WHATSAPP_AUTH_PATH: z.string().default('./data/auth_info_baileys'),
-  TELEGRAM_ENABLED: z
-    .string()
-    .default('false')
-    .transform((val) => val === 'true' || val === '1'),
-  TELEGRAM_BOT_TOKEN: z.string().default(''),
-  /** @meucanal, -100... (supergrupo/canal) ou id numérico do chat */
-  TELEGRAM_CHAT_ID: z.string().default(''),
-  TELEGRAM_API_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
-  ML_AUTH_PATH: z.string().default('./data/ml_auth'),
-  ML_CATEGORIES: z
-    .string()
-    .default('MLB1648')
-    .transform((val) => val.split(',').map((c) => c.trim()).filter(Boolean)),
-  ML_SEARCH_LIMIT: z.coerce.number().int().positive().default(50),
-  ML_SCRAPER_USER_AGENT: z
-    .string()
-    .default(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    ),
-  ML_USE_BROWSER_FALLBACK: z
-    .string()
-    .default('true')
-    .transform((val) => val === 'true' || val === '1'),
-  ML_BROWSER_HEADLESS: z
-    .string()
-    .default('true')
-    .transform((val) => val === 'true' || val === '1'),
-  ML_HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
-  ML_COUPONS_URL: z
-    .string()
-    .url()
-    .default('https://www.mercadolivre.com.br/afiliados/coupons#hub'),
-  AFFILIATE_CONFIG: z
-    .string()
-    .default('{}')
-    .transform((val, ctx) => {
-      try {
-        const parsed: unknown = JSON.parse(val);
-        return affiliateConfigSchema.parse(parsed);
-      } catch {
-        ctx.addIssue({ code: 'custom', message: 'AFFILIATE_CONFIG must be valid JSON' });
-        return z.NEVER;
-      }
-    }),
-  QUEUE_CONFIG: z
-    .string()
-    .default('{}')
-    .transform((val, ctx) => {
-      try {
-        const parsed: unknown = JSON.parse(val);
-        return queueConfigSchema.parse(parsed);
-      } catch {
-        ctx.addIssue({ code: 'custom', message: 'QUEUE_CONFIG must be valid JSON' });
-        return z.NEVER;
-      }
-    }),
-  REDIS_ENABLED: z
-    .string()
-    .default('true')
-    .transform((val) => val === 'true' || val === '1'),
-  MANAGER_PORT: z.coerce.number().int().positive().default(3000),
-  MANAGER_TOKEN: z.string().optional(),
-  /** Permite o painel iniciar/parar workers via spawn (dev). Desligar em produção/Docker. */
-  MANAGER_CAN_SPAWN_WORKERS: z
-    .string()
-    .default('true')
-    .transform((val) => val === 'true' || val === '1'),
-  /** Conta que este worker de envio consome (fila e sessão). Default: `default`. */
-  WORKER_ACCOUNT_ID: z.string().default(''),
-})
+const envSchema = z
+  .object({
+    NODE_ENV: z.enum(['local', 'production']).default('local'),
+    APP_TIMEZONE: z
+      .string()
+      .default('America/Sao_Paulo')
+      .refine(isValidTimezone, { message: 'APP_TIMEZONE must be a valid IANA timezone' }),
+    DATABASE_URL: z.string().url(),
+    REDIS_URL: z.string().min(1),
+    WHATSAPP_CHANNEL_ID: z.string().min(1),
+    WHATSAPP_AUTH_PATH: z.string().default('./data/auth_info_baileys'),
+    TELEGRAM_ENABLED: z
+      .string()
+      .default('false')
+      .transform((val) => val === 'true' || val === '1'),
+    TELEGRAM_BOT_TOKEN: z.string().default(''),
+    /** @meucanal, -100... (supergrupo/canal) ou id numérico do chat */
+    TELEGRAM_CHAT_ID: z.string().default(''),
+    TELEGRAM_API_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
+    ML_AUTH_PATH: z.string().default('./data/ml_auth'),
+    ML_CATEGORIES: z
+      .string()
+      .default('MLB1648')
+      .transform((val) =>
+        val
+          .split(',')
+          .map((c) => c.trim())
+          .filter(Boolean),
+      ),
+    ML_SEARCH_LIMIT: z.coerce.number().int().positive().default(50),
+    ML_SCRAPER_USER_AGENT: z
+      .string()
+      .default(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+      ),
+    ML_USE_BROWSER_FALLBACK: z
+      .string()
+      .default('true')
+      .transform((val) => val === 'true' || val === '1'),
+    ML_BROWSER_HEADLESS: z
+      .string()
+      .default('true')
+      .transform((val) => val === 'true' || val === '1'),
+    ML_HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+    ML_COUPONS_URL: z
+      .string()
+      .url()
+      .default('https://www.mercadolivre.com.br/afiliados/coupons#hub'),
+    AFFILIATE_CONFIG: z
+      .string()
+      .default('{}')
+      .transform((val, ctx) => {
+        try {
+          const parsed: unknown = JSON.parse(val);
+          return affiliateConfigSchema.parse(parsed);
+        } catch {
+          ctx.addIssue({ code: 'custom', message: 'AFFILIATE_CONFIG must be valid JSON' });
+          return z.NEVER;
+        }
+      }),
+    QUEUE_CONFIG: z
+      .string()
+      .default('{}')
+      .transform((val, ctx) => {
+        try {
+          const parsed: unknown = JSON.parse(val);
+          return queueConfigSchema.parse(parsed);
+        } catch {
+          ctx.addIssue({ code: 'custom', message: 'QUEUE_CONFIG must be valid JSON' });
+          return z.NEVER;
+        }
+      }),
+    REDIS_ENABLED: z
+      .string()
+      .default('true')
+      .transform((val) => val === 'true' || val === '1'),
+    MANAGER_PORT: z.coerce.number().int().positive().default(3000),
+    MANAGER_TOKEN: z.string().optional(),
+    /** Permite o painel iniciar/parar workers via spawn (dev). Desligar em produção/Docker. */
+    MANAGER_CAN_SPAWN_WORKERS: z
+      .string()
+      .default('true')
+      .transform((val) => val === 'true' || val === '1'),
+    /** Conta que este worker de envio consome (fila e sessão). Default: `default`. */
+    WORKER_ACCOUNT_ID: z.string().default(''),
+  })
   // Só exigimos as credenciais do Telegram quando o canal está ligado: quem roda
   // apenas o WhatsApp não precisa preencher nada no .env.
   .superRefine((value, ctx) => {
@@ -112,7 +118,8 @@ const envSchema = z.object({
       ctx.addIssue({
         code: 'custom',
         path: ['TELEGRAM_BOT_TOKEN'],
-        message: 'TELEGRAM_BOT_TOKEN é obrigatório quando TELEGRAM_ENABLED=true — pegue o token com o @BotFather',
+        message:
+          'TELEGRAM_BOT_TOKEN é obrigatório quando TELEGRAM_ENABLED=true — pegue o token com o @BotFather',
       });
     }
 
@@ -120,7 +127,8 @@ const envSchema = z.object({
       ctx.addIssue({
         code: 'custom',
         path: ['TELEGRAM_CHAT_ID'],
-        message: 'TELEGRAM_CHAT_ID é obrigatório quando TELEGRAM_ENABLED=true — use @seucanal ou o id numérico',
+        message:
+          'TELEGRAM_CHAT_ID é obrigatório quando TELEGRAM_ENABLED=true — use @seucanal ou o id numérico',
       });
     }
   });

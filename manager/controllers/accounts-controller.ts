@@ -14,9 +14,7 @@ export async function showAccountsPage(
   return renderAccountsPage(data);
 }
 
-export async function handleAccountAdd(
-  form: Record<string, string>,
-): Promise<string> {
+export async function handleAccountAdd(form: Record<string, string>): Promise<string> {
   const result = await addAccount(form);
   if (!result.ok) {
     return showAccountsPage(null, result.error);
@@ -24,9 +22,7 @@ export async function handleAccountAdd(
   return showAccountsPage('Conta adicionada com sucesso');
 }
 
-export async function handleAccountToggle(
-  accountId: string,
-): Promise<{ redirect: string }> {
+export async function handleAccountToggle(accountId: string): Promise<{ redirect: string }> {
   const result = await toggleAccount(accountId);
   if (!result.ok) {
     return { redirect: `/manager/accounts?error=${encodeURIComponent(result.error)}` };
@@ -34,9 +30,7 @@ export async function handleAccountToggle(
   return { redirect: '/manager/accounts?saved=1' };
 }
 
-export async function handleAccountDelete(
-  accountId: string,
-): Promise<{ redirect: string }> {
+export async function handleAccountDelete(accountId: string): Promise<{ redirect: string }> {
   const result = await removeAccount(accountId);
   if (!result.ok) {
     return { redirect: `/manager/accounts?error=${encodeURIComponent(result.error)}` };

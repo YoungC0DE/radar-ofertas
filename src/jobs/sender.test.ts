@@ -4,7 +4,10 @@ import { resolveJobAccountId } from './sender.js';
 
 describe('resolveJobAccountId', () => {
   it('prioriza accountId do job', () => {
-    assert.equal(resolveJobAccountId({ offerId: 'o1', accountId: 'conta-a' }, 'worker-b'), 'conta-a');
+    assert.equal(
+      resolveJobAccountId({ offerId: 'o1', accountId: 'conta-a' }, 'worker-b'),
+      'conta-a',
+    );
   });
 
   it('usa worker quando job não tem accountId', () => {

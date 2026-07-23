@@ -6,12 +6,7 @@ import { logger } from './logger.js';
 const INVALIDATION_CHANNEL = 'radar:cache:invalidate';
 
 export type CacheDomain =
-  | 'accounts'
-  | 'queue-config'
-  | 'score-config'
-  | 'brand-config'
-  | 'ml-sources'
-  | 'coupons-config';
+  'accounts' | 'queue-config' | 'score-config' | 'brand-config' | 'ml-sources' | 'coupons-config';
 
 type InvalidationHandler = () => void | Promise<void>;
 

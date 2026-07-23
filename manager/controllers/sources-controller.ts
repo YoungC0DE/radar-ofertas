@@ -13,7 +13,11 @@ export function parseSourcesChannel(value: string | undefined): Channel {
   return value && isChannel(value) ? value : 'whatsapp';
 }
 
-async function page(channel: Channel, saved: SourcesSaveType, error: string | null): Promise<string> {
+async function page(
+  channel: Channel,
+  saved: SourcesSaveType,
+  error: string | null,
+): Promise<string> {
   const data = await loadSourcesData(channel, saved, error);
   return renderSourcesPage(data);
 }

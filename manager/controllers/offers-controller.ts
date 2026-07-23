@@ -1,7 +1,24 @@
-import { saveAffiliateLinkDelaySettings, saveSearchLimit } from '../../src/config/queue-config-store.js';
-import { loadOfferDetail, loadOffersPage, parsePage, parseSentFilter } from '../models/offers-model.js';
-import { formatOfferMessageFromTemplate, loadMessageTemplate, loadPlaceholderVisibility, renderMessageTemplate, buildTemplateValues } from '../../src/offers/message-template.js';
-import { removeAllPendingOffers, removePendingOffer, sendOfferNow } from '../../src/offers/service.js';
+import {
+  saveAffiliateLinkDelaySettings,
+  saveSearchLimit,
+} from '../../src/config/queue-config-store.js';
+import {
+  loadOfferDetail,
+  loadOffersPage,
+  parsePage,
+  parseSentFilter,
+} from '../models/offers-model.js';
+import {
+  loadMessageTemplate,
+  loadPlaceholderVisibility,
+  renderMessageTemplate,
+  buildTemplateValues,
+} from '../../src/offers/message-template.js';
+import {
+  removeAllPendingOffers,
+  removePendingOffer,
+  sendOfferNow,
+} from '../../src/offers/service.js';
 import { renderNotFound, renderOfferDetail } from '../views/offer-detail.js';
 import { renderOffersPage } from '../views/offers.js';
 
@@ -12,11 +29,7 @@ export async function showOffersList(searchParams: URLSearchParams): Promise<str
   const error = searchParams.get('error');
   const clearedCount = cleared ? Number.parseInt(cleared, 10) : null;
   const data = await loadOffersPage(filter, page);
-  return renderOffersPage(
-    data,
-    Number.isFinite(clearedCount) ? clearedCount : null,
-    error,
-  );
+  return renderOffersPage(data, Number.isFinite(clearedCount) ? clearedCount : null, error);
 }
 
 export async function handleDeleteAllPending(): Promise<{ count: number } | { error: string }> {
@@ -91,7 +104,10 @@ export async function showOfferDetail(id: string): Promise<{ status: number; htm
   if (!offer) {
     return { status: 404, html: renderNotFound('Oferta não encontrada.') };
   }
-  const [template, visibility] = await Promise.all([loadMessageTemplate(), loadPlaceholderVisibility()]);
+  const [template, visibility] = await Promise.all([
+    loadMessageTemplate(),
+    loadPlaceholderVisibility(),
+  ]);
   const messagePreview = renderMessageTemplate(template, buildTemplateValues(offer), visibility);
   return { status: 200, html: renderOfferDetail(offer, messagePreview) };
 }

@@ -15,17 +15,25 @@ const MIME_TYPES: Record<string, string> = {
 };
 
 export function resolveSafePublicPath(relativePath: string, publicDir: string): string | null {
-  const normalized = path.normalize(relativePath).replace(/^(\.\.(\/|\\|$))+/, '');
-  const filePath = path.join(publicDir, normalized);
+  const normalized = path.normalize(relativePath);
+  if (path.isAbsolute(normalized) || normalized.split(path.sep).includes('..')) {
+    return null;
+  }
 
-  if (!filePath.startsWith(publicDir)) {
+  const baseDir = path.resolve(publicDir);
+  const filePath = path.resolve(baseDir, normalized);
+
+  if (!filePath.startsWith(baseDir + path.sep) && filePath !== baseDir) {
     return null;
   }
 
   return filePath;
 }
 
-export async function serveStaticAsset(relativePath: string, res: ServerResponse): Promise<boolean> {
+export async function serveStaticAsset(
+  relativePath: string,
+  res: ServerResponse,
+): Promise<boolean> {
   const filePath = resolveSafePublicPath(relativePath, PUBLIC_DIR);
   if (!filePath) {
     return false;

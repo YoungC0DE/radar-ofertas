@@ -1,7 +1,6 @@
+import { spawnSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import path from 'node:path';
-import { run } from 'node:test';
-import { pathToFileURL } from 'node:url';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const roots = [path.join(root, 'src'), path.join(root, 'manager')];
@@ -20,7 +19,7 @@ function findTestFiles(dir: string): string[] {
     }
 
     if (entry.isFile() && entry.name.endsWith('.test.ts')) {
-      files.push(fullPath);
+      files.push(path.relative(root, fullPath));
     }
   }
 
@@ -34,8 +33,10 @@ if (files.length === 0) {
   process.exit(1);
 }
 
-const result = await run({
-  files: files.map((file) => pathToFileURL(file).href),
-});
+const result = spawnSync(
+  process.execPath,
+  ['--import', 'tsx', '--import', './src/test/preload.ts', '--test', ...files],
+  { cwd: root, stdio: 'inherit' },
+);
 
-process.exit(result.failed > 0 ? 1 : 0);
+process.exit(result.status ?? 1);

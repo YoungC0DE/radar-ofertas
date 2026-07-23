@@ -22,7 +22,9 @@ async function requireValidChannel(sock: Awaited<ReturnType<typeof connectWhatsA
   label: string;
 }> {
   if (isPlaceholderChannelId(env.WHATSAPP_CHANNEL_ID)) {
-    throw new Error('WHATSAPP_CHANNEL_ID é placeholder — rode npm run wa:channel com o link do seu canal');
+    throw new Error(
+      'WHATSAPP_CHANNEL_ID é placeholder — rode npm run wa:channel com o link do seu canal',
+    );
   }
 
   const channel = await validateWhatsAppChannel(sock, env.WHATSAPP_CHANNEL_ID);
@@ -66,7 +68,8 @@ async function main(): Promise<void> {
     throw new Error('Sessão Mercado Livre inválida — rode npm run ml:login');
   }
 
-  const samplePermalink = 'https://produto.mercadolivre.com.br/MLB-4356882227-moletom-canguru-unissex-com-capuz-e-bolso-quentinho-confo-_JM';
+  const samplePermalink =
+    'https://produto.mercadolivre.com.br/MLB-4356882227-moletom-canguru-unissex-com-capuz-e-bolso-quentinho-confo-_JM';
   const sampleLink = await generateAffiliateLink(samplePermalink, 'MLB4356882227');
   if (!sampleLink.includes('meli.la') && !sampleLink.includes('/sec/')) {
     throw new Error(`Link afiliado de teste não encurtado: ${sampleLink}`);
@@ -85,7 +88,9 @@ async function main(): Promise<void> {
 
   const enqueued = await processOffers(rawOffers);
   const saved = await prisma.offer.findMany({ orderBy: { createdAt: 'desc' } });
-  const shortLinks = saved.filter((o) => o.affiliateLink?.includes('meli.la') || o.affiliateLink?.includes('/sec/'));
+  const shortLinks = saved.filter(
+    (o) => o.affiliateLink?.includes('meli.la') || o.affiliateLink?.includes('/sec/'),
+  );
 
   logger.info(
     {

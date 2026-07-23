@@ -20,7 +20,11 @@ export {
   isOffersListingUrl,
   validateCategoryConfig,
 } from './category-url.js';
-export type { CategoryConfigType, CategoryListingKind, CategoryValidation } from './category-url.js';
+export type {
+  CategoryConfigType,
+  CategoryListingKind,
+  CategoryValidation,
+} from './category-url.js';
 
 const DEFAULT_HEADERS = {
   Accept: 'text/html,application/xhtml+xml',
@@ -79,8 +83,7 @@ function buildRequestHeaders(): Record<string, string> {
 
 function isBlockedHtml(html: string): boolean {
   return (
-    html.length < 500 ||
-    /captcha|challenge|account-verification|suspicious-traffic/i.test(html)
+    html.length < 500 || /captcha|challenge|account-verification|suspicious-traffic/i.test(html)
   );
 }
 
@@ -103,7 +106,10 @@ async function fetchHtmlWithRetry(url: string): Promise<string> {
       if (!response.ok) {
         if (isRetryableHttpStatus(response.status) && attempt < MAX_RETRY_ATTEMPTS - 1) {
           const delay = retryDelayMs(attempt, RETRY_BASE_MS);
-          logger.warn({ url, status: response.status, attempt: attempt + 1, delay }, 'HTTP scrape retry');
+          logger.warn(
+            { url, status: response.status, attempt: attempt + 1, delay },
+            'HTTP scrape retry',
+          );
           await sleep(delay);
           continue;
         }
@@ -128,7 +134,10 @@ async function fetchHtmlWithRetry(url: string): Promise<string> {
       lastError = error instanceof Error ? error : new Error(String(error));
       if (attempt < MAX_RETRY_ATTEMPTS - 1) {
         const delay = retryDelayMs(attempt, RETRY_BASE_MS);
-        logger.warn({ url, attempt: attempt + 1, delay, error: lastError.message }, 'HTTP fetch retry');
+        logger.warn(
+          { url, attempt: attempt + 1, delay, error: lastError.message },
+          'HTTP fetch retry',
+        );
         await sleep(delay);
         continue;
       }
@@ -145,10 +154,7 @@ async function fetchListingPage(url: string, limit: number): Promise<ScrapedItem
   return parseListingHtml(html, limit);
 }
 
-function mergeUniqueItems(
-  unique: Map<string, ScrapedItem>,
-  items: ScrapedItem[],
-): number {
+function mergeUniqueItems(unique: Map<string, ScrapedItem>, items: ScrapedItem[]): number {
   let added = 0;
   for (const item of items) {
     if (!unique.has(item.id)) {
@@ -184,7 +190,14 @@ async function fetchCategoryListingViaHttp(
   }
 
   logger.info(
-    { category, url: baseUrl, count: result.length, pages: offsets.length, listingKind: 'category', method: 'http' },
+    {
+      category,
+      url: baseUrl,
+      count: result.length,
+      pages: offsets.length,
+      listingKind: 'category',
+      method: 'http',
+    },
     'Category scraped',
   );
   return result;
@@ -242,7 +255,10 @@ export async function fetchSingleOffersPage(baseUrl: string, page: number): Prom
   return fetchListingPage(url, Number.MAX_SAFE_INTEGER);
 }
 
-export async function fetchSingleCategoryPage(baseUrl: string, offset: number): Promise<ScrapedItem[]> {
+export async function fetchSingleCategoryPage(
+  baseUrl: string,
+  offset: number,
+): Promise<ScrapedItem[]> {
   const url = offset > 0 ? buildPaginatedListingUrl(baseUrl, offset) : baseUrl;
   return fetchListingPage(url, Number.MAX_SAFE_INTEGER);
 }

@@ -9,7 +9,9 @@ describe('coupon-message', () => {
     assert.equal(isShortAffiliateLink('https://mercadolivre.com/sec/abc123'), true);
     assert.equal(isShortAffiliateLink('https://meli.la/xyz'), true);
     assert.equal(
-      isShortAffiliateLink('https://lista.mercadolivre.com.br/_Container_pega-mais-21-off-seller-1784313015'),
+      isShortAffiliateLink(
+        'https://lista.mercadolivre.com.br/_Container_pega-mais-21-off-seller-1784313015',
+      ),
       false,
     );
   });
@@ -44,10 +46,7 @@ describe('coupon-message', () => {
 describe('coupon-template', () => {
   it('renderiza placeholders do cupom', () => {
     const values = sampleCouponTemplateValues();
-    const message = renderCouponTemplate(
-      '🎟️ {{brand}}\n🏷️ {{discount}}\n🔖 {{code}}',
-      values,
-    );
+    const message = renderCouponTemplate('🎟️ {{brand}}\n🏷️ {{discount}}\n🔖 {{code}}', values);
     assert.match(message, new RegExp(values.brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     assert.match(message, /R\$ 20 OFF/);
     assert.match(message, /#PROMOAGRADARKLAB/);

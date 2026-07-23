@@ -93,8 +93,12 @@ export const dashboardRoutes: RouteDefinition[] = [
               : url.searchParams.get('deleted') === '1'
                 ? 'Oferta removida com sucesso.'
                 : undefined,
-          sendNowError: url.searchParams.get('sendError') ?? url.searchParams.get('deleteError') ?? undefined,
-          collectMessage: url.searchParams.get('collectQueued') === '1' ? 'Busca de novos anúncios enfileirada.' : undefined,
+          sendNowError:
+            url.searchParams.get('sendError') ?? url.searchParams.get('deleteError') ?? undefined,
+          collectMessage:
+            url.searchParams.get('collectQueued') === '1'
+              ? 'Busca de novos anúncios enfileirada.'
+              : undefined,
           collectError: url.searchParams.get('collectError') ?? undefined,
         }),
       );
@@ -115,7 +119,9 @@ export const dashboardRoutes: RouteDefinition[] = [
   {
     method: 'GET',
     pattern: '/manager/health',
-    handler: ({ res }) => sendText(res, 200, 'ok'),
+    handler: async ({ res }) => {
+      sendText(res, 200, 'ok');
+    },
   },
   {
     method: 'GET',
@@ -168,7 +174,11 @@ export const offersRoutes: RouteDefinition[] = [
     handler: async ({ res }) => {
       const result = await handleDeleteAllPending();
       if ('error' in result) {
-        sendHtml(res, 200, await showOffersList(new URLSearchParams({ status: 'pending', error: result.error })));
+        sendHtml(
+          res,
+          200,
+          await showOffersList(new URLSearchParams({ status: 'pending', error: result.error })),
+        );
         return;
       }
       sendRedirect(res, `/manager/offers?status=pending&cleared=${result.count}`);
@@ -185,11 +195,18 @@ export const offersRoutes: RouteDefinition[] = [
         if (fromDashboard) {
           sendRedirect(res, `/manager?deleteError=${encodeURIComponent(result.error)}`);
         } else {
-          sendHtml(res, 200, await showOffersList(new URLSearchParams({ status: 'pending', error: result.error })));
+          sendHtml(
+            res,
+            200,
+            await showOffersList(new URLSearchParams({ status: 'pending', error: result.error })),
+          );
         }
         return;
       }
-      sendRedirect(res, fromDashboard ? '/manager?deleted=1' : '/manager/offers?status=pending&cleared=1');
+      sendRedirect(
+        res,
+        fromDashboard ? '/manager?deleted=1' : '/manager/offers?status=pending&cleared=1',
+      );
     },
   },
   {
@@ -361,13 +378,19 @@ export const couponsRoutes: RouteDefinition[] = [
     pattern: '/manager/coupons/:couponId/store-link',
     handler: async ({ req, res, params }) => {
       const form = parseFormUrlEncoded(await readFormBody(req));
-      sendHtml(res, 200, await handleCouponStoreLinkSave(params.couponId, form.storeUrl ?? '', form.code ?? null));
+      sendHtml(
+        res,
+        200,
+        await handleCouponStoreLinkSave(params.couponId, form.storeUrl ?? '', form.code ?? null),
+      );
     },
   },
   {
     method: 'GET',
     pattern: '/manager/api/coupons',
-    handler: ({ res }) => sendJson(res, 200, getCouponsApiJson()),
+    handler: async ({ res }) => {
+      sendJson(res, 200, getCouponsApiJson());
+    },
   },
 ];
 
@@ -422,7 +445,9 @@ export const connectionRoutes: RouteDefinition[] = [
   {
     method: 'POST',
     pattern: '/manager/settings/connect/ml/start',
-    handler: ({ res }) => sendJson(res, 200, startMercadoLivreConnectJson()),
+    handler: async ({ res }) => {
+      sendJson(res, 200, startMercadoLivreConnectJson());
+    },
   },
   {
     method: 'POST',
@@ -437,7 +462,9 @@ export const connectionRoutes: RouteDefinition[] = [
   {
     method: 'GET',
     pattern: '/manager/settings/connect/ml/status',
-    handler: ({ res }) => sendJson(res, 200, getMercadoLivreConnectJson()),
+    handler: async ({ res }) => {
+      sendJson(res, 200, getMercadoLivreConnectJson());
+    },
   },
   {
     method: 'GET',
@@ -506,12 +533,16 @@ export const workerRoutes: RouteDefinition[] = [
   {
     method: 'POST',
     pattern: '/manager/settings/prisma/generate',
-    handler: ({ res }) => sendJson(res, 200, runPrismaGenerateJson()),
+    handler: async ({ res }) => {
+      sendJson(res, 200, runPrismaGenerateJson());
+    },
   },
   {
     method: 'GET',
     pattern: '/manager/settings/prisma/status',
-    handler: ({ res }) => sendJson(res, 200, getPrismaJson()),
+    handler: async ({ res }) => {
+      sendJson(res, 200, getPrismaJson());
+    },
   },
 ];
 

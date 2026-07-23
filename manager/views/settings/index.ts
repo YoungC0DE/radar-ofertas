@@ -4,7 +4,10 @@ import { operatingStatusBadge } from '../components/index.js';
 import { configRow, EDIT_ICON, renderEditableValue } from '../components/index.js';
 import { renderLayout } from '../layout.js';
 import { renderSettingsAlert } from './alerts.js';
-import { renderConnectionsSection, renderOperationsSection } from './sections/connections-section.js';
+import {
+  renderConnectionsSection,
+  renderOperationsSection,
+} from './sections/connections-section.js';
 import { renderBrandSection } from './sections/brand-section.js';
 import { renderChannelSection } from './sections/channel-section.js';
 import { renderMlCouponsUrlSection, renderSourcesPointer } from './sections/sources-section.js';
@@ -29,12 +32,22 @@ export function renderSettingsPage(data: SettingsData): string {
         ${renderScoreSection(data)}
         ${configRow(
           'Intervalo de coleta',
-          renderEditableValue('intervalo de coleta', `${data.collectorIntervalMinutes} min`, 'edit-send-interval', EDIT_ICON),
+          renderEditableValue(
+            'intervalo de coleta',
+            `${data.collectorIntervalMinutes} min`,
+            'edit-send-interval',
+            EDIT_ICON,
+          ),
           'Frequência de busca de novas ofertas',
         )}
         ${configRow(
           'Tempo entre envios',
-          renderEditableValue('tempo entre envios', `${data.senderDelayMinutes} min`, 'edit-sender-delay', EDIT_ICON),
+          renderEditableValue(
+            'tempo entre envios',
+            `${data.senderDelayMinutes} min`,
+            'edit-sender-delay',
+            EDIT_ICON,
+          ),
           'Intervalo entre cada mensagem enviada no WhatsApp',
         )}
         ${renderChannelSection(data)}

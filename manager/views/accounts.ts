@@ -55,11 +55,15 @@ function renderAccountCard(account: Account): string {
           <form method="POST" action="/manager/accounts/${escapeHtml(account.id)}/toggle" class="inline-form">
             <button type="submit" class="btn btn-sm${account.enabled ? '' : ' primary'}">${toggleLabel}</button>
           </form>
-          ${!isDefault ? `
+          ${
+            !isDefault
+              ? `
           <form method="POST" action="/manager/accounts/${escapeHtml(account.id)}/delete" class="inline-form"
                 onsubmit="return confirm('Remover a conta ${escapeHtml(account.label)}?')">
             <button type="submit" class="btn btn-sm btn-danger">Remover</button>
-          </form>` : ''}
+          </form>`
+              : ''
+          }
         </div>
       </div>
     </article>
@@ -72,7 +76,9 @@ export function renderAccountsPage(data: AccountsPageData): string {
   const alerts = [
     saved ? `<p class="alert ok">${escapeHtml(saved)}</p>` : '',
     error ? `<p class="alert err">${escapeHtml(error)}</p>` : '',
-  ].filter(Boolean).join('');
+  ]
+    .filter(Boolean)
+    .join('');
 
   const accountCards = accounts.map(renderAccountCard).join('');
 
@@ -120,10 +126,5 @@ export function renderAccountsPage(data: AccountsPageData): string {
     </section>
   `;
 
-  return renderLayoutShell(
-    'Contas',
-    body,
-    'accounts',
-    pageStyles('settings.css', 'accounts.css'),
-  );
+  return renderLayoutShell('Contas', body, 'accounts', pageStyles('settings.css', 'accounts.css'));
 }

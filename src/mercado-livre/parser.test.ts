@@ -11,7 +11,10 @@ describe('parser — sales rank', () => {
   it('extrai ranking do texto do produto', () => {
     assert.equal(parseSalesRankText('4º em Impressoras'), '4º em Impressoras');
     assert.equal(parseSalesRankText('MAIS VENDIDO 4º em Impressoras Novo'), '4º em Impressoras');
-    assert.equal(parseSalesRankText('MAIS VENDIDO 5º em Maquinas de Solda'), '5º em Maquinas de Solda');
+    assert.equal(
+      parseSalesRankText('MAIS VENDIDO 5º em Maquinas de Solda'),
+      '5º em Maquinas de Solda',
+    );
     assert.equal(parseSalesRankText('sem ranking'), null);
   });
 

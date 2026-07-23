@@ -121,15 +121,21 @@ function localSnapshot(): MetricSnapshot {
 export async function getMetrics(): Promise<MetricSnapshot> {
   const local = localSnapshot();
   const remote = await withRedis(async (redis) => {
-    const [sendSuccess, sendFailure, scrapeLatency, scrapeFailures, circuitBreakerOpens, startedAt] =
-      await Promise.all([
-        redis.hgetall(KEYS.sendSuccess),
-        redis.hgetall(KEYS.sendFailure),
-        redis.lrange(KEYS.scrapeLatency, 0, MAX_LATENCY_SAMPLES - 1),
-        redis.get(KEYS.scrapeFailures),
-        redis.get(KEYS.circuitBreakerOpens),
-        redis.get(KEYS.startedAt),
-      ]);
+    const [
+      sendSuccess,
+      sendFailure,
+      scrapeLatency,
+      scrapeFailures,
+      circuitBreakerOpens,
+      startedAt,
+    ] = await Promise.all([
+      redis.hgetall(KEYS.sendSuccess),
+      redis.hgetall(KEYS.sendFailure),
+      redis.lrange(KEYS.scrapeLatency, 0, MAX_LATENCY_SAMPLES - 1),
+      redis.get(KEYS.scrapeFailures),
+      redis.get(KEYS.circuitBreakerOpens),
+      redis.get(KEYS.startedAt),
+    ]);
 
     return {
       sendSuccess: parseHashCounts(sendSuccess),
@@ -148,7 +154,8 @@ export async function getMetrics(): Promise<MetricSnapshot> {
   return {
     sendSuccess: remote.sendSuccess,
     sendFailure: remote.sendFailure,
-    scrapeLatencyMs: remote.scrapeLatencyMs.length > 0 ? remote.scrapeLatencyMs : local.scrapeLatencyMs,
+    scrapeLatencyMs:
+      remote.scrapeLatencyMs.length > 0 ? remote.scrapeLatencyMs : local.scrapeLatencyMs,
     scrapeFailures: remote.scrapeFailures,
     circuitBreakerOpens: remote.circuitBreakerOpens,
     startedAt: remote.startedAt,

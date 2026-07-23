@@ -1,6 +1,11 @@
 import { env } from '../config/env.js';
 import type { OfferRecord } from '../offers/types.js';
-import { getBotIdentity, hasTelegramCredentials, sendOffer, validateTelegramChat } from '../telegram/index.js';
+import {
+  getBotIdentity,
+  hasTelegramCredentials,
+  sendOffer,
+  validateTelegramChat,
+} from '../telegram/index.js';
 import type { ChannelPublisher } from './types.js';
 
 export const telegramPublisher: ChannelPublisher = {

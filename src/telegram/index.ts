@@ -54,7 +54,9 @@ export class TelegramApiError extends Error {
 function botToken(): string {
   const token = env.TELEGRAM_BOT_TOKEN;
   if (!token) {
-    throw new Error('TELEGRAM_BOT_TOKEN não configurado — defina no .env com o token do @BotFather');
+    throw new Error(
+      'TELEGRAM_BOT_TOKEN não configurado — defina no .env com o token do @BotFather',
+    );
   }
   return token;
 }

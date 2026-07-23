@@ -1,6 +1,10 @@
 import { escapeHtml } from '../helpers.js';
 
-export function statusBadge(ok: boolean, okLabel = 'Conectado', failLabel = 'Desconectado'): string {
+export function statusBadge(
+  ok: boolean,
+  okLabel = 'Conectado',
+  failLabel = 'Desconectado',
+): string {
   return ok
     ? `<span class="badge ok">${escapeHtml(okLabel)}</span>`
     : `<span class="badge warn">${escapeHtml(failLabel)}</span>`;

@@ -15,7 +15,9 @@ const OFFERS_PATH_PATTERN = /\/ofertas(?:\/|$)/;
 export function isOffersListingUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
-    return parsed.hostname === 'www.mercadolivre.com.br' && OFFERS_PATH_PATTERN.test(parsed.pathname);
+    return (
+      parsed.hostname === 'www.mercadolivre.com.br' && OFFERS_PATH_PATTERN.test(parsed.pathname)
+    );
   } catch {
     return false;
   }
@@ -54,7 +56,9 @@ export function validateCategoryConfig(category: string): CategoryValidation {
         type: 'url',
         listingKind,
         url: listingKind === 'offers' ? normalizeOffersListingUrl(trimmed) : trimmed,
-        reason: isListingHost ? undefined : 'URL must use lista.mercadolivre.com.br or www.mercadolivre.com.br',
+        reason: isListingHost
+          ? undefined
+          : 'URL must use lista.mercadolivre.com.br or www.mercadolivre.com.br',
       };
     } catch {
       return {

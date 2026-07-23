@@ -1,4 +1,8 @@
-import { getCouponsUrlCached, getCouponsUrlFromDb, hydrateCouponsConfigCache } from '../../src/config/coupons-config-store.js';
+import {
+  getCouponsUrlCached,
+  getCouponsUrlFromDb,
+  hydrateCouponsConfigCache,
+} from '../../src/config/coupons-config-store.js';
 import { prisma } from '../../src/database/client.js';
 import { sendCouponToChannelsNow } from '../../src/offers/coupon-service.js';
 import { scrapeAffiliateCoupons } from '../../src/mercado-livre/coupons.js';
@@ -31,7 +35,10 @@ function matchesCoupon(coupon: MlCoupon, couponId: string, code?: string | null)
   return true;
 }
 
-function applyStoreLinkOverrides(coupons: MlCoupon[], overrides: Record<string, string>): MlCoupon[] {
+function applyStoreLinkOverrides(
+  coupons: MlCoupon[],
+  overrides: Record<string, string>,
+): MlCoupon[] {
   return coupons.map((coupon) => {
     const override =
       overrides[couponLookupKey(coupon.id, coupon.code)] ??
@@ -129,7 +136,9 @@ export async function loadCouponsPage(
   };
 }
 
-export async function refreshCoupons(): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+export async function refreshCoupons(): Promise<
+  { ok: true; count: number } | { ok: false; error: string }
+> {
   try {
     await hydrateCouponsConfigCache();
     const result = await scrapeAffiliateCoupons();
