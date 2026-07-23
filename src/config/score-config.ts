@@ -98,6 +98,10 @@ export const DEFAULT_SCORE_CONFIG: ScoreConfig = new Proxy({} as ScoreConfig, {
 const SETTING_KEY = 'scoreConfig';
 let scoreCache: ScoreConfig | null = null;
 
+export function invalidateScoreConfigCache(): void {
+  scoreCache = null;
+}
+
 function mergeTier(defaultTier: ScoreTier, override?: Partial<ScoreTier>): ScoreTier {
   return {
     enabled: override?.enabled ?? defaultTier.enabled,
@@ -238,6 +242,8 @@ export async function saveScoreConfig(config: ScoreConfig): Promise<void> {
     create: { key: SETTING_KEY, value: json },
   });
   scoreCache = config;
+  const { notifyConfigCacheChange } = await import('../utils/config-cache-sync.js');
+  await notifyConfigCacheChange('score-config');
 }
 
 export function calculateOfferScore(

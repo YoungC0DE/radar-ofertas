@@ -34,6 +34,11 @@ const ENV_FLAGS_KEY = 'mlEnvSourceFlags';
 let sourcesCache: MlCustomSource[] | null = null;
 let envFlagsCache: Record<string, Channel[]> | null = null;
 
+export function invalidateMlSourcesCache(): void {
+  sourcesCache = null;
+  envFlagsCache = null;
+}
+
 /** Só canais conhecidos, na ordem canônica (evita lixo salvo no settings). */
 function sanitizeChannels(values: readonly unknown[]): Channel[] {
   return CHANNELS.filter((channel) => values.includes(channel));
@@ -124,6 +129,10 @@ function deriveLabel(category: string): string {
 function normalizeCategoryKey(category: string): string {
   const validation = validateCategoryConfig(category);
   return validation.valid && validation.url ? validation.url : category.trim();
+}
+
+export function categoryJobKey(category: string): string {
+  return normalizeCategoryKey(category).replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 120);
 }
 
 export function getCustomMlSources(): MlCustomSource[] {
@@ -234,6 +243,8 @@ async function persistCustomSources(sources: MlCustomSource[]): Promise<void> {
     create: { key: SETTING_KEY, value: json },
   });
   sourcesCache = sources;
+  const { notifyConfigCacheChange } = await import('../utils/config-cache-sync.js');
+  await notifyConfigCacheChange('ml-sources');
 }
 
 async function persistEnvFlags(flags: Record<string, Channel[]>): Promise<void> {
@@ -244,6 +255,8 @@ async function persistEnvFlags(flags: Record<string, Channel[]>): Promise<void> 
     create: { key: ENV_FLAGS_KEY, value: json },
   });
   envFlagsCache = flags;
+  const { notifyConfigCacheChange } = await import('../utils/config-cache-sync.js');
+  await notifyConfigCacheChange('ml-sources');
 }
 
 export async function addCustomMlSource(

@@ -1,7 +1,8 @@
-import { chromium, type BrowserContextOptions } from 'playwright';
+import type { BrowserContextOptions } from 'playwright';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { sleep } from '../utils/retry.js';
+import { withPooledBrowserContext } from './browser-pool.js';
 import {
   cookiesToHeader,
   isSessionExpired,
@@ -168,69 +169,66 @@ async function createLinkViaHttp(permalink: string): Promise<AffiliateLinkResult
 
 async function createLinkViaBrowser(permalink: string): Promise<AffiliateLinkResult | null> {
   const state = await loadStorageState();
-  const browser = await chromium.launch({ headless: env.ML_BROWSER_HEADLESS });
 
   try {
-    const context = await browser.newContext({
-      userAgent: env.ML_SCRAPER_USER_AGENT,
-      locale: 'pt-BR',
-      storageState: state ? (state as BrowserContextOptions['storageState']) : undefined,
-    });
-    const page = await context.newPage();
+    return await withPooledBrowserContext(
+      { storageState: state ? (state as BrowserContextOptions['storageState']) : undefined },
+      async (context) => {
+        const page = await context.newPage();
 
-    await page.goto(LINK_BUILDER_URL, {
-      waitUntil: 'domcontentloaded',
-      timeout: env.ML_HTTP_TIMEOUT_MS,
-    });
+        await page.goto(LINK_BUILDER_URL, {
+          waitUntil: 'domcontentloaded',
+          timeout: env.ML_HTTP_TIMEOUT_MS,
+        });
 
-    const urlInput = page
-      .locator(
-        'input[type="url"], input[placeholder*="URL"], input[placeholder*="url"], textarea, input[data-testid*="url"]',
-      )
-      .first();
-    await urlInput.fill(permalink);
+        const urlInput = page
+          .locator(
+            'input[type="url"], input[placeholder*="URL"], input[placeholder*="url"], textarea, input[data-testid*="url"]',
+          )
+          .first();
+        await urlInput.fill(permalink);
 
-    const generateButton = page
-      .getByRole('button', { name: /gerar|criar|generate/i })
-      .first();
-    await generateButton.click();
-    await page.waitForTimeout(2000);
+        const generateButton = page
+          .getByRole('button', { name: /gerar|criar|generate/i })
+          .first();
+        await generateButton.click();
+        await page.waitForTimeout(2000);
 
-    const output = page
-      .locator(
-        'input[readonly], textarea[readonly], [data-testid*="link"], [data-testid*="short"], .link-builder__result',
-      )
-      .first();
-    const generated =
-      (await output.inputValue().catch(() => '')) || (await output.textContent()) || '';
+        const output = page
+          .locator(
+            'input[readonly], textarea[readonly], [data-testid*="link"], [data-testid*="short"], .link-builder__result',
+          )
+          .first();
+        const generated =
+          (await output.inputValue().catch(() => '')) || (await output.textContent()) || '';
 
-    if (!generated.includes('mercadolivre') && !generated.includes('mercadolibre')) {
-      if (await page.locator('text=/sess[aã]o|login|entrar/i').isVisible().catch(() => false)) {
-        logger.warn({ permalink }, 'Link-builder requires login — run npm run ml:login');
-      }
-      return null;
-    }
+        if (!generated.includes('mercadolivre') && !generated.includes('mercadolibre')) {
+          if (await page.locator('text=/sess[aã]o|login|entrar/i').isVisible().catch(() => false)) {
+            logger.warn({ permalink }, 'Link-builder requires login — run npm run ml:login');
+          }
+          return null;
+        }
 
-    const isLoginPage = /login|registration|account-verification/i.test(page.url());
-    if (!isLoginPage) {
-      const savedState = await context.storageState();
-      await saveStorageState(savedState);
-    }
+        const isLoginPage = /login|registration|account-verification/i.test(page.url());
+        if (!isLoginPage) {
+          const savedState = await context.storageState();
+          await saveStorageState(savedState);
+        }
 
-    const normalized = generated.trim();
-    const isShort = normalized.includes('/sec/');
+        const normalized = generated.trim();
+        const isShort = normalized.includes('/sec/');
 
-    logger.info({ permalink, affiliate_source: 'browser' }, 'Affiliate link generated');
-    return {
-      url: normalized,
-      shortUrl: isShort ? normalized : null,
-      source: 'browser',
-    };
+        logger.info({ permalink, affiliate_source: 'browser' }, 'Affiliate link generated');
+        return {
+          url: normalized,
+          shortUrl: isShort ? normalized : null,
+          source: 'browser',
+        };
+      },
+    );
   } catch (error) {
     logger.warn({ permalink, error }, 'Browser affiliate link generation failed');
     return null;
-  } finally {
-    await browser.close();
   }
 }
 

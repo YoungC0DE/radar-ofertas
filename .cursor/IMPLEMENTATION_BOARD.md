@@ -10,7 +10,7 @@ Quadro de tarefas do projeto **Radar Ofertas**. Atualizar conforme o desenvolvim
 
 ### Multi-conta (painel)
 
-- [ ] Painel spawna workers com `WORKER_ACCOUNT_ID` por conta habilitada (`process-model.ts`)
+- [x] Painel spawna workers com `WORKER_ACCOUNT_ID` por conta habilitada (`process-model.ts`)
 
 ### Scraping — coleta de produtos
 
@@ -235,7 +235,7 @@ _(nenhum item ativo)_
 3. Rodar `npm run ml:login` e validar que `storage-state.json` é criado.
 4. Acessar `http://localhost:3000/manager` para configurar score, template e horários.
 5. **Prioridade alta (afiliado):** capturar request `createLink` real via DevTools.
-6. **Prioridade média (multi-conta UI):** spawn de workers por conta no painel.
+6. ~~**Prioridade média (multi-conta UI):** spawn de workers por conta no painel.~~ ✅
 
 ### Arquivos-chave
 

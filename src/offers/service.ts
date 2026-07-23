@@ -12,6 +12,7 @@ import { calculateOfferScore, getRuntimeScoreConfig } from '../config/score-conf
 import { iterateScrapedPages } from '../mercado-livre/index.js';
 import {
   enqueueOfferSend,
+  enqueueCollectSourceJob,
   getSenderQueue,
   isRedisEnabled,
   SENDER_JOB_OPTIONS,
@@ -281,6 +282,60 @@ async function collectForChannel(
     total++;
     const id = await processOffer(offer);
     if (id) enqueued++;
+  }
+
+  return { total, enqueued };
+}
+
+/** Fan-out: enfileira um job por fonte ativa — permite paralelismo entre fontes na fila. */
+export async function orchestrateOfferCollection(triggeredAt: string): Promise<{ jobs: number }> {
+  await hydrateMlSourcesCache();
+  const target = getSearchLimit();
+  const channels = getEnabledChannels();
+  let jobs = 0;
+
+  for (const channel of channels) {
+    const categories = getActiveMlCategoriesForChannel(channel);
+    if (categories.length === 0) continue;
+
+    const quota = Math.max(1, Math.floor(target / categories.length));
+
+    for (const category of categories) {
+      await enqueueCollectSourceJob({
+        kind: 'source',
+        triggeredAt,
+        channel,
+        category,
+        quota,
+      });
+      jobs++;
+    }
+  }
+
+  logger.info({ triggeredAt, jobs, target }, 'Offer collection orchestrated per source');
+  return { jobs };
+}
+
+/** Coleta e processa ofertas de uma única fonte (job sharded). */
+export async function collectFromSource(
+  channel: Channel,
+  category: string,
+  quota: number,
+): Promise<{ total: number; enqueued: number }> {
+  let total = 0;
+  let enqueued = 0;
+
+  try {
+    const pool = shuffle(await collectPool(category));
+    for (const offer of pool) {
+      if (enqueued >= quota) break;
+      offer.sourceCategory = category;
+      total++;
+      const id = await processOffer(offer);
+      if (id) enqueued++;
+    }
+  } catch (error) {
+    logger.error({ channel, category, error }, 'Failed to collect from source');
   }
 
   return { total, enqueued };

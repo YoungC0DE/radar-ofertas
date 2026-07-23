@@ -65,13 +65,14 @@ Parâmetros operacionais (score, intervalos, horários, templates, brand, fontes
 
 | Processo | Entry | Função |
 |----------|-------|--------|
-| Collector | `app.ts` | Coleta periódica + enfileiramento + auto-messages due |
+| Collector | `app.ts` | Coleta periódica + enfileiramento (Playwright pooled) |
+| Scheduler | `scheduler.ts` | Mensagens automáticas programadas (leve) |
 | Sender WhatsApp | `worker.ts` | Envio WhatsApp com janela operacional |
 | Sender Telegram | `worker-telegram.ts` | Envio Telegram com janela operacional |
 | Manager | `manager/server.ts` | Painel admin — leitor de estado em produção |
 | ML Login | `ml-login.ts` | Setup manual de sessão afiliado (CLI) |
 
-O `npm run up` sobe collector + manager. Em **dev** (`MANAGER_CAN_SPAWN_WORKERS=true`), o painel pode spawnar workers. Em **produção/Docker**, workers são serviços separados (`worker`, `worker-telegram`).
+O `npm run up` sobe collector + scheduler + manager. Em **dev** (`MANAGER_CAN_SPAWN_WORKERS=true`), o painel pode spawnar workers. Em **produção/Docker**, workers são serviços separados (`worker`, `worker-telegram`).
 
 ### Um canal, um processo
 

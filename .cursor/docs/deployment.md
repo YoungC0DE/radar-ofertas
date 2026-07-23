@@ -7,9 +7,10 @@
 | postgres | postgres:16-alpine | 5432 | Banco de dados |
 | redis | redis:7-alpine | 6379 | Filas BullMQ + estado compartilhado |
 | migrate | build local | — | Aplica migrations (one-shot) |
-| app | build local (bookworm + Chromium) | — | Collector (scraping + enfileira) |
-| worker | build local | — | WhatsApp — envio |
-| worker-telegram | build local | — | Telegram — envio |
+| collector | build local (bookworm + Chromium) | — | Coleta de ofertas (singleton, browser pooled) |
+| scheduler | build local | — | Mensagens automáticas (sem Playwright) |
+| worker | build local | — | WhatsApp — envio (`WORKER_ACCOUNT_ID` opcional) |
+| worker-telegram | build local | — | Telegram — envio (`restart: on-failure`) |
 | manager | build local | `MANAGER_PORT` (3000) | Painel admin (stateless) |
 
 O serviço `manager` define `MANAGER_CAN_SPAWN_WORKERS=false` — não inicia workers pelo painel.
@@ -23,7 +24,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Migrations rodam automaticamente no serviço `migrate` antes de `app`, `worker`, `worker-telegram` e `manager` subirem.
+Migrations rodam automaticamente no serviço `migrate` antes de `collector`, `scheduler`, `worker`, `worker-telegram` e `manager` subirem.
 
 Painel: `http://localhost:3000/manager`
 
@@ -75,13 +76,15 @@ O serviço `worker-telegram` encerra com exit 0 se `TELEGRAM_ENABLED` não estiv
 
 ## Multi-conta
 
-Para worker de conta adicional:
+Cada conta WhatsApp precisa de um worker dedicado (1 sessão Baileys = 1 processo).
+
+Para teste pontual:
 
 ```bash
 WORKER_ACCOUNT_ID=minha-conta-wa docker compose run --rm worker
 ```
 
-Ou adicionar serviço no `docker-compose.yml` com `WORKER_ACCOUNT_ID` no environment.
+Para produção com várias contas, copie `docker-compose.accounts.example.yml` para `docker-compose.override.yml` e ajuste um serviço por `WORKER_ACCOUNT_ID`. Auth paths ficam em `./data/accounts/{accountId}/whatsapp/`.
 
 ## Variáveis obrigatórias
 
@@ -100,7 +103,7 @@ Opcionais: `APP_TIMEZONE`, `ML_AUTH_PATH`, `ML_USE_BROWSER_FALLBACK`, `ML_BROWSE
 O `Dockerfile` usa `node:22-bookworm-slim` com Chromium instalado para fallback de scraping e geração de links.
 
 - Coleta HTTP funciona sem browser na maioria dos casos.
-- Fallback Playwright disponível no container `app`.
+- Fallback Playwright disponível no container `collector`.
 - Login ML recomendado no host ou via painel (requer navegador visível).
 
 ## Local (sem Docker)
@@ -134,6 +137,7 @@ Em dev local, `MANAGER_CAN_SPAWN_WORKERS=true` (default) permite iniciar workers
 | `check` | Preflight — valida ambiente |
 | `setup` | Preflight + guia de setup |
 | `dev` | Collector + fila de coleta |
+| `scheduler` | Agendador de mensagens automáticas |
 | `worker` | Worker de envio WhatsApp |
 | `worker:telegram` | Worker de envio Telegram |
 | `manager` | Painel web admin |

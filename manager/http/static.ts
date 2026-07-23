@@ -14,11 +14,20 @@ const MIME_TYPES: Record<string, string> = {
   '.ico': 'image/x-icon',
 };
 
-export async function serveStaticAsset(relativePath: string, res: ServerResponse): Promise<boolean> {
+export function resolveSafePublicPath(relativePath: string, publicDir: string): string | null {
   const normalized = path.normalize(relativePath).replace(/^(\.\.(\/|\\|$))+/, '');
-  const filePath = path.join(PUBLIC_DIR, normalized);
+  const filePath = path.join(publicDir, normalized);
 
-  if (!filePath.startsWith(PUBLIC_DIR)) {
+  if (!filePath.startsWith(publicDir)) {
+    return null;
+  }
+
+  return filePath;
+}
+
+export async function serveStaticAsset(relativePath: string, res: ServerResponse): Promise<boolean> {
+  const filePath = resolveSafePublicPath(relativePath, PUBLIC_DIR);
+  if (!filePath) {
     return false;
   }
 

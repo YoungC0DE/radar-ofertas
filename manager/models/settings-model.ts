@@ -43,7 +43,13 @@ import {
   getWhatsAppSessionStatus,
   type SessionStatus,
 } from './session-model.js';
-import { getWorkerState, canManagerSpawnWorkers, type WorkerState } from './process-model.js';
+import {
+  getWorkerState,
+  canManagerSpawnWorkers,
+  listWorkerStates,
+  type WorkerState,
+  type AccountWorkerState,
+} from './process-model.js';
 
 export type SettingsSaveType = 'channel' | 'interval' | 'brand' | 'score' | 'hours' | 'senderDelay' | 'mlSources' | 'couponsUrl' | null;
 
@@ -70,7 +76,9 @@ export interface SettingsData {
   telegramChatId: string;
   tgSession: SessionStatus | null;
   workerState: WorkerState;
+  whatsappWorkers: AccountWorkerState[];
   telegramWorkerState: WorkerState;
+  telegramWorkers: AccountWorkerState[];
   canSpawnWorkers: boolean;
   mlCouponsUrl: string;
   saved: SettingsSaveType;
@@ -110,6 +118,8 @@ export async function loadSettingsData(
 
   const brand = getBrandSettings();
   const mlCouponsUrl = await getCouponsUrlFromDb();
+  const whatsappWorkers = await listWorkerStates('whatsapp');
+  const telegramWorkers = env.TELEGRAM_ENABLED ? await listWorkerStates('telegram') : [];
 
   return {
     timezone: env.APP_TIMEZONE,
@@ -136,8 +146,10 @@ export async function loadSettingsData(
     telegramEnabled: env.TELEGRAM_ENABLED,
     telegramChatId: env.TELEGRAM_CHAT_ID,
     tgSession,
-    workerState: await getWorkerState('whatsapp'),
-    telegramWorkerState: await getWorkerState('telegram'),
+    workerState: whatsappWorkers[0]?.state ?? await getWorkerState('whatsapp'),
+    whatsappWorkers,
+    telegramWorkerState: telegramWorkers[0]?.state ?? await getWorkerState('telegram'),
+    telegramWorkers,
     canSpawnWorkers: canManagerSpawnWorkers(),
     mlCouponsUrl,
     saved,

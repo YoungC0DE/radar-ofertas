@@ -105,18 +105,26 @@ interface OwnerLock {
   heartbeat: string;
 }
 
-function ownerLockPath(): string {
-  return path.join(getWhatsAppAuthPath(), 'owner.lock');
+function ownerLockPathFor(authPath: string): string {
+  return path.join(authPath, 'owner.lock');
 }
 
-async function readOwnerLock(): Promise<OwnerLock | null> {
+function ownerLockPath(): string {
+  return ownerLockPathFor(getWhatsAppAuthPath());
+}
+
+async function readOwnerLockAt(authPath: string): Promise<OwnerLock | null> {
   try {
-    const parsed = JSON.parse(await readFile(ownerLockPath(), 'utf8')) as OwnerLock;
+    const parsed = JSON.parse(await readFile(ownerLockPathFor(authPath), 'utf8')) as OwnerLock;
     if (typeof parsed?.pid === 'number' && typeof parsed?.heartbeat === 'string') return parsed;
     return null;
   } catch {
     return null;
   }
+}
+
+async function readOwnerLock(): Promise<OwnerLock | null> {
+  return readOwnerLockAt(getWhatsAppAuthPath());
 }
 
 function isOwnLock(lock: OwnerLock): boolean {
@@ -157,9 +165,9 @@ export interface WhatsAppOwnerStatus {
   isCurrentProcess: boolean;
 }
 
-/** Estado do dono da sessão WhatsApp (lock + PID vivo no mesmo host). */
-export async function getWhatsAppOwnerStatus(): Promise<WhatsAppOwnerStatus> {
-  const lock = await readOwnerLock();
+/** Estado do dono da sessão WhatsApp em um auth path (multi-conta no painel). */
+export async function getWhatsAppOwnerStatusAtPath(authPath: string): Promise<WhatsAppOwnerStatus> {
+  const lock = await readOwnerLockAt(authPath);
   if (!lock || !isLockFresh(lock)) {
     return { active: false, pid: null, host: null, isCurrentProcess: false };
   }
@@ -172,6 +180,11 @@ export async function getWhatsAppOwnerStatus(): Promise<WhatsAppOwnerStatus> {
     host: lock.host,
     isCurrentProcess: isOwnLock(lock),
   };
+}
+
+/** Estado do dono da sessão WhatsApp (lock + PID vivo no mesmo host). */
+export async function getWhatsAppOwnerStatus(): Promise<WhatsAppOwnerStatus> {
+  return getWhatsAppOwnerStatusAtPath(getWhatsAppAuthPath());
 }
 
 async function writeOwnerLock(): Promise<void> {

@@ -7,6 +7,7 @@ import { hydrateTemplateCache } from '../offers/message-template.js';
 import { closeAllQueues } from '../queue/index.js';
 import { logger } from '../utils/logger.js';
 import { startWorkerHeartbeatLoop } from '../utils/redis-state.js';
+import { bootstrapCacheCoherence } from '../utils/config-cache-sync.js';
 import { CHANNEL_LABELS, type ChannelPublisher } from './types.js';
 /**
  * Boot compartilhado dos workers de envio: hidrata os caches de config, valida o
@@ -30,6 +31,7 @@ export async function runChannelWorker(publisher: ChannelPublisher): Promise<voi
     hydrateBrandCache(),
     hydrateTemplateCache(),
     hydrateCouponTemplateCache(),
+    bootstrapCacheCoherence(),
   ]);
 
   const verification = await publisher.verify();

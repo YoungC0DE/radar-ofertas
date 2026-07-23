@@ -44,6 +44,8 @@ async function persistAccounts(accounts: Account[]): Promise<Account[]> {
   });
 
   accountsCache = validated;
+  const { notifyConfigCacheChange } = await import('../utils/config-cache-sync.js');
+  await notifyConfigCacheChange('accounts');
   return validated;
 }
 

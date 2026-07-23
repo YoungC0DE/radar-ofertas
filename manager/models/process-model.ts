@@ -1,13 +1,16 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { hostname } from 'node:os';
+import { getEnabledAccountIdsForChannel } from '../../src/accounts/channel-accounts.js';
+import { resolveAccountAuthPath } from '../../src/accounts/paths.js';
+import { findAccountById, loadAccounts } from '../../src/accounts/repository.js';
+import { DEFAULT_ACCOUNT_ID } from '../../src/accounts/types.js';
 import type { Channel } from '../../src/channels/types.js';
 import { env } from '../../src/config/env.js';
 import {
   getWorkerHeartbeat,
   isWorkerHeartbeatFresh,
-  resolveWorkerAccountId,
 } from '../../src/utils/redis-state.js';
-import { getWhatsAppOwnerStatus } from '../../src/whatsapp/index.js';
+import { getWhatsAppOwnerStatusAtPath } from '../../src/whatsapp/index.js';
 import { logger } from '../../src/utils/logger.js';
 
 const SPAWN_DISABLED_DETAIL =
@@ -22,7 +25,6 @@ const isWindows = process.platform === 'win32';
 function killProcessTree(proc: ChildProcess): void {
   if (!proc.pid) return;
   if (isWindows) {
-    // shell:true spawns cmd.exe as the parent; /T kills the whole tree (npx → node)
     spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F']);
     return;
   }
@@ -49,16 +51,19 @@ function killPidTree(pid: number): void {
   }
 }
 
-// --- Worker processes (um por canal) ------------------------------------------
-// Cada canal tem seu próprio processo de envio, controlado de forma independente
-// pelo painel: parar o WhatsApp não afeta o Telegram.
-
 export type WorkerStatus = 'stopped' | 'starting' | 'running' | 'error';
 
 export interface WorkerState {
   status: WorkerStatus;
   startedAt: string | null;
   detail: string | null;
+}
+
+export interface AccountWorkerState {
+  accountId: string;
+  label: string;
+  prefix: string;
+  state: WorkerState;
 }
 
 const WORKER_SCRIPTS: Record<Channel, string> = {
@@ -74,13 +79,28 @@ interface WorkerSlot {
   externalOwner?: boolean;
 }
 
-const workers = new Map<Channel, WorkerSlot>();
+const workers = new Map<string, WorkerSlot>();
 
-function slot(channel: Channel): WorkerSlot {
-  let current = workers.get(channel);
+function resolveAccountId(accountId?: string): string {
+  return accountId?.trim() || DEFAULT_ACCOUNT_ID;
+}
+
+function workerSlotKey(channel: Channel, accountId: string): string {
+  return `${channel}:${accountId}`;
+}
+
+export function workerDomPrefix(channel: Channel, accountId: string): string {
+  if (channel === 'whatsapp' && accountId === DEFAULT_ACCOUNT_ID) return 'worker';
+  if (channel === 'telegram' && accountId === DEFAULT_ACCOUNT_ID) return 'worker-tg';
+  return `worker-${channel}-${accountId.replace(/[^a-zA-Z0-9_-]+/g, '-')}`;
+}
+
+function slot(channel: Channel, accountId: string): WorkerSlot {
+  const key = workerSlotKey(channel, accountId);
+  let current = workers.get(key);
   if (!current) {
     current = { status: 'stopped', startedAt: null, detail: null };
-    workers.set(channel, current);
+    workers.set(key, current);
   }
   return current;
 }
@@ -94,10 +114,21 @@ function hasLocalWorker(current: WorkerSlot): boolean {
   return !!current.proc && (current.status === 'running' || current.status === 'starting');
 }
 
-async function syncWhatsAppFromExternalOwner(current: WorkerSlot): Promise<boolean> {
+function spawnEnvForAccount(accountId: string): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    WORKER_ACCOUNT_ID: accountId === DEFAULT_ACCOUNT_ID ? '' : accountId,
+  };
+}
+
+async function whatsappAuthPath(accountId: string): Promise<string> {
+  return resolveAccountAuthPath(accountId, 'whatsapp');
+}
+
+async function syncWhatsAppFromExternalOwner(current: WorkerSlot, accountId: string): Promise<boolean> {
   if (hasLocalWorker(current)) return false;
 
-  const owner = await getWhatsAppOwnerStatus();
+  const owner = await getWhatsAppOwnerStatusAtPath(await whatsappAuthPath(accountId));
   if (!owner.active || owner.isCurrentProcess) {
     if (current.externalOwner && !owner.active) {
       current.status = 'stopped';
@@ -116,18 +147,16 @@ async function syncWhatsAppFromExternalOwner(current: WorkerSlot): Promise<boole
   return true;
 }
 
-async function stopWhatsAppExternalOwner(): Promise<void> {
-  const owner = await getWhatsAppOwnerStatus();
+async function stopWhatsAppExternalOwner(accountId: string): Promise<void> {
+  const owner = await getWhatsAppOwnerStatusAtPath(await whatsappAuthPath(accountId));
   if (!owner.active || owner.isCurrentProcess || !owner.pid) return;
   if (owner.host !== hostname()) return;
   killPidTree(owner.pid);
 }
 
-async function deriveExternalWorkerState(channel: Channel): Promise<WorkerState> {
-  const accountId = resolveWorkerAccountId();
-
+async function deriveExternalWorkerState(channel: Channel, accountId: string): Promise<WorkerState> {
   if (channel === 'whatsapp') {
-    const owner = await getWhatsAppOwnerStatus();
+    const owner = await getWhatsAppOwnerStatusAtPath(await whatsappAuthPath(accountId));
     if (owner.active) {
       return {
         status: 'running',
@@ -158,11 +187,12 @@ async function deriveExternalWorkerState(channel: Channel): Promise<WorkerState>
   return { status: 'stopped', startedAt: null, detail: null };
 }
 
-export async function getWorkerState(channel: Channel = 'whatsapp'): Promise<WorkerState> {
-  const current = slot(channel);
+export async function getWorkerState(channel: Channel, accountId?: string): Promise<WorkerState> {
+  const resolvedAccountId = resolveAccountId(accountId);
+  const current = slot(channel, resolvedAccountId);
 
   if (channel === 'whatsapp') {
-    await syncWhatsAppFromExternalOwner(current);
+    await syncWhatsAppFromExternalOwner(current, resolvedAccountId);
   }
 
   if (hasLocalWorker(current)) {
@@ -173,7 +203,7 @@ export async function getWorkerState(channel: Channel = 'whatsapp'): Promise<Wor
     return { status: current.status, startedAt: current.startedAt, detail: current.detail };
   }
 
-  const external = await deriveExternalWorkerState(channel);
+  const external = await deriveExternalWorkerState(channel, resolvedAccountId);
   if (external.status !== 'stopped' || !canManagerSpawnWorkers()) {
     return external;
   }
@@ -181,37 +211,80 @@ export async function getWorkerState(channel: Channel = 'whatsapp'): Promise<Wor
   return { status: current.status, startedAt: current.startedAt, detail: current.detail };
 }
 
-export async function isWorkerRunning(channel: Channel = 'whatsapp'): Promise<boolean> {
-  const { status } = await getWorkerState(channel);
+export async function listWorkerStates(channel: Channel): Promise<AccountWorkerState[]> {
+  const accountIds = await getEnabledAccountIdsForChannel(channel);
+  const accounts = await loadAccounts();
+
+  return Promise.all(
+    accountIds.map(async (accountId) => {
+      const account = accounts.find((row) => row.id === accountId);
+      const label = account?.label ?? accountId;
+      return {
+        accountId,
+        label,
+        prefix: workerDomPrefix(channel, accountId),
+        state: await getWorkerState(channel, accountId),
+      };
+    }),
+  );
+}
+
+export async function isWorkerRunning(channel: Channel, accountId?: string): Promise<boolean> {
+  const { status } = await getWorkerState(channel, accountId);
   return status === 'running' || status === 'starting';
 }
 
-export async function startWorker(channel: Channel = 'whatsapp'): Promise<WorkerState> {
+export async function startWorker(channel: Channel, accountId?: string): Promise<WorkerState> {
+  const resolvedAccountId = resolveAccountId(accountId);
+
   if (!canManagerSpawnWorkers()) {
-    return deriveExternalWorkerState(channel);
+    return deriveExternalWorkerState(channel, resolvedAccountId);
   }
 
-  const current = slot(channel);
+  const account = await findAccountById(resolvedAccountId);
+  if (!account) {
+    return {
+      status: 'error',
+      startedAt: null,
+      detail: `Conta "${resolvedAccountId}" não encontrada`,
+    };
+  }
+  if (account.platform !== channel) {
+    return {
+      status: 'error',
+      startedAt: null,
+      detail: `Conta "${resolvedAccountId}" é ${account.platform}, não ${channel}`,
+    };
+  }
+  if (!account.enabled) {
+    return {
+      status: 'error',
+      startedAt: null,
+      detail: `Conta "${resolvedAccountId}" está desabilitada`,
+    };
+  }
+
+  const current = slot(channel, resolvedAccountId);
 
   if (channel === 'whatsapp') {
-    await syncWhatsAppFromExternalOwner(current);
+    await syncWhatsAppFromExternalOwner(current, resolvedAccountId);
     if (current.externalOwner && current.status === 'running') {
-      return getWorkerState(channel);
+      return getWorkerState(channel, resolvedAccountId);
     }
   }
 
-  if (hasLocalWorker(current)) return getWorkerState(channel);
+  if (hasLocalWorker(current)) return getWorkerState(channel, resolvedAccountId);
 
   if (channel === 'whatsapp') {
-    const owner = await getWhatsAppOwnerStatus();
+    const owner = await getWhatsAppOwnerStatusAtPath(await whatsappAuthPath(resolvedAccountId));
     if (owner.active && !owner.isCurrentProcess) {
       current.status = 'running';
       current.proc = undefined;
       current.externalOwner = true;
       current.detail = externalOwnerDetail(owner.pid!, owner.host);
       current.startedAt = new Date().toISOString();
-      logger.info({ channel, pid: owner.pid }, 'Worker WhatsApp já ativo em outro processo');
-      return getWorkerState(channel);
+      logger.info({ channel, accountId: resolvedAccountId, pid: owner.pid }, 'Worker WhatsApp já ativo em outro processo');
+      return getWorkerState(channel, resolvedAccountId);
     }
   }
 
@@ -222,7 +295,7 @@ export async function startWorker(channel: Channel = 'whatsapp'): Promise<Worker
 
   const proc = spawn('npx', ['tsx', '--env-file=.env', WORKER_SCRIPTS[channel]], {
     cwd: process.cwd(),
-    env: process.env,
+    env: spawnEnvForAccount(resolvedAccountId),
     shell: isWindows,
     detached: !isWindows,
     stdio: 'inherit',
@@ -234,7 +307,7 @@ export async function startWorker(channel: Channel = 'whatsapp'): Promise<Worker
       current.status = 'running';
       current.externalOwner = false;
     }
-    logger.info({ channel, pid: proc.pid }, 'Worker iniciado pelo painel');
+    logger.info({ channel, accountId: resolvedAccountId, pid: proc.pid }, 'Worker iniciado pelo painel');
   });
 
   proc.on('error', (error) => {
@@ -243,7 +316,7 @@ export async function startWorker(channel: Channel = 'whatsapp'): Promise<Worker
     current.detail = error.message;
     current.proc = undefined;
     current.externalOwner = false;
-    logger.error({ channel, error }, 'Falha ao iniciar worker pelo painel');
+    logger.error({ channel, accountId: resolvedAccountId, error }, 'Falha ao iniciar worker pelo painel');
   });
 
   proc.on('exit', (code, signal) => {
@@ -251,9 +324,9 @@ export async function startWorker(channel: Channel = 'whatsapp'): Promise<Worker
       if (current.proc === proc) current.proc = undefined;
 
       if (channel === 'whatsapp' && code === 0) {
-        const synced = await syncWhatsAppFromExternalOwner(current);
+        const synced = await syncWhatsAppFromExternalOwner(current, resolvedAccountId);
         if (synced) {
-          logger.info({ channel }, 'Worker duplicado encerrado — sessão mantida em outro processo');
+          logger.info({ channel, accountId: resolvedAccountId }, 'Worker duplicado encerrado — sessão mantida em outro processo');
           return;
         }
       }
@@ -263,28 +336,30 @@ export async function startWorker(channel: Channel = 'whatsapp'): Promise<Worker
       current.status = 'stopped';
       current.detail = `Encerrado (code=${code ?? '—'}, signal=${signal ?? '—'})`;
       current.externalOwner = false;
-      logger.info({ channel, code, signal }, 'Worker encerrado');
+      logger.info({ channel, accountId: resolvedAccountId, code, signal }, 'Worker encerrado');
     })();
   });
 
-  return getWorkerState(channel);
+  return getWorkerState(channel, resolvedAccountId);
 }
 
-export async function stopWorker(channel: Channel = 'whatsapp'): Promise<WorkerState> {
+export async function stopWorker(channel: Channel, accountId?: string): Promise<WorkerState> {
+  const resolvedAccountId = resolveAccountId(accountId);
+
   if (!canManagerSpawnWorkers()) {
-    return deriveExternalWorkerState(channel);
+    return deriveExternalWorkerState(channel, resolvedAccountId);
   }
 
-  const current = slot(channel);
+  const current = slot(channel, resolvedAccountId);
   const proc = current.proc;
 
   if (!proc) {
-    if (channel === 'whatsapp') await stopWhatsAppExternalOwner();
+    if (channel === 'whatsapp') await stopWhatsAppExternalOwner(resolvedAccountId);
     current.status = 'stopped';
     current.startedAt = null;
     current.detail = null;
     current.externalOwner = false;
-    return getWorkerState(channel);
+    return getWorkerState(channel, resolvedAccountId);
   }
 
   return new Promise((resolve) => {
@@ -297,7 +372,7 @@ export async function stopWorker(channel: Channel = 'whatsapp'): Promise<WorkerS
         current.startedAt = null;
         current.detail = null;
         current.externalOwner = false;
-        resolve(await getWorkerState(channel));
+        resolve(await getWorkerState(channel, resolvedAccountId));
       })();
     };
 
@@ -307,14 +382,14 @@ export async function stopWorker(channel: Channel = 'whatsapp'): Promise<WorkerS
   });
 }
 
-export async function restartWorker(channel: Channel = 'whatsapp'): Promise<WorkerState> {
+export async function restartWorker(channel: Channel, accountId?: string): Promise<WorkerState> {
   if (!canManagerSpawnWorkers()) {
-    return deriveExternalWorkerState(channel);
+    return deriveExternalWorkerState(channel, resolveAccountId(accountId));
   }
 
-  await stopWorker(channel);
+  await stopWorker(channel, accountId);
   await new Promise((resolve) => setTimeout(resolve, 500));
-  return startWorker(channel);
+  return startWorker(channel, accountId);
 }
 
 // --- Prisma generate (run and finish) ----------------------------------------

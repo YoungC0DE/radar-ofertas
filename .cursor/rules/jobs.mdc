@@ -9,14 +9,14 @@ alwaysApply: false
 - Processos assíncronos em `jobs/` (collector, sender).
 - Configuração de filas em `queue/`; agendamento em `queue/sender-schedule.ts`.
 - Pool de filas reutilizáveis via `getQueue(name)` — `closeAllQueues()` no shutdown.
-- Collector consulta Mercado Livre via scraping híbrido (`mercado-livre/`) e processa auto-messages due; sender publica — nunca enviar direto após coleta.
+- Collector consulta Mercado Livre via scraping híbrido (`mercado-livre/`, browser pooled); auto-messages due em `scheduler.ts`; sender publica — nunca enviar direto após coleta.
 - Jobs idempotentes: verificar estado antes de agir.
 - Intervalos e janela operacional: `queue-config-store.ts` (DB → cache → fallback ENV).
 - `jobs/sender.ts` é genérico por canal (recebe um `ChannelPublisher`) — ver `.cursor/rules/channels.mdc`.
 
 ## Filas
 
-- `offer-collector` — repeatable, processo `app.ts`.
+- `offer-collector` — repeatable, processo `app.ts` (`concurrency: 1`).
 - `offer-sender` — standard, processo `worker.ts` (WhatsApp).
 - `offer-sender-telegram` — standard, processo `worker-telegram.ts`.
 - `offer-sender-{accountId}` / `offer-sender-telegram-{accountId}` — filas por conta não-default.

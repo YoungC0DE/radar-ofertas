@@ -49,6 +49,22 @@ async function saveIntSetting(key: string, value: number): Promise<void> {
   });
 }
 
+export function invalidateQueueConfigCache(): void {
+  cache.senderDelayMinutes = null;
+  cache.collectorIntervalMinutes = null;
+  cache.operatingHoursStart = null;
+  cache.operatingHoursEnd = null;
+  cache.searchLimit = null;
+  cache.affiliateLinkDelayMs = null;
+  cache.affiliateLinkBacklogDelayMinutes = null;
+  cache.affiliateLinkBacklogThreshold = null;
+}
+
+async function notifyQueueConfigChange(): Promise<void> {
+  const { notifyConfigCacheChange } = await import('../utils/config-cache-sync.js');
+  await notifyConfigCacheChange('queue-config');
+}
+
 export async function hydrateQueueConfigCache(): Promise<void> {
   const rows = await prisma.setting.findMany({
     where: { key: { in: Object.values(KEYS) } },
@@ -91,6 +107,7 @@ export async function saveSenderDelayMinutes(minutes: number): Promise<void> {
   }
   await saveIntSetting(KEYS.senderDelay, minutes);
   cache.senderDelayMinutes = minutes;
+  await notifyQueueConfigChange();
 }
 
 // --- Collector Interval ---
@@ -105,6 +122,7 @@ export async function saveCollectorIntervalMinutes(minutes: number): Promise<voi
   }
   await saveIntSetting(KEYS.collectorInterval, minutes);
   cache.collectorIntervalMinutes = minutes;
+  await notifyQueueConfigChange();
 }
 
 // --- Operating Hours ---
@@ -129,6 +147,7 @@ export async function saveSearchLimit(limit: number): Promise<void> {
   }
   await saveIntSetting(KEYS.searchLimit, limit);
   cache.searchLimit = limit;
+  await notifyQueueConfigChange();
 }
 
 // --- Affiliate link delay ---
@@ -199,6 +218,7 @@ export async function saveAffiliateLinkDelaySettings(
   cache.affiliateLinkDelayMs = delayMs;
   cache.affiliateLinkBacklogDelayMinutes = backlogDelayMinutes;
   cache.affiliateLinkBacklogThreshold = backlogThreshold;
+  await notifyQueueConfigChange();
 }
 
 // --- Operating Hours ---
@@ -221,4 +241,5 @@ export async function saveOperatingHours(startHour: number, endHour: number): Pr
   await saveIntSetting(KEYS.opHoursEnd, storedEnd);
   cache.operatingHoursStart = startHour;
   cache.operatingHoursEnd = storedEnd;
+  await notifyQueueConfigChange();
 }

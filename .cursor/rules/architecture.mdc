@@ -60,4 +60,4 @@ manager/                → painel web (MVC server-rendered)
 
 ## Multi-conta
 
-`dispatchOffer` enfileira por `(canal, accountId)`. Workers usam `WORKER_ACCOUNT_ID`; publishers resolvem auth path por conta. Painel ainda não spawna workers por conta — ver `.cursor/docs/accounts.md`.
+`dispatchOffer` enfileira por `(canal, accountId)`. Workers usam `WORKER_ACCOUNT_ID`; publishers resolvem auth path por conta. Painel spawna um worker por conta habilitada em dev (`MANAGER_CAN_SPAWN_WORKERS=true`) — ver `.cursor/docs/accounts.md`.

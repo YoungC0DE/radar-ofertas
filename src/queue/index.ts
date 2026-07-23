@@ -1,6 +1,7 @@
 import { Queue } from 'bullmq';
 import { getEnabledAccountIdsForChannel } from '../accounts/channel-accounts.js';
 import { getCollectorIntervalMinutes } from '../config/queue-config-store.js';
+import { categoryJobKey } from '../config/ml-sources-config.js';
 import { env } from '../config/env.js';
 import { CHANNELS, isChannelEnabled } from '../channels/index.js';
 import type { Channel } from '../channels/types.js';
@@ -26,8 +27,27 @@ export function getSenderQueueName(channel: Channel, accountId = 'default'): str
   return `${SENDER_QUEUE_NAMES[channel]}-${accountId}`;
 }
 
-export interface CollectorJobData {
+export interface CollectorOrchestrateJobData {
+  kind: 'orchestrate';
   triggeredAt: string;
+}
+
+export interface CollectorSourceJobData {
+  kind: 'source';
+  triggeredAt: string;
+  channel: Channel;
+  category: string;
+  quota: number;
+}
+
+export type CollectorJobData = CollectorOrchestrateJobData | CollectorSourceJobData;
+
+export function collectorSourceJobId(
+  channel: Channel,
+  category: string,
+  triggeredAt: string,
+): string {
+  return `collect-source-${channel}-${categoryJobKey(category)}-${triggeredAt}`;
 }
 
 export interface SenderJobData {
@@ -102,8 +122,8 @@ export async function scheduleCollectorJob(): Promise<void> {
   const intervalMs = getCollectorIntervalMinutes() * 60 * 1000;
 
   await queue.add(
-    'collect',
-    { triggeredAt: new Date().toISOString() },
+    'collect-orchestrate',
+    { kind: 'orchestrate', triggeredAt: new Date().toISOString() },
     {
       repeat: { every: intervalMs },
       jobId: 'offer-collector-repeat',
@@ -113,11 +133,21 @@ export async function scheduleCollectorJob(): Promise<void> {
   );
 }
 
+export async function enqueueCollectSourceJob(data: CollectorSourceJobData): Promise<void> {
+  assertRedisEnabled('enfileiramento de coleta por fonte');
+  await getCollectorQueue().add('collect-source', data, {
+    jobId: collectorSourceJobId(data.channel, data.category, data.triggeredAt),
+    removeOnComplete: 100,
+    removeOnFail: 50,
+  });
+}
+
 export async function enqueueOfferCollection(): Promise<void> {
   assertRedisEnabled('enfileiramento de coleta');
+  const triggeredAt = new Date().toISOString();
   await getCollectorQueue().add(
-    'collect',
-    { triggeredAt: new Date().toISOString() },
+    'collect-orchestrate',
+    { kind: 'orchestrate', triggeredAt },
     {
       removeOnComplete: true,
       removeOnFail: 50,
@@ -131,7 +161,7 @@ export async function rescheduleCollectorJob(): Promise<void> {
   const repeatables = await queue.getRepeatableJobs();
 
   for (const job of repeatables) {
-    if (job.id === 'offer-collector-repeat' || job.name === 'collect') {
+    if (job.id === 'offer-collector-repeat' || job.name === 'collect-orchestrate' || job.name === 'collect') {
       await queue.removeRepeatableByKey(job.key);
     }
   }

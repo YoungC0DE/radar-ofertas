@@ -25,7 +25,7 @@
     return '<span class="badge warn">Parado</span>';
   }
 
-  function setupWorkerCard(prefix, channel, spawnEnabled = true) {
+  function setupWorkerCard(prefix, channel, spawnEnabled = true, accountId = 'default') {
     const startBtn = document.getElementById(`${prefix}-start`);
     const restartBtn = document.getElementById(`${prefix}-restart`);
     const stopBtn = document.getElementById(`${prefix}-stop`);
@@ -33,7 +33,9 @@
     const detail = document.getElementById(`${prefix}-detail`);
     if (!badge || !detail) return;
 
-    const query = channel ? `?channel=${channel}` : '';
+    const params = new URLSearchParams({ channel });
+    if (accountId && accountId !== 'default') params.set('accountId', accountId);
+    const query = `?${params.toString()}`;
     const poller = createPoller(poll, 2500);
 
     function render(state) {

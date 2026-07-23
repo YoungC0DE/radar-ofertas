@@ -49,7 +49,7 @@ ScrapedItem[] → RawOffer (com paginação)
 
 Ativado quando `ML_USE_BROWSER_FALLBACK=true` e HTTP falha (403, captcha, HTML vazio, zero produtos).
 
-Arquivo: `browser-scraper.ts` — Chromium headless, mesmo parser e paginação.
+Arquivos: `browser-scraper.ts`, `affiliate-link.ts`, `coupons.ts` — Chromium headless via **pool compartilhado** (`browser-pool.ts`): uma instância por processo, operações serializadas, fechamento automático após 60s ocioso.
 
 ## Sessão de afiliado (estilo Baileys)
 

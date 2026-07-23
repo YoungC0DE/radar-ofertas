@@ -1,7 +1,8 @@
-import { chromium, type BrowserContextOptions } from 'playwright';
+import type { BrowserContextOptions } from 'playwright';
 import { env } from '../config/env.js';
 import { getSearchLimit } from '../config/queue-config-store.js';
 import { logger } from '../utils/logger.js';
+import { withPooledBrowserContext } from './browser-pool.js';
 import {
   buildCategoryListingUrl,
   buildOffersPaginatedUrl,
@@ -76,63 +77,58 @@ export async function fetchCategoryViaBrowser(category: string): Promise<Scraped
   }
 
   const state = await loadStorageState();
-  const browser = await chromium.launch({ headless: env.ML_BROWSER_HEADLESS });
 
-  try {
-    const context = await browser.newContext({
-      userAgent: env.ML_SCRAPER_USER_AGENT,
-      locale: 'pt-BR',
-      storageState: state ? (state as BrowserContextOptions['storageState']) : undefined,
-    });
-    const page = await context.newPage();
+  return withPooledBrowserContext(
+    { storageState: state ? (state as BrowserContextOptions['storageState']) : undefined },
+    async (context) => {
+      const page = await context.newPage();
 
-    const gotoAndGetHtml = async (url: string): Promise<string> => {
-      await page.goto(url, { waitUntil: 'networkidle', timeout: env.ML_HTTP_TIMEOUT_MS });
-      await page.waitForTimeout(2500);
-      logger.info({ url, method: 'browser' }, 'ML site visit');
-      return page.content();
-    };
+      const gotoAndGetHtml = async (url: string): Promise<string> => {
+        await page.goto(url, { waitUntil: 'networkidle', timeout: env.ML_HTTP_TIMEOUT_MS });
+        await page.waitForTimeout(2500);
+        logger.info({ url, method: 'browser' }, 'ML site visit');
+        return page.content();
+      };
 
-    if (validation.listingKind === 'offers') {
-      const { items, pagesFetched } = await scrapeOffersPages(gotoAndGetHtml, validation.url);
+      if (validation.listingKind === 'offers') {
+        const { items, pagesFetched } = await scrapeOffersPages(gotoAndGetHtml, validation.url);
+
+        if (items.length === 0) {
+          throw new Error(`Browser scrape returned no products for ${validation.url}`);
+        }
+
+        logger.info(
+          {
+            category: validation.category,
+            url: validation.url,
+            count: items.length,
+            pages: pagesFetched,
+            listingKind: 'offers',
+            method: 'browser',
+          },
+          'Offers page scraped',
+        );
+        return items;
+      }
+
+      const url = buildCategoryListingUrl(validation.category);
+      const html = await gotoAndGetHtml(url);
+
+      if (isBlockedHtml(html)) {
+        throw new Error(`Browser blocked by anti-bot for ${url}`);
+      }
+
+      const items = parseListingHtml(html, getSearchLimit());
 
       if (items.length === 0) {
-        throw new Error(`Browser scrape returned no products for ${validation.url}`);
+        throw new Error(`Browser scrape returned no products for ${url}`);
       }
 
       logger.info(
-        {
-          category: validation.category,
-          url: validation.url,
-          count: items.length,
-          pages: pagesFetched,
-          listingKind: 'offers',
-          method: 'browser',
-        },
-        'Offers page scraped',
+        { category: validation.category, url, count: items.length, listingKind: 'category', method: 'browser' },
+        'Category scraped',
       );
       return items;
-    }
-
-    const url = buildCategoryListingUrl(validation.category);
-    const html = await gotoAndGetHtml(url);
-
-    if (isBlockedHtml(html)) {
-      throw new Error(`Browser blocked by anti-bot for ${url}`);
-    }
-
-    const items = parseListingHtml(html, getSearchLimit());
-
-    if (items.length === 0) {
-      throw new Error(`Browser scrape returned no products for ${url}`);
-    }
-
-    logger.info(
-      { category: validation.category, url, count: items.length, listingKind: 'category', method: 'browser' },
-      'Category scraped',
-    );
-    return items;
-  } finally {
-    await browser.close();
-  }
+    },
+  );
 }

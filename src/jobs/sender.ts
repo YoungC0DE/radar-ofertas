@@ -1,6 +1,6 @@
 import { DEFAULT_ACCOUNT_ID } from '../accounts/types.js';
 import { DelayedError, Worker } from 'bullmq';
-import type { ChannelPublisher } from '../channels/types.js';
+import type { Channel, ChannelPublisher } from '../channels/types.js';
 import { findAutoMessageById } from '../auto-messages/repository.js';
 import { markAutoMessageSent, renderAutoMessageContent } from '../auto-messages/service.js';
 import { env } from '../config/env.js';
@@ -23,13 +23,11 @@ import { getQueueConnection, getSenderQueueName, type SenderJobData } from '../q
 import { isWithinOperatingHours, msUntilOperatingWindow } from '../utils/datetime.js';
 import { logger } from '../utils/logger.js';
 import { recordSendSuccess, recordSendFailure } from '../utils/metrics.js';
+import { acquireSenderPacingSlot } from '../utils/sender-pacing.js';
 
 // Tempo máximo para gerar o link de afiliado no envio antes de cair no fallback,
 // garantindo que uma sessão ML lenta nunca segure a fila de envio.
 const AFFILIATE_LINK_SEND_TIMEOUT_MS = 10_000;
-
-/** Último envio normal (não force) neste processo — usado para espaçar ofertas sem bloquear o worker. */
-let lastPacedSendAt = 0;
 
 function getOperatingHours() {
   return {
@@ -38,26 +36,30 @@ function getOperatingHours() {
   };
 }
 
-async function enforceSenderPacing(job: { moveToDelayed: (timestamp: number) => Promise<void> }, force: boolean): Promise<void> {
+async function enforceSenderPacing(
+  job: { moveToDelayed: (timestamp: number) => Promise<void> },
+  channel: Channel,
+  accountId: string,
+  force: boolean,
+): Promise<void> {
   if (force) return;
 
   const delayMs = getSenderDelayMinutesCached() * 60 * 1000;
   if (delayMs <= 0) return;
 
-  const waitMs = lastPacedSendAt + delayMs - Date.now();
+  const waitMs = await acquireSenderPacingSlot(channel, accountId, delayMs);
   if (waitMs > 0) {
     await job.moveToDelayed(Date.now() + waitMs);
     throw new DelayedError();
   }
 }
 
-function markPacedSend(force: boolean): void {
-  if (!force) lastPacedSendAt = Date.now();
-}
-
 function resolveJobAccountId(data: SenderJobData, workerAccountId: string): string {
   return data.accountId ?? workerAccountId ?? DEFAULT_ACCOUNT_ID;
 }
+
+/** @internal exportado para testes unitários */
+export { resolveJobAccountId };
 
 /**
  * Worker de envio de um canal/conta. Cada processo consome a fila da sua conta;
@@ -94,7 +96,7 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
 
       const { offerId, autoMessageId, text } = job.data;
 
-      await enforceSenderPacing(job, force);
+      await enforceSenderPacing(job, channel, accountId, force);
 
       if (text) {
         try {
@@ -106,7 +108,6 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
           throw error;
         }
 
-        markPacedSend(force);
         return;
       }
 
@@ -132,7 +133,6 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
           throw error;
         }
 
-        markPacedSend(force);
         return;
       }
 
@@ -168,17 +168,15 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
       try {
         const { messageId } = await publisher.publish(offer, caption);
         await markOfferDelivered(offerId, channel, messageId, accountId);
-        recordSendSuccess(channel);
+        recordSendSuccess(channel, accountId);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         await markOfferDeliveryFailed(offerId, channel, message, accountId).catch(() => {});
-        recordSendFailure(channel);
+        recordSendFailure(channel, accountId);
         throw error;
       }
 
       logger.info({ channel, accountId, offerId, title: offer.title, force }, 'Offer published');
-
-      markPacedSend(force);
     },
     {
       connection: getQueueConnection(),

@@ -17,20 +17,31 @@ export function parseChannelParam(value: string | null | undefined): Channel {
   return 'whatsapp';
 }
 
-export async function startWorkerJson(channel: Channel = 'whatsapp'): Promise<string> {
-  return JSON.stringify(await startWorker(channel));
+export function parseAccountIdParam(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
 }
 
-export async function stopWorkerJson(channel: Channel = 'whatsapp'): Promise<string> {
-  return JSON.stringify(await stopWorker(channel));
+export async function startWorkerJson(
+  channel: Channel = 'whatsapp',
+  accountId?: string,
+): Promise<string> {
+  return JSON.stringify(await startWorker(channel, accountId));
 }
 
-export async function restartWorkerJson(channel: Channel = 'whatsapp'): Promise<string> {
-  return JSON.stringify(await restartWorker(channel));
+export async function stopWorkerJson(channel: Channel = 'whatsapp', accountId?: string): Promise<string> {
+  return JSON.stringify(await stopWorker(channel, accountId));
 }
 
-export async function getWorkerJson(channel: Channel = 'whatsapp'): Promise<string> {
-  return JSON.stringify(await getWorkerState(channel));
+export async function restartWorkerJson(
+  channel: Channel = 'whatsapp',
+  accountId?: string,
+): Promise<string> {
+  return JSON.stringify(await restartWorker(channel, accountId));
+}
+
+export async function getWorkerJson(channel: Channel = 'whatsapp', accountId?: string): Promise<string> {
+  return JSON.stringify(await getWorkerState(channel, accountId));
 }
 
 export function runPrismaGenerateJson(): string {

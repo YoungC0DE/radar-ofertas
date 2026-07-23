@@ -9,6 +9,8 @@
     "up": "tsx --env-file=.env src/scripts/up.ts",
     "predev": "tsx --env-file=.env src/scripts/preflight.ts --profile=collector",
     "dev": "tsx watch --env-file=.env src/app.ts",
+    "prescheduler": "tsx --env-file=.env src/scripts/preflight.ts --profile=scheduler",
+    "scheduler": "tsx watch --env-file=.env src/scheduler.ts",
     "preworker": "tsx --env-file=.env src/scripts/preflight.ts --profile=worker",
     "worker": "tsx watch --env-file=.env src/worker.ts",
     "preworker:telegram": "tsx --env-file=.env src/scripts/preflight.ts --profile=worker-telegram",
@@ -27,7 +29,7 @@
     "manager": "tsx watch --env-file=.env manager/server.ts",
     "start:manager": "tsx --env-file=.env manager/server.ts",
     "e2e:test": "tsx --env-file=.env src/run-e2e-test.ts",
-    "test": "tsx --import ./src/test/preload.ts --test src/**/*.test.ts",
+    "test": "tsx --import ./src/test/preload.ts src/test/run-tests.ts",
     "postinstall": "prisma generate && playwright install chromium"
   },
   "devDependencies": {

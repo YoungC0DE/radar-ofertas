@@ -63,6 +63,7 @@ import {
 import {
   getPrismaJson,
   getWorkerJson,
+  parseAccountIdParam,
   parseChannelParam,
   restartWorkerJson,
   runPrismaGenerateJson,
@@ -119,7 +120,7 @@ export const dashboardRoutes: RouteDefinition[] = [
   {
     method: 'GET',
     pattern: '/manager/api/metrics',
-    handler: ({ res }) => sendJson(res, 200, JSON.stringify(getMetrics())),
+    handler: async ({ res }) => sendJson(res, 200, JSON.stringify(await getMetrics())),
   },
 ];
 
@@ -450,28 +451,56 @@ export const workerRoutes: RouteDefinition[] = [
     method: 'POST',
     pattern: '/manager/settings/worker/start',
     handler: async ({ res, url }) => {
-      sendJson(res, 200, await startWorkerJson(parseChannelParam(url.searchParams.get('channel'))));
+      sendJson(
+        res,
+        200,
+        await startWorkerJson(
+          parseChannelParam(url.searchParams.get('channel')),
+          parseAccountIdParam(url.searchParams.get('accountId')),
+        ),
+      );
     },
   },
   {
     method: 'POST',
     pattern: '/manager/settings/worker/restart',
     handler: async ({ res, url }) => {
-      sendJson(res, 200, await restartWorkerJson(parseChannelParam(url.searchParams.get('channel'))));
+      sendJson(
+        res,
+        200,
+        await restartWorkerJson(
+          parseChannelParam(url.searchParams.get('channel')),
+          parseAccountIdParam(url.searchParams.get('accountId')),
+        ),
+      );
     },
   },
   {
     method: 'POST',
     pattern: '/manager/settings/worker/stop',
     handler: async ({ res, url }) => {
-      sendJson(res, 200, await stopWorkerJson(parseChannelParam(url.searchParams.get('channel'))));
+      sendJson(
+        res,
+        200,
+        await stopWorkerJson(
+          parseChannelParam(url.searchParams.get('channel')),
+          parseAccountIdParam(url.searchParams.get('accountId')),
+        ),
+      );
     },
   },
   {
     method: 'GET',
     pattern: '/manager/settings/worker/status',
     handler: async ({ res, url }) => {
-      sendJson(res, 200, await getWorkerJson(parseChannelParam(url.searchParams.get('channel'))));
+      sendJson(
+        res,
+        200,
+        await getWorkerJson(
+          parseChannelParam(url.searchParams.get('channel')),
+          parseAccountIdParam(url.searchParams.get('accountId')),
+        ),
+      );
     },
   },
   {

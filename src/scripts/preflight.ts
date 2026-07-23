@@ -6,7 +6,7 @@ import { hasValidSession, loadSessionMeta, loadStorageState } from '../mercado-l
 import { getCollectorQueue, isRedisEnabled, closeAllQueues } from '../queue/index.js';
 import { formatIsoInTimezone } from '../utils/datetime.js';
 
-export type PreflightProfile = 'all' | 'collector' | 'worker' | 'worker-telegram' | 'manager';
+export type PreflightProfile = 'all' | 'collector' | 'worker' | 'worker-telegram' | 'manager' | 'scheduler';
 
 export interface PreflightItem {
   ok: boolean;
@@ -252,7 +252,7 @@ export async function runPreflight(profile: PreflightProfile = 'all'): Promise<P
 function parseProfile(argv: string[]): PreflightProfile {
   const arg = argv.find((a) => a.startsWith('--profile='));
   const value = arg?.split('=')[1];
-  if (value === 'collector' || value === 'worker' || value === 'worker-telegram' || value === 'manager') {
+  if (value === 'collector' || value === 'worker' || value === 'worker-telegram' || value === 'manager' || value === 'scheduler') {
     return value;
   }
   return 'all';

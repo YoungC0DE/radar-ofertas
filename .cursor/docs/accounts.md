@@ -92,11 +92,11 @@ Job id determinístico: `send-offer-{canal}-{accountId}-{offerId}` (ou sem accou
 | `jobs/sender.ts` delivery por conta | ✅ |
 | Worker por conta (`WORKER_ACCOUNT_ID`) | ✅ |
 | Publishers/sessões parametrizados por conta | ✅ |
-| Painel spawna workers com `WORKER_ACCOUNT_ID` | ❌ |
+| Painel spawna workers com `WORKER_ACCOUNT_ID` | ✅ |
 
-### Próximos passos
+### Spawn pelo painel
 
-1. `manager/models/process-model.ts` — spawn de workers com `WORKER_ACCOUNT_ID` por conta habilitada.
+Com `MANAGER_CAN_SPAWN_WORKERS=true` (dev local), Settings → Operações exibe **um card de worker por conta habilitada**. Cada spawn define `WORKER_ACCOUNT_ID` no processo filho. Em Docker/produção (`MANAGER_CAN_SPAWN_WORKERS=false`), use `docker-compose.accounts.example.yml` ou `WORKER_ACCOUNT_ID=x npm run worker`.
 
 ## Documentação relacionada
 

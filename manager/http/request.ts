@@ -6,6 +6,9 @@ import { env } from '../../src/config/env.js';
 import { closeAllQueues } from '../../src/queue/index.js';
 import { closeLogStore } from '../../src/utils/log-store.js';
 import { closeRedisState } from '../../src/utils/redis-state.js';
+import { stopCacheInvalidationSubscriber } from '../../src/utils/cache-coherence.js';
+import { closeMetricsRedis } from '../../src/utils/metrics.js';
+import { closeSenderPacingRedis } from '../../src/utils/sender-pacing.js';
 import { logger } from '../../src/utils/logger.js';
 import { toManagerErrorMessage } from '../views/error-message.js';
 import { escapeHtml } from '../views/helpers.js';
@@ -174,6 +177,9 @@ export function createRouter(routes: RouteDefinition[]) {
 export async function shutdownManager(): Promise<void> {
   await closeAllQueues();
   await closeLogStore();
+  await stopCacheInvalidationSubscriber();
+  await closeMetricsRedis();
+  await closeSenderPacingRedis();
   await closeRedisState();
   await prisma.$disconnect();
 }

@@ -44,12 +44,13 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  console.log('Subindo collector e manager...\n');
+  console.log('Subindo collector, scheduler e manager...\n');
 
   // O worker de envio NÃO sobe aqui: quem gerencia o worker é o painel (Settings
   // › Worker de envio). Subir um worker também aqui criaria dois donos da sessão
   // do WhatsApp ao mesmo tempo (connectionReplaced em loop).
   spawnScript('dev');
+  spawnScript('scheduler');
   spawnScript('manager');
 
   process.on('SIGINT', () => shutdown('SIGINT'));

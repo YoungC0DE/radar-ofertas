@@ -153,4 +153,4 @@ Workers em produção: serviços Docker (`worker`, `worker-telegram`). Em dev: s
 
 Ver `.cursor/IMPLEMENTATION_BOARD.md` para status detalhado de tarefas.
 
-**Débito principal:** painel ainda não spawna workers por conta habilitada — usar `WORKER_ACCOUNT_ID=x npm run worker` manualmente para contas adicionais.
+**Débito principal (produção):** em Docker (`MANAGER_CAN_SPAWN_WORKERS=false`), workers adicionais ainda exigem `docker-compose.override.yml` ou `WORKER_ACCOUNT_ID=x npm run worker`.

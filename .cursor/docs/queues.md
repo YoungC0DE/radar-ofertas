@@ -40,9 +40,9 @@ Intervalos e horários lidos de `queue-config-store.ts` (tabela `settings` → c
 ```
 Fontes ML por canal (.env + settings)
     ↓
-jobs/collector (+ auto-messages due)
+jobs/collector
     ↓
-mercado-livre/          → HTTP scrape → (Playwright fallback)
+mercado-livre/          → HTTP scrape → (Playwright pooled fallback)
     ↓
 score-config + offers/service → score, dedup, dispatchOffer
     ↓
@@ -57,12 +57,11 @@ canal WhatsApp                canal Telegram
 
 ## Collector (`offer-collector`)
 
-1. Job repeatable dispara a cada `collectorIntervalMinutes`.
-2. `collectNewOffers()` — coleta independente por canal, até `searchLimit` por canal.
-3. `processOffers()` — score, deduplica, `dispatchOffer`.
-4. Processa auto-messages due (`auto-messages/service.ts`).
-5. Retorna `{ total, enqueued }`.
-6. Reagendamento via `rescheduleCollectorJob()` quando intervalo muda no manager.
+1. Job repeatable `collect-orchestrate` dispara a cada `collectorIntervalMinutes`.
+2. Orchestrator enfileira um job `collect-source` por `(canal, fonte)` com quota `floor(searchLimit / fontes)`.
+3. Worker com `concurrency: 2` processa fontes em paralelo (HTTP); Playwright serializado no pool.
+4. `collectFromSource` — scrape + `processOffer` por shard.
+5. Reagendamento via `rescheduleCollectorJob()` quando intervalo muda no manager.
 
 ## Sender (um por canal)
 

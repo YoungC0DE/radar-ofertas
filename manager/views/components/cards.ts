@@ -60,6 +60,8 @@ export function renderSimpleConnectCard(options: SimpleConnectCardOptions): stri
 
 export interface WorkerCardOptions {
   prefix: string;
+  channel: 'whatsapp' | 'telegram';
+  accountId: string;
   name: string;
   icon: string;
   status: string;
@@ -68,7 +70,7 @@ export interface WorkerCardOptions {
 }
 
 export function renderWorkerCard(options: WorkerCardOptions): string {
-  const { prefix, name, icon, status, detail, spawnEnabled = true } = options;
+  const { prefix, channel, accountId, name, icon, status, detail, spawnEnabled = true } = options;
   const running = status === 'running' || status === 'starting';
 
   const actionsHtml = spawnEnabled
@@ -78,13 +80,15 @@ export function renderWorkerCard(options: WorkerCardOptions): string {
       <button type="button" class="btn btn-danger" id="${prefix}-stop"${running ? '' : ' disabled'}>Parar</button>`
     : '<span class="meta">Gerenciado externamente (Docker/terminal)</span>';
 
-  return renderConnectCard({
-    service: 'worker',
-    name,
-    icon,
-    detail,
-    detailId: `${prefix}-detail`,
-    badgeHtml: `<span id="${prefix}-badge">${workerStatusBadge(status)}</span>`,
-    actionsHtml,
-  });
+  return `<div data-worker-setup data-worker-prefix="${prefix}" data-worker-channel="${channel}" data-worker-account="${accountId}">
+    ${renderConnectCard({
+      service: 'worker',
+      name,
+      icon,
+      detail,
+      detailId: `${prefix}-detail`,
+      badgeHtml: `<span id="${prefix}-badge">${workerStatusBadge(status)}</span>`,
+      actionsHtml,
+    })}
+  </div>`;
 }

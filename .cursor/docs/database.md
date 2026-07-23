@@ -142,7 +142,7 @@ Nunca chamar `prisma` diretamente de jobs ou módulos de scraping.
 - `mercado_livre_id` é unique — impede duplicatas.
 - `offers.sent_at IS NULL` indica oferta ainda não publicada em nenhum canal — use apenas para dedup e visões globais.
 - Estado **por canal e conta** vem sempre de `offer_deliveries`, nunca de `offers.sent_at`.
-- Settings: upsert por chave; cache em memória hidratado no startup.
+- Settings: upsert por chave; cache em memória hidratado no startup. Com `REDIS_ENABLED=true`, gravações publicam invalidação em `radar:cache:invalidate` para sincronizar réplicas do manager e processos worker/collector.
 - Migrations versionadas em `prisma/migrations/`.
 
 ## Docker

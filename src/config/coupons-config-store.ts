@@ -5,6 +5,10 @@ const SETTING_KEY = 'mlCouponsUrl';
 
 let cache: string | null = null;
 
+export function invalidateCouponsConfigCache(): void {
+  cache = null;
+}
+
 export async function hydrateCouponsConfigCache(): Promise<void> {
   try {
     const row = await prisma.setting.findUnique({ where: { key: SETTING_KEY } });
@@ -56,4 +60,6 @@ export async function saveCouponsUrl(url: string): Promise<void> {
   });
 
   cache = trimmed;
+  const { notifyConfigCacheChange } = await import('../utils/config-cache-sync.js');
+  await notifyConfigCacheChange('coupons-config');
 }

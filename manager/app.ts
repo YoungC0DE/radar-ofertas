@@ -1,6 +1,7 @@
 import { createServer, type Server } from 'node:http';
 
 import { env } from '../src/config/env.js';
+import { bootstrapCacheCoherence } from '../src/utils/config-cache-sync.js';
 import { logger } from '../src/utils/logger.js';
 import { handleManagerRequest, shutdownManager } from './routes/index.js';
 
@@ -11,6 +12,7 @@ export function startManagerServer(): Server {
 
   server.listen(env.MANAGER_PORT, () => {
     logger.info({ port: env.MANAGER_PORT }, 'Manager disponível em /manager');
+    void bootstrapCacheCoherence();
   });
 
   return server;

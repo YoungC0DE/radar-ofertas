@@ -321,12 +321,15 @@
         tgConnectBtn.disabled = false;
       });
 
-      // --- Operações: Workers de envio (um card por canal) ---
-            // Cada canal tem seu card, seus botões e seu polling — o ?channel= diz ao
-      // painel qual processo controlar. O card do Telegram só existe quando o
-      // canal está ligado, então saímos fora se os elementos não estiverem lá.
-      RadarPolling.setupWorkerCard('worker', 'whatsapp', canSpawnWorkers);
-      RadarPolling.setupWorkerCard('worker-tg', 'telegram', canSpawnWorkers);
+      // --- Operações: Workers de envio (um card por conta habilitada) ---
+      document.querySelectorAll('[data-worker-setup]').forEach((el) => {
+        RadarPolling.setupWorkerCard(
+          el.dataset.workerPrefix,
+          el.dataset.workerChannel,
+          canSpawnWorkers,
+          el.dataset.workerAccount,
+        );
+      });
 
       // --- Operações: Prisma generate ---
       const prismaBtn = document.getElementById('prisma-generate');

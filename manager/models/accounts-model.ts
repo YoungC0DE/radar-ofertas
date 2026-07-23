@@ -1,7 +1,6 @@
 import {
   loadAccounts,
   saveAccounts,
-  invalidateAccountsCache,
 } from '../../src/accounts/repository.js';
 import { resolveAccountAuthPath } from '../../src/accounts/paths.js';
 import {
@@ -71,7 +70,6 @@ export async function addAccount(form: Record<string, string>): Promise<SaveResu
 
   accounts.push(newAccount);
   await saveAccounts(accounts);
-  invalidateAccountsCache();
   return { ok: true };
 }
 
@@ -102,7 +100,6 @@ export async function updateAccount(
   }
 
   await saveAccounts(accounts);
-  invalidateAccountsCache();
   return { ok: true };
 }
 
@@ -119,7 +116,6 @@ export async function removeAccount(accountId: string): Promise<SaveResult> {
   }
 
   await saveAccounts(filtered);
-  invalidateAccountsCache();
   return { ok: true };
 }
 
@@ -133,6 +129,5 @@ export async function toggleAccount(accountId: string): Promise<SaveResult> {
 
   account.enabled = !account.enabled;
   await saveAccounts(accounts);
-  invalidateAccountsCache();
   return { ok: true };
 }

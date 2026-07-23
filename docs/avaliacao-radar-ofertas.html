@@ -50,7 +50,9 @@
     ul { margin: 8px 0; padding-left: 20px; }
     li { margin: 4px 0; }
     .pro { color: #166534; }
+    .ok { color: #166534; }
     .con { color: #991b1b; }
+    .tag-ok { background: #dcfce7; color: #166534; }
     .tag { display: inline-block; background: #dbeafe; color: #1e40af; font-size: 8pt; padding: 2px 8px; border-radius: 99px; margin-right: 4px; }
     .footer { margin-top: 36px; padding-top: 12px; border-top: 1px solid #e2e8f0; font-size: 9pt; color: #94a3b8; text-align: center; }
     .bar-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; font-size: 10pt; }
@@ -102,7 +104,7 @@
 <p>
   <span class="tag">~102 arquivos src/</span>
   <span class="tag">~62 arquivos manager/</span>
-  <span class="tag">12 testes unitários</span>
+  <span class="tag">20 testes unitários</span>
   <span class="tag">TS strict</span>
   <span class="tag">CI: tsc + test</span>
 </p>
@@ -124,7 +126,6 @@
 <ul>
   <li class="con">Login ML (Playwright) permanece stateful no manager — não replicável em cluster.</li>
   <li class="con">Telegram multi-conta incompleto: token ainda lê <code>env.TELEGRAM_BOT_TOKEN</code> global.</li>
-  <li class="con">Collector + auto-messages no mesmo processo — acoplamento aceitável, mas limita escala independente.</li>
   <li class="con"><code>telegram-publisher.ts</code> legado coexistindo com <code>publisher-factory.ts</code>.</li>
 </ul>
 
@@ -152,9 +153,9 @@
 <h3>Pontos fracos</h3>
 <ul>
   <li class="con"><code>tsc</code> falha em ~14 erros (Baileys types, cheerio, manager unused imports) — gate de CI configurado mas código não limpo.</li>
-  <li class="con">12 testes unitários — bom para domínio crítico, mas sem cobertura de jobs/, whatsapp/, manager/.</li>
+  <li class="con">Cobertura ainda parcial em <code>jobs/</code>, <code>whatsapp/</code> e <code>manager/</code> — helpers e regras puras testados; workers Baileys e rotas HTTP sem testes de integração.</li>
+  <li class="ok"><span class="tag tag-ok">já ok</span> <strong><code>npm test</code> cross-platform:</strong> runner em <code>src/test/run-tests.ts</code> descobre <code>*.test.ts</code> em <code>src/</code> e <code>manager/</code> (funciona no Windows).</li>
   <li class="con">Sem ESLint/Prettier — estilo depende de convenção manual.</li>
-  <li class="con"><code>npm test</code> com glob falha no Windows (PowerShell).</li>
   <li class="con"><code>accounts/repository.ts</code> silencia erro de DB e cai para ENV — pode mascarar falhas.</li>
 </ul>
 
@@ -162,8 +163,11 @@
   <tr><th>Área testada</th><th>Arquivos</th></tr>
   <tr><td>Ofertas / score / sampling</td><td>service.test.ts, sampling.test.ts, message-template.test.ts</td></tr>
   <tr><td>Mercado Livre</td><td>parser, circuit-breaker, category-url, coupon-parser</td></tr>
-  <tr><td>Contas / Redis</td><td>account-config.test.ts, redis-state.test.ts</td></tr>
-  <tr><td>Sem testes</td><td>jobs/, whatsapp/, telegram/, manager/</td></tr>
+  <tr><td>Contas / Redis / filas</td><td>account-config.test.ts, redis-state.test.ts, queue-names.test.ts</td></tr>
+  <tr><td>Jobs / pacing</td><td>sender.test.ts, collector.test.ts, sender-pacing.test.ts</td></tr>
+  <tr><td>WhatsApp</td><td>channel-cache.test.ts, channel-id.test.ts</td></tr>
+  <tr><td>Manager</td><td>static-path.test.ts, operating-hours-section.test.ts</td></tr>
+  <tr><td>Sem testes</td><td>telegram/, rotas HTTP do manager, conexão Baileys end-to-end</td></tr>
 </table>
 
 <div class="page-break"></div>
@@ -198,30 +202,31 @@
 
 <h2>4. Escalabilidade — 7,0 / 10</h2>
 
-<h3>O que escala bem (pós Fases 1–4)</h3>
+<h3>Já ok</h3>
 <ul>
-  <li class="pro"><strong>Pool de filas BullMQ:</strong> <code>getQueue()</code> reutilizável — sem overhead de criar/fechar Queue a cada enqueue.</li>
-  <li class="pro"><strong>Filas por conta:</strong> <code>offer-sender-{accountId}</code> — isolamento de jobs por conta.</li>
-  <li class="pro"><strong>Contas em Prisma:</strong> tabela <code>accounts</code> com validação Zod — base para FKs futuras.</li>
-  <li class="pro"><strong>Manager stateless:</strong> <code>MANAGER_CAN_SPAWN_WORKERS=false</code> no Docker; status via Redis + <code>owner.lock</code>.</li>
-  <li class="pro"><strong>QR/status no Redis:</strong> <code>radar:connect:wa:{accountId}</code> — painel replicável atrás de load balancer.</li>
-  <li class="pro"><strong>Heartbeat worker:</strong> <code>radar:worker:{channel}:{accountId}</code> — detecção cross-process.</li>
-  <li class="pro"><strong>Delivery por conta:</strong> unique <code>(offer_id, channel, account_id)</code> — fonte da verdade granular.</li>
+  <li class="ok"><span class="tag tag-ok">já ok</span> <strong>Pool de filas BullMQ:</strong> <code>getQueue()</code> reutilizável — sem overhead de criar/fechar Queue a cada enqueue.</li>
+  <li class="ok"><span class="tag tag-ok">já ok</span> <strong>Filas por conta:</strong> <code>offer-sender-{accountId}</code> — isolamento de jobs por conta.</li>
+  <li class="ok"><span class="tag tag-ok">já ok</span> <strong>Contas em Prisma:</strong> tabela <code>accounts</code> com validação Zod — base para FKs futuras.</li>
+  <li class="ok"><span class="tag tag-ok">já ok</span> <strong>Manager stateless:</strong> <code>MANAGER_CAN_SPAWN_WORKERS=false</code> no Docker; status via Redis + <code>owner.lock</code>.</li>
+  <li class="ok"><span class="tag tag-ok">já ok</span> <strong>QR/status no Redis:</strong> <code>radar:connect:wa:{accountId}</code> — painel replicável atrás de load balancer.</li>
+  <li class="ok"><span class="tag tag-ok">já ok</span> <strong>Heartbeat worker:</strong> <code>radar:worker:{channel}:{accountId}</code> — detecção cross-process.</li>
+  <li class="ok"><span class="tag tag-ok">já ok</span> <strong>Delivery por conta:</strong> unique <code>(offer_id, channel, account_id)</code> — fonte da verdade granular.</li>
+  <li class="ok"><span class="tag tag-ok">já ok</span> <strong>Collector otimizado:</strong> Playwright pooled (1 Chromium/processo), auto-messages em <code>scheduler</code> separado, <code>concurrency: 1</code> na fila.</li>
+  <li class="ok"><span class="tag tag-ok">já ok</span> <strong>Collector sharded:</strong> job <code>collect-orchestrate</code> fan-out por fonte (<code>collect-source</code>) — paralelismo na fila; Playwright pooled.</li>
+  <li class="ok"><span class="tag tag-ok">já ok</span> <strong>Pacing atômico:</strong> <code>sender-pacing.ts</code> via Redis (ou mutex in-process) — seguro com <code>senderConcurrency &gt; 1</code>.</li>
+  <li class="ok"><span class="tag tag-ok">já ok</span> <strong>Spawn por conta:</strong> painel sobe workers com <code>WORKER_ACCOUNT_ID</code> — um card por conta habilitada em Settings → Operações (dev local).</li>
+  <li class="ok"><span class="tag tag-ok">já ok</span> <strong>Caches coerentes:</strong> invalidação via Redis pub/sub (<code>cache-coherence</code>) — accounts, queue-config e settings sincronizam entre réplicas; métricas centralizadas no Redis.</li>
 </ul>
 
-<h3>Gargalos e limites</h3>
+<h3>Gargalos e limites restantes</h3>
 <ul>
   <li class="con"><strong>WhatsApp:</strong> 1 sessão Baileys = 1 processo — não escala horizontalmente no mesmo número.</li>
-  <li class="con"><strong>Collector singleton:</strong> um worker <code>offer-collector</code>; Playwright é CPU/RAM pesado.</li>
-  <li class="con"><strong>Pacing in-process:</strong> <code>lastPacedSendAt</code> em memória — race se <code>senderConcurrency &gt; 1</code>.</li>
-  <li class="con"><strong>Spawn por conta:</strong> painel ainda não sobe workers com <code>WORKER_ACCOUNT_ID</code> — manual via Docker/terminal.</li>
-  <li class="con"><strong>Caches locais:</strong> accounts, queue-config, metrics — inconsistentes entre réplicas sem Redis.</li>
   <li class="con"><strong>Auth manager:</strong> <code>MANAGER_TOKEN</code> opcional — acesso livre se ausente.</li>
 </ul>
 
 <table>
   <tr><th>Componente</th><th>Escala horizontal?</th><th>Nota</th></tr>
-  <tr><td>Collector (app)</td><td>Parcial</td><td>Repeat job único; scraping pesado</td></tr>
+  <tr><td>Collector</td><td>Parcial</td><td>Shard por fonte (<code>collect-source</code>); Playwright pooled; <code>scheduler</code> separado</td></tr>
   <tr><td>Worker WhatsApp</td><td>Não (por sessão)</td><td>Lock de dono + Baileys</td></tr>
   <tr><td>Worker Telegram</td><td>Sim (por conta)</td><td>Bot API stateless</td></tr>
   <tr><td>Manager</td><td>Sim (pós Fase 4)</td><td>Redis + spawn desligado</td></tr>
@@ -341,9 +346,8 @@
 <ol>
   <li><strong>Endurecer segurança do painel</strong> — CSRF, <code>MANAGER_TOKEN</code> obrigatório, fix XSS em <code>accounts.ts</code>.</li>
   <li><strong>Corrigir <code>tsc</code></strong> — erros Baileys/cheerio/manager bloqueiam gate de qualidade.</li>
-  <li><strong>Spawn workers por conta</strong> — <code>process-model.ts</code> + templates Docker com <code>WORKER_ACCOUNT_ID</code>.</li>
   <li><strong>Telegram multi-conta</strong> — <code>botToken</code> por conta no publisher.</li>
-  <li><strong>Expandir testes</strong> — jobs/sender, integração queue; glob cross-platform.</li>
+  <li><strong>Expandir testes</strong> — integração queue/sender e rotas do manager; E2E Telegram.</li>
   <li><strong>Limitar <code>readFormBody</code></strong> e adicionar rate limiting no manager.</li>
 </ol>
 
@@ -355,13 +359,14 @@
 </p>
 <p>
   A qualidade de código é boa no núcleo (<code>src/</code>), com TypeScript rigoroso e testes nos domínios críticos,
-  mas perde pontos por dívidas de tipagem no manager/Baileys e cobertura estreita fora de <code>offers/</code> e
-  <code>mercado-livre/</code>.
+  mas perde pontos por dívidas de tipagem no manager/Baileys e cobertura ainda parcial em workers e rotas HTTP
+  (helpers de <code>jobs/</code>, <code>whatsapp/</code> e <code>manager/</code> já têm testes unitários).
 </p>
 <p>
-  A escalabilidade melhorou significativamente com as Fases 1–4, mas limites reais permanecem: WhatsApp é
-  intrinsecamente single-process por sessão, o collector é singleton, e multi-conta ainda exige operação manual
-  para contas adicionais.
+  A escalabilidade melhorou significativamente com as Fases 1–4 e os itens marcados como <em>já ok</em> na seção 4
+  (filas por conta, manager stateless, collector sharded, pacing atômico, spawn por conta, caches coerentes).
+  Limites reais restantes: WhatsApp é intrinsecamente single-process por sessão, e em produção/Docker workers
+  adicionais ainda usam override ou terminal.
 </p>
 <p>
   Em <strong>segurança</strong>, o projeto está adequado para uso em ambiente controlado (localhost, VPN, rede interna),

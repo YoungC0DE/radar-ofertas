@@ -1,7 +1,8 @@
-import { chromium, type BrowserContextOptions } from 'playwright';
+import type { BrowserContextOptions } from 'playwright';
 import { getCouponsUrlFromDb } from '../config/coupons-config-store.js';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
+import { withPooledBrowserContext } from './browser-pool.js';
 import { collectCouponsFromUnknown, finalizeParsedCoupons, isLoginHtml, parseCouponsHtml, parseCouponsJson } from './coupon-parser.js';
 import {
   cookiesToHeader,
@@ -104,67 +105,61 @@ async function fetchCouponsViaBrowser(): Promise<MlCoupon[]> {
   const url = await getCouponsUrlFromDb();
   const collected: MlCoupon[] = [];
 
-  const browser = await chromium.launch({ headless: env.ML_BROWSER_HEADLESS });
+  return withPooledBrowserContext(
+    { storageState: state ? (state as BrowserContextOptions['storageState']) : undefined },
+    async (context) => {
+      const page = await context.newPage();
 
-  try {
-    const context = await browser.newContext({
-      userAgent: env.ML_SCRAPER_USER_AGENT,
-      locale: 'pt-BR',
-      storageState: state ? (state as BrowserContextOptions['storageState']) : undefined,
-    });
-    const page = await context.newPage();
+      page.on('response', async (response) => {
+        const responseUrl = response.url();
+        if (!/coupon|cupom|affiliate|campaign|benefit|promo/i.test(responseUrl)) return;
+        if (response.status() < 200 || response.status() >= 300) return;
 
-    page.on('response', async (response) => {
-      const responseUrl = response.url();
-      if (!/coupon|cupom|affiliate|campaign|benefit|promo/i.test(responseUrl)) return;
-      if (response.status() < 200 || response.status() >= 300) return;
+        const contentType = response.headers()['content-type'] ?? '';
+        if (!contentType.includes('json')) return;
 
-      const contentType = response.headers()['content-type'] ?? '';
-      if (!contentType.includes('json')) return;
+        try {
+          const data = (await response.json()) as unknown;
+          const before = collected.length;
+          collectCouponsFromUnknown(data, collected);
+          if (collected.length > before) {
+            logger.debug({ responseUrl, added: collected.length - before }, 'Coupons captured from API response');
+          }
+        } catch {
+          // resposta não-JSON
+        }
+      });
+
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: env.ML_HTTP_TIMEOUT_MS });
+      await page.waitForTimeout(3000);
 
       try {
-        const data = (await response.json()) as unknown;
-        const before = collected.length;
-        collectCouponsFromUnknown(data, collected);
-        if (collected.length > before) {
-          logger.debug({ responseUrl, added: collected.length - before }, 'Coupons captured from API response');
-        }
+        await page.waitForSelector('[class*="coupon"], [data-testid*="coupon"], [class*="cupom"], article', {
+          timeout: 8000,
+        });
       } catch {
-        // resposta não-JSON
+        // página pode não ter seletores conhecidos
       }
-    });
 
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: env.ML_HTTP_TIMEOUT_MS });
-    await page.waitForTimeout(3000);
+      const html = await page.content();
+      collected.push(...parseCouponsHtml(html));
 
-    try {
-      await page.waitForSelector('[class*="coupon"], [data-testid*="coupon"], [class*="cupom"], article', {
-        timeout: 8000,
+      if (collected.length === 0 && isLoginHtml(html)) {
+        throw new Error('Sessão de afiliado necessária — conecte o Mercado Livre em Configuração.');
+      }
+
+      const embeddedState = await page.evaluate(() => {
+        const globals = window as unknown as Record<string, unknown>;
+        return globals.__PRELOADED_STATE__ ?? globals.__NORDIC_STATE__ ?? null;
       });
-    } catch {
-      // página pode não ter seletores conhecidos
-    }
 
-    const html = await page.content();
-    collected.push(...parseCouponsHtml(html));
+      if (embeddedState) {
+        collectCouponsFromUnknown(embeddedState, collected);
+      }
 
-    if (collected.length === 0 && isLoginHtml(html)) {
-      throw new Error('Sessão de afiliado necessária — conecte o Mercado Livre em Configuração.');
-    }
-
-    const embeddedState = await page.evaluate(() => {
-      const globals = window as unknown as Record<string, unknown>;
-      return globals.__PRELOADED_STATE__ ?? globals.__NORDIC_STATE__ ?? null;
-    });
-
-    if (embeddedState) {
-      collectCouponsFromUnknown(embeddedState, collected);
-    }
-
-    return finalizeParsedCoupons(collected, html);
-  } finally {
-    await browser.close();
-  }
+      return finalizeParsedCoupons(collected, html);
+    },
+  );
 }
 
 export async function scrapeAffiliateCoupons(): Promise<CouponScrapeResult> {

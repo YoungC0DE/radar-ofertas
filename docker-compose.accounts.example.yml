@@ -1,0 +1,36 @@
+# Exemplo: workers WhatsApp por conta adicional
+#
+# Uso:
+#   cp docker-compose.accounts.example.yml docker-compose.override.yml
+#   # Edite WORKER_ACCOUNT_ID e auth path de cada conta no painel /manager/accounts
+#   docker compose up -d --build
+#
+# Cada conta precisa de:
+#   - linha na tabela accounts (painel ou seed)
+#   - auth em ./data/accounts/{accountId}/whatsapp/
+#   - um serviço worker dedicado (1 sessão Baileys = 1 processo)
+
+services:
+  worker-conta-2:
+    build: .
+    restart: on-failure
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      APP_TIMEZONE: ${APP_TIMEZONE:-America/Sao_Paulo}
+      REDIS_ENABLED: "true"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-radar}:${POSTGRES_PASSWORD:-radar_secret}@postgres:5432/${POSTGRES_DB:-radar_ofertas}
+      REDIS_URL: redis://redis:6379
+      SKIP_MIGRATIONS: "true"
+      WORKER_ACCOUNT_ID: minha-conta-wa-2
+    volumes:
+      - ./data:/app/data
+    command: ["npx", "tsx", "src/worker.ts"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully

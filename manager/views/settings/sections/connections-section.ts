@@ -1,4 +1,5 @@
 import type { SettingsData } from '../../../models/settings-model.js';
+import type { AccountWorkerState } from '../../../models/process-model.js';
 import { escapeHtml } from '../../helpers.js';
 import {
   ML_ICON,
@@ -54,32 +55,45 @@ export function renderConnectionsSection(data: SettingsData): string {
     </section>`;
 }
 
-function renderTelegramWorkerCard(data: SettingsData): string {
-  if (!data.telegramEnabled) return '';
-
-  const worker = data.telegramWorkerState;
-  const running = worker.status === 'running' || worker.status === 'starting';
+function renderAccountWorkerCard(
+  channel: 'whatsapp' | 'telegram',
+  worker: AccountWorkerState,
+  icon: string,
+  spawnEnabled: boolean,
+): string {
+  const channelLabel = channel === 'whatsapp' ? 'WhatsApp' : 'Telegram';
+  const running = worker.state.status === 'running' || worker.state.status === 'starting';
   const detail =
-    worker.detail ??
-    data.tgSession?.detail ??
+    worker.state.detail ??
     (running ? 'Processo de envio em execução' : 'Processo de envio parado');
+  const accountSuffix =
+    worker.accountId === 'default' ? '' : ` — ${escapeHtml(worker.label)} (${escapeHtml(worker.accountId)})`;
 
   return renderWorkerCard({
-    prefix: 'worker-tg',
-    name: 'Worker de envio — Telegram',
-    icon: TELEGRAM_ICON,
-    status: worker.status,
+    prefix: worker.prefix,
+    channel,
+    accountId: worker.accountId,
+    name: `Worker de envio — ${channelLabel}${accountSuffix}`,
+    icon,
+    status: worker.state.status,
     detail,
-    spawnEnabled: data.canSpawnWorkers,
+    spawnEnabled,
   });
 }
 
+function renderChannelWorkerCards(
+  channel: 'whatsapp' | 'telegram',
+  workers: AccountWorkerState[],
+  icon: string,
+  spawnEnabled: boolean,
+): string {
+  if (workers.length === 0) return '';
+  return workers.map((worker) => renderAccountWorkerCard(channel, worker, icon, spawnEnabled)).join('');
+}
+
 export function renderOperationsSection(data: SettingsData): string {
-  const worker = data.workerState;
-  const running = worker.status === 'running' || worker.status === 'starting';
-  const workerDetail = worker.detail ?? (running ? 'Processo de envio em execução' : 'Processo de envio parado');
   const opsHint = data.canSpawnWorkers
-    ? 'Controle os processos do bot direto pelo painel. Os workers aqui são gerenciados por este painel — não rode um <code>npm run worker</code> no terminal ao mesmo tempo. Cada canal tem seu próprio worker: parar um não afeta o outro.'
+    ? 'Controle os processos do bot direto pelo painel — um worker por conta habilitada (<code>WORKER_ACCOUNT_ID</code>). Não rode <code>npm run worker</code> manualmente para a mesma conta ao mesmo tempo.'
     : 'Workers rodam como serviços separados (Docker ou terminal). O painel apenas exibe o status via Redis e <code>owner.lock</code> — não inicia nem para processos.';
 
   return `
@@ -87,15 +101,8 @@ export function renderOperationsSection(data: SettingsData): string {
       <h2>Operações</h2>
       <p class="meta">${opsHint}</p>
       <div class="connect-grid">
-        ${renderWorkerCard({
-          prefix: 'worker',
-          name: 'Worker de envio — WhatsApp',
-          icon: WORKER_ICON,
-          status: worker.status,
-          detail: workerDetail,
-          spawnEnabled: data.canSpawnWorkers,
-        })}
-        ${renderTelegramWorkerCard(data)}
+        ${renderChannelWorkerCards('whatsapp', data.whatsappWorkers, WORKER_ICON, data.canSpawnWorkers)}
+        ${data.telegramEnabled ? renderChannelWorkerCards('telegram', data.telegramWorkers, TELEGRAM_ICON, data.canSpawnWorkers) : ''}
         ${renderConnectCard({
           service: 'prisma',
           name: 'Prisma Client',

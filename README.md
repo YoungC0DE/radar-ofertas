@@ -91,10 +91,11 @@ docker compose up -d --build
 |---------|--------|
 | `postgres` / `redis` | Infraestrutura |
 | `migrate` | Aplica migrations automaticamente |
-| `app` | Collector |
-| `worker` | Envio WhatsApp |
-| `worker-telegram` | Envio Telegram (encerra sozinho se `TELEGRAM_ENABLED=false`) |
-| `manager` | Painel em `http://localhost:3000/manager` |
+| `collector` | Coleta de ofertas (singleton; Playwright pooled) |
+| `scheduler` | Mensagens automáticas programadas (leve, sem browser) |
+| `worker` | Envio WhatsApp (`WORKER_ACCOUNT_ID` opcional; 1 réplica por sessão) |
+| `worker-telegram` | Envio Telegram (encerra com exit 0 se `TELEGRAM_ENABLED=false`) |
+| `manager` | Painel em `http://localhost:3000/manager` (stateless, `MANAGER_CAN_SPAWN_WORKERS=false`) |
 
 ```bash
 docker compose logs -f worker            # QR na primeira execução (se sessão não existir)
@@ -102,20 +103,19 @@ docker compose restart worker            # reiniciar envio WhatsApp
 docker compose logs -f worker-telegram   # envios no Telegram
 ```
 
-Não escale o `worker` além de uma réplica — a sessão do WhatsApp só admite um dono. O `worker-telegram` é stateless e pode ter várias.
+Não escale o `worker` além de uma réplica por número WhatsApp — a sessão Baileys só admite um dono. Para contas adicionais, use `docker-compose.accounts.example.yml` como base de `docker-compose.override.yml`.
 
-Sessões persistidas em `./data` (volume montado nos containers).
-
-O manager não está no docker-compose — rode separadamente com `npm run manager` se precisar do painel.
+Sessões persistidas em `./data` (volume montado nos containers), incluindo `data/accounts/{id}/` para multi-conta.
 
 ## Scripts
 
 | Comando | Descrição |
 |---------|-----------|
-| `npm run up` | Collector + manager (preflight automático) |
+| `npm run up` | Collector + scheduler + manager (preflight automático) |
 | `npm run check` | Valida ambiente (DB, Redis, sessões, canais) |
 | `npm run setup` | Preflight + guia de setup |
 | `npm run dev` | Processo collector (coleta + fila) |
+| `npm run scheduler` | Agendador de mensagens automáticas |
 | `npm run worker` | Processo worker (WhatsApp + envio) |
 | `npm run worker:telegram` | Processo worker (Telegram + envio) |
 | `npm run manager` | Painel web admin em `/manager` |

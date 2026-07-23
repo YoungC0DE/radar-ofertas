@@ -15,6 +15,10 @@ const DEFAULT_BRAND: BrandSettings = {
 const SETTING_KEY = 'brandSettings';
 let brandCache: BrandSettings | null = null;
 
+export function invalidateBrandCache(): void {
+  brandCache = null;
+}
+
 function parseDataUrl(dataUrl: string): string | null {
   const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/);
   if (!match) return null;
@@ -97,4 +101,6 @@ export async function saveBrandSettings(input: {
   });
 
   brandCache = settings;
+  const { notifyConfigCacheChange } = await import('../utils/config-cache-sync.js');
+  await notifyConfigCacheChange('brand-config');
 }
