@@ -1,0 +1,93 @@
+.accounts-section-head {
+  margin-bottom: 16px;
+}
+
+.accounts-section-head h2 {
+  margin-bottom: 4px;
+}
+
+.accounts-grid {
+  margin-top: 0;
+}
+
+.account-card {
+  transition: border-color 0.15s, opacity 0.15s;
+}
+
+.account-card-disabled {
+  opacity: 0.72;
+}
+
+.account-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.account-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.account-id code {
+  font-size: 0.78rem;
+}
+
+.accounts-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 32px 20px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.accounts-empty p {
+  margin: 0;
+}
+
+.accounts-empty p + p {
+  margin-top: 6px;
+}
+
+.accounts-add-form {
+  margin-top: 16px;
+}
+
+.accounts-form-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, 2fr) auto;
+  gap: 16px;
+  align-items: end;
+}
+
+.form-field label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.875rem;
+  margin-bottom: 6px;
+}
+
+.form-field-action {
+  padding-bottom: 1px;
+}
+
+.form-field-action .btn {
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .accounts-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-field-action .btn {
+    width: 100%;
+  }
+}

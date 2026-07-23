@@ -9,16 +9,21 @@ alwaysApply: false
 - Um canal = um processo = uma fila. Falha de um canal nunca derruba o outro.
 - `channels/types.ts` define o contrato `ChannelPublisher`; `channels/index.ts` registra os publishers.
 - `jobs/sender.ts` é genérico — recebe um publisher. Nunca colocar `if (channel === ...)` nele.
-- Publisher não tem regra de negócio: só conecta, valida e publica.
+- Publisher não tem regra de negócio: só conecta, valida e publica (`publish` para ofertas, `publishText` para texto livre).
 - Boot dos workers em `channels/worker-runner.ts` — entries (`worker*.ts`) só passam o publisher.
 - Canal desligado (`isEnabled() === false`): não enfileira e o worker encerra com exit 0.
 
 ## Estado de envio
 
-- Fonte da verdade por canal: `OfferDelivery` (`offers/repository.ts`).
+- Fonte da verdade por canal e conta: `OfferDelivery` (`offers/repository.ts`).
+- Unique: `(offer_id, channel, account_id)`.
 - `Offer.sentAt` é denormalizado (primeiro envio em qualquer canal) — só para dedup e visões globais.
 - Nunca decidir "já enviei?" por `Offer.sentAt` num caminho de canal.
 - Abrir a entrega antes de enfileirar (`dispatchOffer`).
+
+## Multi-conta (parcial)
+
+`dispatchOffer` itera contas habilitadas por plataforma. Worker ainda opera só na conta `default` — ver `.cursor/docs/accounts.md`.
 
 ## Adicionar canal
 

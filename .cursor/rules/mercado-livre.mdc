@@ -9,8 +9,10 @@ alwaysApply: false
 ## Estratégia híbrida
 
 - **Coleta:** `http-scraper.ts` primeiro; `browser-scraper.ts` só se `ML_USE_BROWSER_FALLBACK=true` e HTTP falhar.
+- **Proteção:** `circuit-breaker.ts` pausa tentativas após falhas repetidas.
 - **Afiliado:** `affiliate-link.ts` tenta HTTP com cookies → Playwright → fallback `matt_tool`.
-- **Sessão:** `session.ts` persiste em `ML_AUTH_PATH`. Login manual via `npm run ml:login`.
+- **Cupons:** `coupons.ts` + `coupon-parser.ts` — scraping da página de cupons do portal afiliado.
+- **Sessão:** `session.ts` persiste em `ML_AUTH_PATH`. Login manual via `npm run ml:login` ou painel.
 - **Parser:** `parser.ts` centraliza extração HTML/JSON — não duplicar lógica de parse.
 - **Categorias:** `category-url.ts` valida IDs e URLs (`ML_CATEGORIES`).
 
@@ -19,11 +21,14 @@ alwaysApply: false
 - Não usar API oficial (`api.mercadolibre.com`) para coleta ou links.
 - Não colocar regra de score/filtro em `mercado-livre/` — isso fica em `offers/` e `config/score-config.ts`.
 - Não abrir Playwright em todo ciclo de coleta — apenas fallback.
+- Não formatar mensagens de cupom aqui — isso fica em `offers/coupon-message.ts`.
 
 ## Novos arquivos
 
-Preferir adicionar ao domínio existente (`parser.ts`, `affiliate-link.ts`) em vez de criar camadas novas.
+Preferir adicionar ao domínio existente (`parser.ts`, `affiliate-link.ts`, `coupon-parser.ts`) em vez de criar camadas novas.
 
 ## ENV
 
 Variáveis em `config/env.ts`: `ML_AUTH_PATH`, `ML_CATEGORIES`, `ML_SEARCH_LIMIT`, `ML_USE_BROWSER_FALLBACK`, `ML_BROWSER_HEADLESS`, `ML_HTTP_TIMEOUT_MS`, `ML_SCRAPER_USER_AGENT`, `AFFILIATE_CONFIG`.
+
+URL de cupons em runtime: `coupons-config-store.ts` (settings `couponsUrl`).

@@ -49,6 +49,37 @@ async function checkDatabase(): Promise<PreflightItem> {
   }
 }
 
+async function checkOfferDeliverySchema(): Promise<PreflightItem> {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ column_name: string }>>`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'offer_deliveries'
+        AND column_name = 'account_id'
+    `;
+
+    if (rows.length === 0) {
+      return {
+        ok: false,
+        label: 'Schema do banco',
+        detail: 'Migração pendente: coluna account_id ausente em offer_deliveries',
+        fix: 'Pare o bot (Ctrl+C), rode npm run migrate:deploy e depois npm run prisma:generate',
+      };
+    }
+
+    return { ok: true, label: 'Schema do banco', detail: 'offer_deliveries com suporte a multi-conta' };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      label: 'Schema do banco',
+      detail: message,
+      fix: 'Confira DATABASE_URL e rode: npm run migrate:deploy',
+    };
+  }
+}
+
 async function checkRedis(): Promise<PreflightItem> {
   if (!isRedisEnabled()) {
     return {
@@ -162,6 +193,7 @@ async function runChecks(profile: PreflightProfile): Promise<PreflightItem[]> {
   const items: PreflightItem[] = [];
 
   items.push(await checkDatabase());
+  items.push(await checkOfferDeliverySchema());
 
   if (profile === 'all' || profile === 'collector' || profile === 'worker' || profile === 'worker-telegram') {
     items.push(await checkRedis());

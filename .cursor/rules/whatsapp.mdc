@@ -7,10 +7,12 @@ alwaysApply: false
 # WhatsApp
 
 - Conexão e envio em `whatsapp/index.ts` — zero regra de negócio.
+- Publisher em `channels/whatsapp-publisher.ts` — implementa `ChannelPublisher`.
 - Formatação de mensagem em `offers/message-template.ts` (template editável via manager).
 - Cache de canal em `whatsapp/channel-cache.ts` (nome, invite link).
-- Sessão em `WHATSAPP_AUTH_PATH`; canal em `WHATSAPP_CHANNEL_ID`.
-- Apenas `worker.ts` instancia conexão Baileys.
+- Sessão em `WHATSAPP_AUTH_PATH` (ou path da conta em `data/accounts/{id}/whatsapp/`); canal em `WHATSAPP_CHANNEL_ID`.
+- Apenas `worker.ts` instancia conexão Baileys para envio.
+- **Lock de dono:** `owner.lock` em `WHATSAPP_AUTH_PATH` — apenas um processo por sessão. Dois sockets causam `connectionReplaced`.
 
 ## Setup
 
@@ -18,3 +20,5 @@ alwaysApply: false
 npm run wa:login    # autenticar (QR)
 npm run wa:channel  # obter WHATSAPP_CHANNEL_ID
 ```
+
+Ou via painel: Settings → Conectar WhatsApp. O painel salva credenciais e desconecta — o worker mantém a conexão ativa.

@@ -8,8 +8,11 @@ alwaysApply: false
 
 - Tipagem forte; evitar `any`.
 - Tipos de ofertas em `offers/types.ts` (`RawOffer`, `OfferRecord`).
+- Tipos de contas em `accounts/types.ts` (`Account`, `AccountPlatform`).
 - Config types em `config/score-config.ts`, `config/brand-config.ts`.
 - `async/await` sempre.
 - `import type` para tipos (`verbatimModuleSyntax`).
 - ENV validado com Zod em `config/env.ts`.
 - Preferir funções exportadas a classes quando não há estado.
+- Checagem de tipos: `npx tsc -p tsconfig.check.json --noEmit` (inclui `src/` e `manager/`).
+- Testes: `node:test` + `assert` via `npm test` (preload em `src/test/preload.ts`).

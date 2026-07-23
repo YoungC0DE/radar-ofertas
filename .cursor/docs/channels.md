@@ -10,13 +10,14 @@ src/channels/
 ├── index.ts              → registro dos publishers + canais ligados
 ├── whatsapp-publisher.ts → sessão Baileys, lock de dono
 ├── telegram-publisher.ts → Bot API stateless
+├── publisher-factory.ts  → getPublisher(channel)
 └── worker-runner.ts      → boot compartilhado dos workers
 
 src/worker.ts           → processo do WhatsApp
 src/worker-telegram.ts  → processo do Telegram
 ```
 
-O `jobs/sender.ts` é **genérico**: recebe um `ChannelPublisher` e só sabe da fila daquele canal. O que muda entre canais é o publisher.
+O `jobs/sender.ts` é **genérico**: recebe um `ChannelPublisher` e processa ofertas, auto-messages e texto livre. O que muda entre canais é o publisher.
 
 ## Fluxo
 
@@ -32,13 +33,15 @@ flowchart TD
     G --> I[(OfferDelivery telegram)]
 ```
 
+`dispatchOffer` itera canais ligados × contas habilitadas por plataforma. Cada par `(canal, accountId)` gera uma `OfferDelivery` e um job na fila.
+
 ## Estado por canal — `OfferDelivery`
 
-Uma linha por `(oferta, canal)` — é a **fonte da verdade** de quem recebeu o quê.
+Uma linha por `(oferta, canal, conta)` — é a **fonte da verdade** de quem recebeu o quê.
 
 | Estado | Significado |
 |--------|-------------|
-| linha ausente | O canal não estava ligado quando a oferta foi coletada |
+| linha ausente | O canal/conta não estava ligado quando a oferta foi coletada |
 | `sentAt` nulo | Enfileirada, ainda não publicada |
 | `sentAt` nulo + `error` | Última tentativa falhou (o BullMQ ainda retenta) |
 | `sentAt` preenchido | Publicada, com `messageId` do canal |
@@ -47,12 +50,22 @@ Uma linha por `(oferta, canal)` — é a **fonte da verdade** de quem recebeu o 
 
 ## Filas
 
-| Canal | Fila | Worker |
-|-------|------|--------|
+| Canal | Fila (default) | Worker |
+|-------|----------------|--------|
 | WhatsApp | `offer-sender` | `src/worker.ts` |
 | Telegram | `offer-sender-telegram` | `src/worker-telegram.ts` |
 
-O nome `offer-sender` é histórico — mantido para não órfãos os jobs em voo. O job id é `send-offer-{canal}-{offerId}`: determinístico, garante um envio por oferta por canal.
+O nome `offer-sender` é histórico — mantido para não órfãos os jobs em voo. Job id: `send-offer-{canal}-{offerId}` (ou com `{accountId}` para contas não-default).
+
+## Tipos de publicação
+
+| Tipo | Origem | Payload do job |
+|------|--------|----------------|
+| Oferta | `dispatchOffer` | `{ offerId }` |
+| Auto-message | `auto-messages/service` | `{ autoMessageId }` |
+| Texto livre | `coupon-service`, envio manual | `{ text }` |
+
+Todos passam pelo mesmo `jobs/sender.ts` e pelo `ChannelPublisher.publish()` ou `publishText()`.
 
 ## Adicionar um canal novo
 
@@ -64,13 +77,17 @@ O nome `offer-sender` é histórico — mantido para não órfãos os jobs em vo
 
 O fan-out (`dispatchOffer`), o painel e as stats passam a incluir o canal sozinhos — todos derivam de `getEnabledChannels()`.
 
+## Multi-conta (parcial)
+
+Schema e dispatch prontos (`account_id` em `offer_deliveries`). Worker e fila ainda operam só na conta `default`. Ver [Contas](./accounts.md).
+
 ## Princípios
 
 - Um processo por canal — falha isolada.
 - O publisher é a única parte que conhece o protocolo do canal.
 - `isEnabled()` decide tudo: canal desligado não enfileira e o worker encerra no boot.
 - Entrega aberta **antes** de enfileirar: nada some sem rastro.
-- O template da mensagem é compartilhado entre os canais.
+- O template da mensagem é compartilhado entre os canais (ofertas e cupons têm templates próprios).
 
 ## Documentação relacionada
 
@@ -78,3 +95,4 @@ O fan-out (`dispatchOffer`), o painel e as stats passam a incluir o canal sozinh
 - [Telegram](./telegram.md)
 - [Filas](./queues.md)
 - [Database](./database.md)
+- [Contas](./accounts.md)

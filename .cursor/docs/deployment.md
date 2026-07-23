@@ -8,7 +8,8 @@
 | redis | redis:7-alpine | 6379 | Filas BullMQ |
 | migrate | build local | — | Aplica migrations (one-shot) |
 | app | build local (bookworm + Chromium) | — | Collector (scraping + enfileira) |
-| worker | build local | — | WhatsApp + envio |
+| worker | build local | — | WhatsApp — envio |
+| worker-telegram | build local | — | Telegram — envio |
 | manager | build local | `MANAGER_PORT` (3000) | Painel admin |
 
 ## Primeiro deploy
@@ -20,11 +21,11 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Migrations rodam automaticamente no serviço `migrate` antes de `app`, `worker` e `manager` subirem.
+Migrations rodam automaticamente no serviço `migrate` antes de `app`, `worker`, `worker-telegram` e `manager` subirem.
 
 Painel: `http://localhost:3000/manager`
 
-> No Docker, o **worker** já sobe como serviço separado. Não inicie outro worker pelo painel — use `docker compose restart worker` se precisar reiniciar.
+> No Docker, os **workers** já sobem como serviços separados. Não inicie outro worker pelo painel — use `docker compose restart worker` ou `docker compose restart worker-telegram` se precisar reiniciar.
 
 ## Autenticação WhatsApp
 
@@ -58,17 +59,29 @@ npm run ml:login
 
 Sessão salva em `./data/ml_auth/` (montado no container via volume `./data`). Repetir quando links de afiliado falharem (cookie expirado).
 
+## Telegram
+
+Configure no `.env`:
+
+```bash
+TELEGRAM_ENABLED=true
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=@meucanal
+```
+
+O serviço `worker-telegram` encerra com exit 0 se `TELEGRAM_ENABLED` não estiver ligado.
+
 ## Variáveis obrigatórias
 
 | Variável | Descrição |
 |----------|-----------|
 | `DATABASE_URL` | Conexão PostgreSQL |
 | `REDIS_URL` | Conexão Redis |
-| `WHATSAPP_CHANNEL_ID` | ID do canal WhatsApp |
+| `WHATSAPP_CHANNEL_ID` | ID do canal WhatsApp (se WhatsApp ativo) |
 | `ML_CATEGORIES` | Categorias ou URLs de listagem |
 | `AFFILIATE_CONFIG` | Tag de afiliado (`{"tag":"sua-tag"}`) |
 
-Opcionais: `APP_TIMEZONE`, `ML_AUTH_PATH`, `ML_USE_BROWSER_FALLBACK`, `ML_BROWSER_HEADLESS`, `ML_SEARCH_LIMIT`, `ML_HTTP_TIMEOUT_MS`, `QUEUE_CONFIG`, `MANAGER_PORT`, `MANAGER_TOKEN`, `REDIS_ENABLED`.
+Opcionais: `APP_TIMEZONE`, `ML_AUTH_PATH`, `ML_USE_BROWSER_FALLBACK`, `ML_BROWSER_HEADLESS`, `ML_SEARCH_LIMIT`, `ML_HTTP_TIMEOUT_MS`, `QUEUE_CONFIG`, `MANAGER_PORT`, `MANAGER_TOKEN`, `REDIS_ENABLED`, `TELEGRAM_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
 
 ## Docker + Playwright
 
@@ -87,13 +100,14 @@ docker compose up -d postgres redis
 # Setup
 npm run check
 
-# Collector + manager (worker via painel)
+# Collector + manager (workers via painel)
 npm run up
 
 # Ou separado:
-npm run dev       # collector
-npm run worker    # sender
-npm run manager   # painel
+npm run dev              # collector
+npm run worker           # sender WhatsApp
+npm run worker:telegram  # sender Telegram
+npm run manager          # painel
 ```
 
 ## Scripts npm
@@ -105,14 +119,24 @@ npm run manager   # painel
 | `setup` | Preflight + guia de setup |
 | `dev` | Collector + fila de coleta |
 | `worker` | Worker de envio WhatsApp |
+| `worker:telegram` | Worker de envio Telegram |
 | `manager` | Painel web admin |
 | `ml:login` | Login afiliado ML (salva sessão) |
 | `wa:login` | Login WhatsApp (QR) |
 | `wa:channel` | Obter ID do canal |
 | `migrate` | Prisma migrate dev |
-| `test` | Testes unitários |
-| `build` | Compila TypeScript |
+| `test` | Testes unitários (`node:test`) |
+| `build` | Compila TypeScript (`src/` apenas) |
+| `e2e:test` | Teste E2E manual |
+
+## CI
+
+`.github/workflows/ci.yml` — em push/PR para `main`:
+
+1. `npm ci`
+2. `npx tsc -p tsconfig.check.json --noEmit` (inclui `src/` e `manager/`)
+3. `npm test`
 
 ## Preflight
 
-Todos os processos principais rodam preflight antes de iniciar (`predev`, `preworker`, `premanager`). Use `npm run check` para validar manualmente.
+Todos os processos principais rodam preflight antes de iniciar (`predev`, `preworker`, `preworker:telegram`, `premanager`). Use `npm run check` para validar manualmente.

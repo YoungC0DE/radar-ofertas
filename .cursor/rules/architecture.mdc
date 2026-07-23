@@ -11,16 +11,19 @@ Estrutura simples organizada por domínio. Evitar camadas extras e arquivos pequ
 src/
 ├── app.ts              → entry: collector
 ├── worker.ts           → entry: envio WhatsApp
+├── worker-telegram.ts  → entry: envio Telegram
 ├── ml-login.ts         → entry: login afiliado ML
 ├── config/             → ENV (Zod) + stores de runtime (settings DB)
-│   ├── score-config.ts, brand-config.ts, queue-config-store.ts, ml-sources-config.ts
-├── accounts/           → contas por plataforma (multi-conta)
-├── channels/           → contrato de canal + publishers
-├── whatsapp/           → Baileys (conexão + envio)
+│   ├── score-config.ts, brand-config.ts, queue-config-store.ts
+│   ├── ml-sources-config.ts, coupons-config-store.ts
+├── accounts/           → contas por plataforma (JSON em settings; multi-conta parcial)
+├── channels/           → contrato de canal + publishers + worker-runner
+├── whatsapp/           → Baileys (conexão + envio + lock de dono)
 ├── telegram/           → Bot API
-├── mercado-livre/      → scraping híbrido + sessão afiliado
-├── offers/             → tipos, persistência, regras de negócio, template
-├── jobs/               → workers BullMQ (collector, sender)
+├── mercado-livre/      → scraping híbrido + sessão afiliado + cupons
+├── offers/             → tipos, persistência, regras de negócio, templates
+├── auto-messages/      → mensagens automáticas agendadas
+├── jobs/               → workers BullMQ (collector, sender genérico)
 ├── queue/              → filas Redis/BullMQ + agendamento de envio
 ├── database/           → Prisma client
 ├── scripts/            → preflight, up (orquestração local)
@@ -29,21 +32,32 @@ src/
 manager/                → painel web (MVC server-rendered)
 ├── server.ts           → entry: npm run manager
 ├── http/               → router declarativo + helpers HTTP
+│   └── routes/         → rotas por domínio (~54 rotas)
 ├── routes/             → exporta handleManagerRequest
 ├── controllers/        → handlers de request
 ├── models/             → dados para views (reutiliza src/)
-└── views/              → HTML em TS (components/ + settings/)
+├── views/              → HTML em TS (components/ + settings/sections/)
+└── public/             → CSS/JS estáticos
 ```
 
 ## Regras
 
 - Um domínio = uma pasta com responsabilidade clara.
 - Regras de negócio de ofertas ficam em `offers/`, nunca em `whatsapp/`, `mercado-livre/` ou `manager/`.
+- Auto-messages: regras em `auto-messages/`, não em `jobs/` ou `manager/`.
 - Ofertas: acesso ao banco via `offers/repository.ts`.
+- Contas: persistência em `accounts/repository.ts` (JSON em `settings.accounts`).
 - Configuração runtime: `config/*-config*.ts` e `queue-config-store.ts` leem/escrevem tabela `settings` (fallback em ENV).
-- `npm run up` sobe collector + manager; worker iniciado pelo painel (evita conflito de sessão WhatsApp).
+- `npm run up` sobe collector + manager; workers iniciados pelo painel (evita conflito de sessão WhatsApp).
 - Processos pesados passam por `queue/` + `jobs/`.
+- Um canal = um processo = uma fila (`channels/` + `worker*.ts`).
 - `manager/` apenas orquestra UI — reutiliza `src/` para lógica de negócio.
 - Novas features: adicionar ao domínio correto, não criar camada nova.
 - Mercado Livre: scraping híbrido (HTTP primeiro, Playwright fallback). Proibido depender da API oficial.
 - Sessão de afiliado persistida em `ML_AUTH_PATH` — mesmo padrão de `WHATSAPP_AUTH_PATH`.
+- Tipos checados via `npx tsc -p tsconfig.check.json` (inclui `src/` e `manager/`).
+- CI: `.github/workflows/ci.yml` — `tsc` + `npm test`.
+
+## Multi-conta (parcial)
+
+`dispatchOffer` enfileira por `(canal, accountId)`, mas `enqueueOfferSend` e `jobs/sender.ts` ainda operam na conta `default`. Ver `.cursor/docs/accounts.md`.

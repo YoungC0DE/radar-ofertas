@@ -119,6 +119,28 @@ buildAffiliateLink(permalink: string, mercadoLivreId?: string): Promise<string>
 - Sessão expira — requer novo login periodicamente.
 - Scraping sujeito a anti-bot (403, captcha).
 
+## Cupons
+
+Scraping da página de cupons do portal de afiliados ML.
+
+```
+coupons.ts         → fetch HTML/JSON da página de cupons
+coupon-parser.ts   → extrai cupons (código, loja, status, link)
+coupons-config-store.ts → URL da página (settings.couponsUrl)
+offers/coupon-message.ts → formata mensagem para envio
+offers/coupon-service.ts → envia cupom pelos canais (texto livre)
+```
+
+Fluxo no manager (`/manager/coupons`):
+
+1. Refresh busca cupons via `coupons.ts` (HTTP com cookies da sessão; Playwright se necessário).
+2. Usuário envia cupom individual ou salva link de loja.
+3. `coupon-service.ts` formata com `couponMessageTemplate` e enfileira `{ text }` na fila do canal.
+
+## Circuit breaker
+
+`circuit-breaker.ts` protege contra falhas repetidas de scraping HTTP — após N falhas consecutivas, pausa tentativas por um período configurável antes de retentar.
+
 ## Arquivos por responsabilidade
 
 | Arquivo | Responsabilidade |
@@ -126,11 +148,14 @@ buildAffiliateLink(permalink: string, mercadoLivreId?: string): Promise<string>
 | `parser.ts` | Extrair produtos de HTML (JSON embutido + Cheerio) |
 | `http-scraper.ts` | Fetch de listagens com paginação e retry |
 | `browser-scraper.ts` | Fallback Playwright para coleta |
+| `circuit-breaker.ts` | Proteção contra falhas repetidas de HTTP |
 | `category-url.ts` | Validação de URLs, paginação, tipos de listagem |
 | `session.ts` | Load/save cookies, validação e refresh de sessão |
 | `affiliate-link.ts` | Geração de links (cache → HTTP → browser → fallback) |
 | `auth.ts` | Fluxo de login manual |
+| `coupons.ts` | Scraping da página de cupons |
+| `coupon-parser.ts` | Parse HTML/JSON de cupons |
 
 ## Para o próximo agente
 
-Prioridades no board: validar endpoint `createLink` real via DevTools, ajustar seletores do link-builder.
+Prioridades no board: validar endpoint `createLink` real via DevTools, ajustar seletores do link-builder, completar multi-conta no sender.

@@ -1,13 +1,15 @@
 ---
 description: Regras de banco de dados com Prisma
-globs: prisma/**,src/database/**,src/offers/repository.ts,src/config/*-config*.ts,src/config/queue-config-store.ts
+globs: prisma/**,src/database/**,src/offers/repository.ts,src/auto-messages/**,src/accounts/**,src/config/*-config*.ts,src/config/queue-config-store.ts
 alwaysApply: false
 ---
 
 # Database
 
 - Prisma ORM; schema em `prisma/schema.prisma`.
-- Ofertas: acesso via `offers/repository.ts` — nunca chamar `prisma` direto de jobs ou scraping.
+- Ofertas e entregas: acesso via `offers/repository.ts` — nunca chamar `prisma` direto de jobs ou scraping.
+- Auto-messages: acesso via `auto-messages/repository.ts`.
+- Contas: JSON em `settings.accounts` via `accounts/repository.ts` (sem model Prisma).
 - Settings (key-value): tabela `settings` para config runtime editável pelo manager.
 - `mercado_livre_id` unique para duplicidade.
 - Migrations versionadas em `prisma/migrations/`.
@@ -16,12 +18,21 @@ alwaysApply: false
 
 | Tabela | Uso |
 |--------|-----|
-| `offers` | Ofertas coletadas e enviadas |
-| `settings` | Config runtime (score, brand, template, filas, canal WA) |
+| `offers` | Ofertas coletadas |
+| `offer_deliveries` | Entrega por `(oferta, canal, conta)` — fonte da verdade |
+| `auto_messages` | Mensagens automáticas agendadas |
+| `settings` | Config runtime (score, brand, template, filas, contas, etc.) |
+
+## `offer_deliveries`
+
+- Unique: `(offer_id, channel, account_id)`
+- `account_id` default `'default'`
+- `sent_at` nulo = pendente; preenchido = publicada
+- Nunca decidir "já enviei?" por `Offer.sentAt` num caminho de canal
 
 ## Chaves `settings` conhecidas
 
-`scoreConfig`, `brandSettings`, `messageTemplate`, `messageTemplatePlaceholders`, `whatsappChannelCache`, `senderDelayMinutes`, `collectorIntervalMinutes`, `operatingHoursStart`, `operatingHoursEnd`, `searchLimit`, `affiliateLinkDelayMs`, `affiliateLinkBacklogDelayMinutes`, `affiliateLinkBacklogThreshold`, `mlCustomSources`, `mlEnvSourceFlags`
+`scoreConfig`, `brandSettings`, `messageTemplate`, `messageTemplatePlaceholders`, `couponMessageTemplate`, `whatsappChannelCache`, `senderDelayMinutes`, `collectorIntervalMinutes`, `operatingHoursStart`, `operatingHoursEnd`, `searchLimit`, `affiliateLinkDelayMs`, `affiliateLinkBacklogDelayMinutes`, `affiliateLinkBacklogThreshold`, `mlCustomSources`, `mlEnvSourceFlags`, `couponsUrl`, `accounts`
 
 ```bash
 npm run migrate        # dev
