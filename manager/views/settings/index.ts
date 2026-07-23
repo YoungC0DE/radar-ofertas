@@ -20,7 +20,7 @@ export function renderSettingsPage(data: SettingsData): string {
   const statusBadge = operatingStatusBadge(data.withinOperatingHours);
   const alert = renderSettingsAlert(data.saved, data.error);
 
-  const body = `
+  const main = `
     ${alert}
     <section>
       <h2>Configuração</h2>
@@ -58,8 +58,9 @@ export function renderSettingsPage(data: SettingsData): string {
 
     ${renderConnectionsSection(data)}
 
-    ${renderOperationsSection(data)}
+    ${renderOperationsSection(data)}`;
 
+  const afterMain = `
     ${renderSettingsModals(data)}
 
     ${pageData('settings-page-data', {
@@ -69,5 +70,5 @@ export function renderSettingsPage(data: SettingsData): string {
     })}
     ${pageScripts('shared/modal.js', 'shared/polling.js', 'settings.js')}`;
 
-  return renderLayout('Configuração', body, 'settings', pageStyles('settings.css'));
+  return renderLayout('Configuração', main, 'settings', pageStyles('settings.css'), afterMain);
 }

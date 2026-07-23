@@ -3,6 +3,8 @@ import { hostname } from 'node:os';
 import path from 'node:path';
 import makeWASocket, {
   DisconnectReason,
+  areJidsSameUser,
+  isJidGroup,
   isJidNewsletter,
   type WASocket,
   type WAMessage,
@@ -269,6 +271,91 @@ function resolveNewsletterName(name: unknown): string | undefined {
   return undefined;
 }
 
+function collectJids(...ids: Array<string | null | undefined>): string[] {
+  return ids.filter((id): id is string => !!id?.trim());
+}
+
+function isSameWhatsAppUser(left: string, right: string): boolean {
+  return areJidsSameUser(left, right);
+}
+
+async function isCurrentUserInGroup(
+  sock: WASocket,
+  meta: Awaited<ReturnType<WASocket['groupMetadata']>>,
+): Promise<boolean> {
+  const me = sock.user;
+  if (!me) return false;
+
+  const mine = collectJids(me.id, me.lid, me.phoneNumber);
+  return (meta.participants ?? []).some((participant) => {
+    const theirs = collectJids(participant.id, participant.lid, participant.phoneNumber);
+    return theirs.some((participantId) =>
+      mine.some((myId) => isSameWhatsAppUser(participantId, myId)),
+    );
+  });
+}
+
+export async function validateWhatsAppGroup(
+  sock: WASocket,
+  groupJid: string,
+  inviteLink?: string | null,
+): Promise<{ valid: boolean; name?: string; reason?: string }> {
+  if (!isJidGroup(groupJid)) {
+    return { valid: false, reason: 'ID do grupo deve terminar com @g.us' };
+  }
+
+  try {
+    const participating = await sock.groupFetchAllParticipating();
+    const fromList = participating[groupJid];
+    if (fromList) {
+      return { valid: true, name: fromList.subject };
+    }
+
+    let meta = await sock.groupMetadata(groupJid);
+    if (!meta?.id) {
+      return { valid: false, reason: 'Grupo não encontrado' };
+    }
+
+    if (!(await isCurrentUserInGroup(sock, meta)) && inviteLink?.trim()) {
+      const { joinWhatsAppGroupFromInvite } = await import('./invite.js');
+      await joinWhatsAppGroupFromInvite(sock, inviteLink);
+      meta = await sock.groupMetadata(groupJid);
+    }
+
+    if (await isCurrentUserInGroup(sock, meta)) {
+      return { valid: true, name: meta.subject };
+    }
+
+    return {
+      valid: false,
+      reason:
+        'O número conectado não participa deste grupo — entre pelo link no celular ou use Pausar no destino',
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { valid: false, reason: message };
+  }
+}
+
+export async function validateWhatsAppDestination(
+  sock: WASocket,
+  destinationJid: string,
+  options?: { inviteLink?: string | null },
+): Promise<{ valid: boolean; name?: string; reason?: string }> {
+  if (isJidNewsletter(destinationJid)) {
+    return validateWhatsAppChannel(sock, destinationJid);
+  }
+
+  if (isJidGroup(destinationJid)) {
+    return validateWhatsAppGroup(sock, destinationJid, options?.inviteLink);
+  }
+
+  return {
+    valid: false,
+    reason: 'Destino deve ser canal (@newsletter) ou grupo (@g.us)',
+  };
+}
+
 export async function validateWhatsAppChannel(
   sock: WASocket,
   channelId: string,
@@ -505,13 +592,9 @@ export async function sendOffer(
   imageUrl: string | null,
   caption: string,
 ): Promise<WAMessage> {
-  if (!isJidNewsletter(channelId)) {
-    throw new Error('Destino deve ser um canal WhatsApp (@newsletter), não chat pessoal');
-  }
-
-  const validation = await validateWhatsAppChannel(sock, channelId);
+  const validation = await validateWhatsAppDestination(sock, channelId);
   if (!validation.valid) {
-    throw new Error(`Canal WhatsApp inválido: ${validation.reason}`);
+    throw new Error(`Destino WhatsApp inválido: ${validation.reason}`);
   }
 
   const channelName = validation.name;
@@ -527,7 +610,7 @@ export async function sendOffer(
         if (result?.key?.id) {
           logger.info(
             { channelId, channelName, messageId: result.key.id, mode: 'image' },
-            'Offer sent to WhatsApp channel',
+            'Offer sent to WhatsApp destination',
           );
           return result;
         }
@@ -548,7 +631,7 @@ export async function sendOffer(
 
   logger.info(
     { channelId, channelName, messageId: result.key.id, mode: 'text' },
-    'Offer sent to WhatsApp channel',
+    'Offer sent to WhatsApp destination',
   );
   return result;
 }

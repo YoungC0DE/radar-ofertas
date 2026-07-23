@@ -1,6 +1,7 @@
 import { QueueEvents } from 'bullmq';
 import { getEnabledAccountIdsForChannel } from '../accounts/channel-accounts.js';
 import { findAccountById } from '../accounts/repository.js';
+import { getEnabledWhatsAppDestinations } from '../accounts/whatsapp-destinations.js';
 import { DEFAULT_ACCOUNT_ID } from '../accounts/types.js';
 import { CHANNEL_LABELS, getEnabledChannels } from '../channels/index.js';
 import type { Channel } from '../channels/types.js';
@@ -69,7 +70,11 @@ async function sendTextMessageNow(channel: Channel, text: string): Promise<void>
       const account = await findAccountById(accountId, 'whatsapp');
       if (account?.platform === 'whatsapp') {
         const sock = await requireWhatsAppSocket();
-        await sendOffer(sock, account.config.channelId, null, text);
+        const destinations = getEnabledWhatsAppDestinations(account.config);
+        for (const destination of destinations) {
+          if (!destination.jid) continue;
+          await sendOffer(sock, destination.jid, null, text);
+        }
         continue;
       }
     }

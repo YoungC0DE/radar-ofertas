@@ -27,3 +27,9 @@ export {
   saveAccounts,
 } from './repository.js';
 export { getEnabledAccountIdsForChannel } from './channel-accounts.js';
+export {
+  createWhatsAppDestinationId,
+  getEnabledWhatsAppDestinations,
+  listWhatsAppDestinations,
+  syncLegacyWhatsAppChannelFields,
+} from './whatsapp-destinations.js';

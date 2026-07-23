@@ -24,6 +24,7 @@
     "prisma": "prisma generate",
     "ml:login": "tsx --env-file=.env src/ml-login.ts",
     "wa:channel": "tsx --env-file=.env src/wa-channel.ts",
+    "wa:destination": "tsx --env-file=.env src/wa-destination.ts",
     "wa:login": "tsx --env-file=.env src/wa-login.ts",
     "premanager": "tsx --env-file=.env src/scripts/preflight.ts --profile=manager",
     "manager": "tsx watch --env-file=.env manager/server.ts",

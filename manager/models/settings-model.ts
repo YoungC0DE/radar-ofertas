@@ -50,6 +50,11 @@ import {
   type WorkerState,
   type AccountWorkerState,
 } from './process-model.js';
+import {
+  ensureDefaultWhatsAppDestinationFromEnv,
+  loadWhatsAppDestinationViews,
+  type WhatsAppDestinationView,
+} from './whatsapp-destinations-model.js';
 
 export type SettingsSaveType =
   | 'channel'
@@ -75,6 +80,7 @@ export interface SettingsData {
   channelId: string;
   channelName: string | null;
   channelInviteLink: string;
+  whatsappDestinations: WhatsAppDestinationView[];
   brandName: string;
   brandSubtitle: string;
   brandLogoHref: string | null;
@@ -104,6 +110,7 @@ export async function loadSettingsData(
   error: string | null = null,
 ): Promise<SettingsData> {
   await Promise.all([hydrateQueueConfigCache(), hydrateBrandCache(), hydrateCouponsConfigCache()]);
+  await ensureDefaultWhatsAppDestinationFromEnv();
   const scoreConfig = await getRuntimeScoreConfigAsync();
   const senderDelayMinutes = await getSenderDelayMinutesFromDb();
   const [mlSession, waSession, tgSession] = await Promise.all([
@@ -116,13 +123,17 @@ export async function loadSettingsData(
     end: getOperatingHoursEnd(),
   };
 
-  const channelId = env.WHATSAPP_CHANNEL_ID;
-  let channelName: string | null = null;
-  let channelInviteLink = '';
+  const whatsappDestinations = await loadWhatsAppDestinationViews();
+  const primaryDestination = whatsappDestinations.find((destination) => destination.enabled);
+  const channelId = primaryDestination?.jid ?? env.WHATSAPP_CHANNEL_ID;
+  let channelName: string | null = primaryDestination?.label ?? null;
+  let channelInviteLink = primaryDestination?.inviteLink ?? '';
 
   if (channelId && !isPlaceholderChannelId(channelId)) {
-    channelName = await resolveWhatsAppChannelName(channelId);
-    channelInviteLink = (await resolveWhatsAppChannelInviteLink(channelId)) ?? '';
+    channelName ??= await resolveWhatsAppChannelName(channelId);
+    if (!channelInviteLink) {
+      channelInviteLink = (await resolveWhatsAppChannelInviteLink(channelId)) ?? '';
+    }
   }
 
   const brand = getBrandSettings();
@@ -146,6 +157,7 @@ export async function loadSettingsData(
     channelId,
     channelName,
     channelInviteLink,
+    whatsappDestinations,
     brandName: brand.name,
     brandSubtitle: brand.subtitle,
     brandLogoHref: getBrandLogoHref(brand),

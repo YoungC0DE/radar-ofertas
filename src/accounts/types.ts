@@ -6,11 +6,23 @@ export type AccountPlatform = (typeof ACCOUNT_PLATFORMS)[number];
 /** ID da conta padrão — espelha a configuração única do .env até multi-conta estar ativo. */
 export const DEFAULT_ACCOUNT_ID = 'default';
 
+export type WhatsAppDestinationKind = 'newsletter' | 'group';
+
+export interface WhatsAppDestination {
+  id: string;
+  jid: string;
+  kind: WhatsAppDestinationKind;
+  label?: string | null;
+  inviteLink?: string | null;
+  enabled: boolean;
+}
+
 export interface WhatsAppAccountConfig {
   channelId: string;
   authPath: string;
   channelName?: string | null;
   inviteLink?: string | null;
+  destinations?: WhatsAppDestination[];
 }
 
 export interface TelegramAccountConfig {

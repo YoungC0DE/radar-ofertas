@@ -1,4 +1,8 @@
 import type { Account, WhatsAppAccount, TelegramAccount } from '../accounts/types.js';
+import {
+  getEnabledWhatsAppDestinations,
+  listWhatsAppDestinations,
+} from '../accounts/whatsapp-destinations.js';
 import { resolveAccountAuthPath } from '../accounts/paths.js';
 import type { ChannelPublisher } from './types.js';
 import {
@@ -8,15 +12,30 @@ import {
   requireWhatsAppSocket,
   sendOffer,
   setWhatsAppAuthPath,
-  validateWhatsAppChannel,
+  validateWhatsAppDestination,
   WhatsAppOwnedElsewhereError,
 } from '../whatsapp/index.js';
+import { resolveWhatsAppInvite } from '../whatsapp/invite.js';
 import {
   getBotIdentity,
   sendOffer as sendTelegramOffer,
   validateTelegramChat,
 } from '../telegram/index.js';
 import type { OfferRecord } from '../offers/types.js';
+import { logger } from '../utils/logger.js';
+
+async function resolveDestinationJid(
+  sock: Awaited<ReturnType<typeof connectWhatsApp>>,
+  destination: ReturnType<typeof listWhatsAppDestinations>[number],
+): Promise<string> {
+  if (destination.jid.trim()) return destination.jid.trim();
+  if (!destination.inviteLink?.trim()) {
+    throw new Error(`Destino "${destination.label ?? destination.id}" sem JID ou link`);
+  }
+
+  const resolved = await resolveWhatsAppInvite(sock, destination.inviteLink);
+  return resolved.jid;
+}
 
 export function createWhatsAppPublisher(account: WhatsAppAccount): ChannelPublisher {
   const { id, config } = account;
@@ -30,26 +49,48 @@ export function createWhatsAppPublisher(account: WhatsAppAccount): ChannelPublis
     async verify() {
       setWhatsAppAuthPath(resolveAccountAuthPath(id, 'whatsapp'));
 
-      if (isPlaceholderChannelId(config.channelId)) {
+      const destinations = getEnabledWhatsAppDestinations(config);
+      if (destinations.length === 0) {
         return {
           ok: false,
           detail:
-            'WHATSAPP_CHANNEL_ID é placeholder — rode npm run wa:channel com o link do seu canal',
+            'Nenhum destino WhatsApp configurado — adicione um canal ou grupo em Configuração',
         };
       }
 
       try {
         const sock = await connectWhatsApp();
-        const channel = await validateWhatsAppChannel(sock, config.channelId);
+        const failures: string[] = [];
+        let validCount = 0;
 
-        if (!channel.valid) {
-          return {
-            ok: false,
-            detail: `Canal inválido (${channel.reason}) — rode npm run wa:channel para obter o JID correto`,
-          };
+        for (const destination of destinations) {
+          const jid = await resolveDestinationJid(sock, destination);
+          if (isPlaceholderChannelId(jid)) {
+            failures.push(`${destination.label ?? jid}: ID placeholder inválido`);
+            continue;
+          }
+
+          const validation = await validateWhatsAppDestination(sock, jid, {
+            inviteLink: destination.inviteLink,
+          });
+          if (!validation.valid) {
+            failures.push(`${destination.label ?? jid}: ${validation.reason}`);
+            continue;
+          }
+
+          validCount += 1;
         }
 
-        return { ok: true, detail: `Canal "${channel.name ?? config.channelId}" validado` };
+        if (validCount === 0) {
+          return { ok: false, detail: failures.join(' · ') };
+        }
+
+        const detail =
+          failures.length > 0
+            ? `${validCount} destino(s) ativo(s); ignorando: ${failures.join(' · ')}`
+            : `${validCount} destino(s) WhatsApp validado(s)`;
+
+        return { ok: true, detail };
       } catch (error) {
         if (error instanceof WhatsAppOwnedElsewhereError) {
           return {
@@ -64,14 +105,74 @@ export function createWhatsAppPublisher(account: WhatsAppAccount): ChannelPublis
 
     async publish(offer: OfferRecord, caption: string) {
       const sock = await requireWhatsAppSocket();
-      const result = await sendOffer(sock, config.channelId, offer.image, caption);
-      return { messageId: result.key.id ?? '' };
+      const destinations = getEnabledWhatsAppDestinations(config);
+      let lastMessageId = '';
+
+      for (const destination of destinations) {
+        try {
+          const jid = await resolveDestinationJid(sock, destination);
+          const validation = await validateWhatsAppDestination(sock, jid, {
+            inviteLink: destination.inviteLink,
+          });
+          if (!validation.valid) {
+            logger.warn(
+              { jid, label: destination.label, reason: validation.reason },
+              'Destino WhatsApp ignorado no envio',
+            );
+            continue;
+          }
+
+          const result = await sendOffer(sock, jid, offer.image, caption);
+          lastMessageId = result.key.id ?? lastMessageId;
+        } catch (error) {
+          logger.warn(
+            { error, label: destination.label, jid: destination.jid },
+            'Falha ao publicar em destino WhatsApp',
+          );
+        }
+      }
+
+      if (!lastMessageId) {
+        throw new Error('Nenhum destino WhatsApp aceitou o envio');
+      }
+
+      return { messageId: lastMessageId };
     },
 
     async publishText(text: string) {
       const sock = await requireWhatsAppSocket();
-      const result = await sendOffer(sock, config.channelId, null, text);
-      return { messageId: result.key.id ?? '' };
+      const destinations = getEnabledWhatsAppDestinations(config);
+      let lastMessageId = '';
+
+      for (const destination of destinations) {
+        try {
+          const jid = await resolveDestinationJid(sock, destination);
+          const validation = await validateWhatsAppDestination(sock, jid, {
+            inviteLink: destination.inviteLink,
+          });
+          if (!validation.valid) {
+            logger.warn(
+              { jid, label: destination.label, reason: validation.reason },
+              'Destino WhatsApp ignorado no envio',
+            );
+            continue;
+          }
+
+          const result = await sendOffer(sock, jid, null, text);
+          lastMessageId = result.key.id ?? lastMessageId;
+        } catch (error) {
+          logger.warn(
+            { error, label: destination.label, jid: destination.jid },
+            'Falha ao publicar texto em destino WhatsApp',
+          );
+        }
+      }
+
+      if (!lastMessageId) {
+        throw new Error('Nenhum destino WhatsApp aceitou o envio');
+      }
+
+      return { messageId: lastMessageId };
     },
 
     async shutdown() {

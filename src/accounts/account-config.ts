@@ -9,11 +9,21 @@ import {
   type WhatsAppAccountConfig,
 } from './types.js';
 
+const whatsAppDestinationSchema = z.object({
+  id: z.string().min(1),
+  jid: z.string(),
+  kind: z.enum(['newsletter', 'group']),
+  label: z.string().nullable().optional(),
+  inviteLink: z.string().nullable().optional(),
+  enabled: z.boolean(),
+});
+
 const whatsAppConfigSchema = z.object({
   channelId: z.string(),
   authPath: z.string(),
   channelName: z.string().nullable().optional(),
   inviteLink: z.string().nullable().optional(),
+  destinations: z.array(whatsAppDestinationSchema).optional(),
 });
 
 const telegramConfigSchema = z.object({

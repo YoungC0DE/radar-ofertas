@@ -8,6 +8,11 @@ import {
   saveSendIntervalMinutes,
   saveSenderDelay,
 } from '../models/settings-model.js';
+import {
+  addWhatsAppDestination,
+  removeWhatsAppDestinationById,
+  setWhatsAppDestinationEnabled,
+} from '../models/whatsapp-destinations-model.js';
 import type { SettingsSaveType } from '../models/settings-model.js';
 import { renderSettingsPage } from '../views/settings.js';
 
@@ -21,6 +26,33 @@ export async function showSettingsPage(
 
 export async function handleChannelLinkSave(inviteLink: string): Promise<string> {
   const result = await saveChannelInviteLink(inviteLink);
+  if (!result.ok) {
+    return showSettingsPage(null, result.error);
+  }
+  return showSettingsPage('channel', null);
+}
+
+export async function handleWhatsAppDestinationAdd(inviteInput: string): Promise<string> {
+  const result = await addWhatsAppDestination(inviteInput);
+  if (!result.ok) {
+    return showSettingsPage(null, result.error);
+  }
+  return showSettingsPage('channel', null);
+}
+
+export async function handleWhatsAppDestinationRemove(destinationId: string): Promise<string> {
+  const result = await removeWhatsAppDestinationById(destinationId);
+  if (!result.ok) {
+    return showSettingsPage(null, result.error);
+  }
+  return showSettingsPage('channel', null);
+}
+
+export async function handleWhatsAppDestinationToggle(
+  destinationId: string,
+  enabled: boolean,
+): Promise<string> {
+  const result = await setWhatsAppDestinationEnabled(destinationId, enabled);
   if (!result.ok) {
     return showSettingsPage(null, result.error);
   }

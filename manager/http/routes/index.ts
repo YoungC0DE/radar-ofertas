@@ -34,6 +34,9 @@ import {
   handleScoreSave,
   handleSendIntervalSave,
   handleSenderDelaySave,
+  handleWhatsAppDestinationAdd,
+  handleWhatsAppDestinationRemove,
+  handleWhatsAppDestinationToggle,
   showSettingsPage,
 } from '../../controllers/settings-controller.js';
 import { getLogsJson, showLogsPage } from '../../controllers/logs-controller.js';
@@ -275,6 +278,37 @@ export const settingsRoutes: RouteDefinition[] = [
     handler: async ({ req, res }) => {
       const form = parseFormUrlEncoded(await readFormBody(req));
       sendHtml(res, 200, await handleChannelLinkSave(form.inviteLink ?? ''));
+    },
+  },
+  {
+    method: 'POST',
+    pattern: '/manager/settings/whatsapp-destinations/add',
+    handler: async ({ req, res }) => {
+      const form = parseFormUrlEncoded(await readFormBody(req));
+      sendHtml(res, 200, await handleWhatsAppDestinationAdd(form.inviteInput ?? ''));
+    },
+  },
+  {
+    method: 'POST',
+    pattern: '/manager/settings/whatsapp-destinations/remove',
+    handler: async ({ req, res }) => {
+      const form = parseFormUrlEncoded(await readFormBody(req));
+      sendHtml(res, 200, await handleWhatsAppDestinationRemove(form.destinationId ?? ''));
+    },
+  },
+  {
+    method: 'POST',
+    pattern: '/manager/settings/whatsapp-destinations/toggle',
+    handler: async ({ req, res }) => {
+      const form = parseFormUrlEncoded(await readFormBody(req));
+      sendHtml(
+        res,
+        200,
+        await handleWhatsAppDestinationToggle(
+          form.destinationId ?? '',
+          form.enabled === '1' || form.enabled === 'true',
+        ),
+      );
     },
   },
   {

@@ -10,6 +10,7 @@ export function renderLayoutShell(
   body: string,
   activeNav?: string,
   headExtras = '',
+  afterMain = '',
 ): string {
   const brand = getBrandSettings();
   const brandLogo = getBrandLogoHref(brand);
@@ -78,6 +79,8 @@ export function renderLayoutShell(
       <main class="content">${body}</main>
     </div>
   </div>
+
+  ${afterMain}
 
   <div id="confirm-modal" class="modal-overlay hidden" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">

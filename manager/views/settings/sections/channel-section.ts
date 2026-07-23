@@ -1,30 +1,56 @@
 import type { SettingsData } from '../../../models/settings-model.js';
 import { escapeHtml } from '../../helpers.js';
-import { configRow, EDIT_ICON } from '../../components/index.js';
+import { configRow } from '../../components/index.js';
+
+function renderDestinationItem(destination: SettingsData['whatsappDestinations'][number]): string {
+  const name = destination.label?.trim() || 'Sem nome';
+  const status = destination.enabled
+    ? '<span class="badge ok">Ativo</span>'
+    : '<span class="badge warn">Pausado</span>';
+  const invite = destination.inviteLink
+    ? `<a href="${escapeHtml(destination.inviteLink)}" target="_blank" rel="noopener">Abrir link</a>`
+    : '';
+
+  return `
+    <li class="destination-item" data-destination-id="${escapeHtml(destination.id)}">
+      <div class="destination-main">
+        <strong>${escapeHtml(name)}</strong>
+        <span class="meta">${escapeHtml(destination.kindLabel)}</span>
+        ${status}
+      </div>
+      <div class="destination-meta">
+        <code>${escapeHtml(destination.jid)}</code>
+        ${invite}
+      </div>
+      <div class="destination-actions">
+        <button
+          type="button"
+          class="btn btn-sm destination-toggle"
+          data-destination-id="${escapeHtml(destination.id)}"
+          data-enabled="${destination.enabled ? '0' : '1'}"
+        >${destination.enabled ? 'Pausar' : 'Ativar'}</button>
+        <button
+          type="button"
+          class="btn btn-sm btn-danger destination-remove"
+          data-destination-id="${escapeHtml(destination.id)}"
+        >Remover</button>
+      </div>
+    </li>`;
+}
 
 export function renderChannelSection(data: SettingsData): string {
-  const nameBlock = data.channelName
-    ? `<span class="channel-name">${escapeHtml(data.channelName)}</span>`
-    : data.channelId
-      ? '<span class="meta">Nome indisponível</span>'
-      : '<span class="badge warn">Não configurado</span>';
-
-  const copyDisabled = data.channelInviteLink ? '' : ' disabled';
+  const destinations = data.whatsappDestinations;
+  const list =
+    destinations.length > 0
+      ? `<ul class="destinations-list">${destinations.map(renderDestinationItem).join('')}</ul>`
+      : '<p class="meta">Nenhum destino configurado — adicione um canal ou grupo abaixo.</p>';
 
   const channelValue = `
-    <div class="channel-inline">
-      ${nameBlock}
-      <div class="channel-actions">
-        <button type="button" class="btn btn-sm" id="copy-channel-link"${copyDisabled}>Copiar link</button>
-        <button type="button" class="btn btn-sm btn-icon" id="edit-channel-link" title="Editar link">${EDIT_ICON}</button>
-        <span class="copy-feedback hidden" id="copy-channel-feedback">Copiado!</span>
-      </div>
+    <div class="destinations-wrap">
+      ${list}
+      <button type="button" class="btn btn-sm" id="add-whatsapp-destination">Adicionar destino</button>
     </div>
-    <input type="hidden" id="channel-invite-link" value="${escapeHtml(data.channelInviteLink)}">`;
+    <p class="meta">Aceita link de canal (<code>whatsapp.com/channel/...</code>) ou grupo (<code>chat.whatsapp.com/...</code>).</p>`;
 
-  return configRow(
-    'Canal WhatsApp',
-    channelValue,
-    data.channelId ? `ID do canal — <code>${escapeHtml(data.channelId)}</code>` : undefined,
-  );
+  return configRow('Destinos WhatsApp', channelValue);
 }

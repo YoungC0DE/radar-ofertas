@@ -44,7 +44,7 @@ export async function serveStaticAsset(
     const ext = path.extname(filePath).toLowerCase();
     res.writeHead(200, {
       'Content-Type': MIME_TYPES[ext] ?? 'application/octet-stream',
-      'Cache-Control': 'public, max-age=3600',
+      'Cache-Control': process.env.NODE_ENV === 'production' ? 'public, max-age=3600' : 'no-cache',
     });
     res.end(content);
     return true;

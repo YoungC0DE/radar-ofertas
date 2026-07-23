@@ -5,7 +5,11 @@ export function pageStyles(...files: string[]): string {
 }
 
 export function pageScripts(...files: string[]): string {
-  return files.map((file) => `<script src="/manager/assets/js/${file}" defer></script>`).join('\n');
+  const cacheBust =
+    process.env.NODE_ENV !== 'production' ? `?v=${Date.now().toString(36)}` : '';
+  return files
+    .map((file) => `<script src="/manager/assets/js/${file}${cacheBust}" defer></script>`)
+    .join('\n');
 }
 
 export function pageData(id: string, data: unknown): string {

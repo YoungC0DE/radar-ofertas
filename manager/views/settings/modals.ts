@@ -96,25 +96,26 @@ export function renderSettingsModals(data: SettingsData): string {
     <div id="channel-link-modal" class="modal-overlay hidden" aria-hidden="true">
       <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="channel-link-modal-title">
         <div class="modal-header">
-          <h3 id="channel-link-modal-title">Editar link do canal</h3>
+          <h3 id="channel-link-modal-title">Adicionar destino WhatsApp</h3>
         </div>
-        <form method="post" action="/manager/settings/channel-link">
+        <form method="post" action="/manager/settings/whatsapp-destinations/add">
           <div class="modal-body">
-            <label for="modal-invite-link" class="modal-label">Link de compartilhamento</label>
+            <label for="modal-invite-link" class="modal-label">Link de convite ou JID</label>
             <input
-              type="url"
+              type="text"
               id="modal-invite-link"
-              name="inviteLink"
-              value="${escapeHtml(data.channelInviteLink)}"
-              placeholder="https://whatsapp.com/channel/..."
+              name="inviteInput"
+              value=""
+              placeholder="https://chat.whatsapp.com/... ou https://whatsapp.com/channel/..."
               spellcheck="false"
               class="modal-input"
+              required
             >
-            <p class="modal-help">Cole o link de convite do seu canal WhatsApp.</p>
+            <p class="modal-help">Cole o link do grupo ou canal. O número conectado precisa estar no grupo/canal.</p>
           </div>
           <div class="modal-actions">
             <button type="button" class="btn modal-cancel" data-modal="channel-link-modal">Cancelar</button>
-            <button type="submit" class="btn primary">Salvar</button>
+            <button type="submit" class="btn primary">Adicionar</button>
           </div>
         </form>
       </div>

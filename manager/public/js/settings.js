@@ -3,10 +3,14 @@
   const brandInitial = pageData.brandInitial || 'R';
   const brandLogoData = pageData.brandLogoHref || '';
   const canSpawnWorkers = pageData.canSpawnWorkers !== false;
-  const { openModal, closeModal, bindModalDismiss } = window.RadarModal;
+  const radarModal = window.RadarModal;
+  if (!radarModal) {
+    console.error('[settings] shared/modal.js não carregou — recarregue a página com Ctrl+F5');
+    return;
+  }
+  const { openModal, closeModal } = radarModal;
 
-      const linkInput = document.getElementById('channel-invite-link');
-      const channelModal = document.getElementById('channel-link-modal');
+  const channelModal = document.getElementById('channel-link-modal');
       const couponsUrlModal = document.getElementById('coupons-url-modal');
       const operatingHoursModal = document.getElementById('operating-hours-modal');
       const intervalModal = document.getElementById('send-interval-modal');
@@ -23,8 +27,6 @@
       const modalBrandLogoFile = document.getElementById('modal-brand-logo-file');
       const modalBrandLogoData = document.getElementById('modal-brand-logo-data');
       const modalRemoveLogo = document.getElementById('modal-remove-logo');
-      const copyBtn = document.getElementById('copy-channel-link');
-      const copyFeedback = document.getElementById('copy-channel-feedback');
             
       
 
@@ -32,12 +34,54 @@
         openModal(couponsUrlModal);
       });
 
-      document.getElementById('edit-channel-link')?.addEventListener('click', () => {
-        modalInviteInput.value = linkInput?.value || '';
-        openModal(channelModal);
-      });
+  document.getElementById('add-whatsapp-destination')?.addEventListener('click', () => {
+    if (!channelModal) {
+      console.error('[settings] Modal #channel-link-modal não encontrado no DOM');
+      return;
+    }
+    if (modalInviteInput) modalInviteInput.value = '';
+    openModal(channelModal);
+  });
 
-      document.getElementById('edit-operating-hours')?.addEventListener('click', () => {
+  function postDestinationAction(action, fields) {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = action;
+    Object.entries(fields).forEach(([name, value]) => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
+  }
+
+  document.addEventListener('click', (event) => {
+    const removeBtn = event.target.closest('.destination-remove');
+    if (removeBtn) {
+      const destinationId = removeBtn.getAttribute('data-destination-id');
+      if (!destinationId || !window.confirm('Remover este destino?')) return;
+      postDestinationAction('/manager/settings/whatsapp-destinations/remove', {
+        destinationId,
+      });
+      return;
+    }
+
+    const toggleBtn = event.target.closest('.destination-toggle');
+    if (toggleBtn) {
+      const destinationId = toggleBtn.getAttribute('data-destination-id');
+      const enabled = toggleBtn.getAttribute('data-enabled');
+      if (!destinationId || enabled == null) return;
+      postDestinationAction('/manager/settings/whatsapp-destinations/toggle', {
+        destinationId,
+        enabled,
+      });
+    }
+  });
+
+  document.getElementById('edit-operating-hours')?.addEventListener('click', () => {
         openModal(operatingHoursModal);
       });
 
@@ -119,25 +163,6 @@
         [channelModal, couponsUrlModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, brandModal].forEach((modal) => {
           if (!modal.classList.contains('hidden')) closeModal(modal);
         });
-      });
-
-      copyBtn?.addEventListener('click', async () => {
-        const link = linkInput?.value?.trim();
-        if (!link) return;
-
-        try {
-          await navigator.clipboard.writeText(link);
-        } catch {
-          const tmp = document.createElement('textarea');
-          tmp.value = link;
-          document.body.appendChild(tmp);
-          tmp.select();
-          document.execCommand('copy');
-          document.body.removeChild(tmp);
-        }
-
-        copyFeedback?.classList.remove('hidden');
-        setTimeout(() => copyFeedback?.classList.add('hidden'), 2000);
       });
 
       // --- Conectar com: Mercado Livre ---
