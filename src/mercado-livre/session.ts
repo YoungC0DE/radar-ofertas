@@ -7,6 +7,17 @@ import type { StorageState } from './types.js';
 const STORAGE_FILE = 'storage-state.json';
 const META_FILE = 'session-meta.json';
 
+let activeAuthPath = env.ML_AUTH_PATH;
+
+/** Auth path da conta ML ativa neste processo (default: ML_AUTH_PATH do .env). */
+export function getMlAuthPath(): string {
+  return activeAuthPath;
+}
+
+export function setMlAuthPath(authPath: string): void {
+  activeAuthPath = authPath;
+}
+
 export interface SessionMeta {
   lastLoginAt: string | null;
   lastRefreshAt: string | null;
@@ -14,15 +25,15 @@ export interface SessionMeta {
 }
 
 function storagePath(): string {
-  return path.join(env.ML_AUTH_PATH, STORAGE_FILE);
+  return path.join(getMlAuthPath(), STORAGE_FILE);
 }
 
 function metaPath(): string {
-  return path.join(env.ML_AUTH_PATH, META_FILE);
+  return path.join(getMlAuthPath(), META_FILE);
 }
 
 export async function ensureAuthDir(): Promise<void> {
-  await mkdir(env.ML_AUTH_PATH, { recursive: true });
+  await mkdir(getMlAuthPath(), { recursive: true });
 }
 
 export async function loadStorageState(): Promise<StorageState | null> {

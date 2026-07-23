@@ -1,3 +1,4 @@
+import { DEFAULT_ACCOUNT_ID } from '../accounts/types.js';
 import { DelayedError, Worker } from 'bullmq';
 import type { ChannelPublisher } from '../channels/types.js';
 import { findAutoMessageById } from '../auto-messages/repository.js';
@@ -54,25 +55,31 @@ function markPacedSend(force: boolean): void {
   if (!force) lastPacedSendAt = Date.now();
 }
 
+function resolveJobAccountId(data: SenderJobData, workerAccountId: string): string {
+  return data.accountId ?? workerAccountId ?? DEFAULT_ACCOUNT_ID;
+}
+
 /**
- * Worker de envio de um canal. Cada canal roda o seu, contra a sua própria fila:
+ * Worker de envio de um canal/conta. Cada processo consome a fila da sua conta;
  * o publisher é a única parte específica do canal.
  */
 export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJobData> {
-  const { channel } = publisher;
+  const { channel, accountId: workerAccountId } = publisher;
 
   const worker = new Worker<SenderJobData>(
-    getSenderQueueName(channel),
+    getSenderQueueName(channel, workerAccountId),
     async (job) => {
       await hydrateQueueConfigCache();
       const operatingHours = getOperatingHours();
       const force = job.data.force === true;
+      const accountId = resolveJobAccountId(job.data, workerAccountId);
 
       if (!force && !isWithinOperatingHours(env.APP_TIMEZONE, operatingHours)) {
         const delayMs = msUntilOperatingWindow(env.APP_TIMEZONE, operatingHours);
         logger.info(
           {
             channel,
+            accountId,
             jobId: job.id,
             offerId: job.data.offerId,
             delayMs,
@@ -92,10 +99,10 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
       if (text) {
         try {
           const { messageId } = await publisher.publishText(text);
-          logger.info({ channel, messageId, force }, 'Text message published');
+          logger.info({ channel, accountId, messageId, force }, 'Text message published');
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          logger.error({ channel, error: message }, 'Text message publish failed');
+          logger.error({ channel, accountId, error: message }, 'Text message publish failed');
           throw error;
         }
 
@@ -106,19 +113,22 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
       if (autoMessageId) {
         const autoMessage = await findAutoMessageById(autoMessageId);
         if (!autoMessage) {
-          logger.warn({ channel, autoMessageId }, 'Auto message not found, skipping');
+          logger.warn({ channel, accountId, autoMessageId }, 'Auto message not found, skipping');
           return;
         }
 
-        const text = renderAutoMessageContent(autoMessage.content);
+        const rendered = renderAutoMessageContent(autoMessage.content);
 
         try {
-          const { messageId } = await publisher.publishText(text);
+          const { messageId } = await publisher.publishText(rendered);
           await markAutoMessageSent(autoMessageId);
-          logger.info({ channel, autoMessageId, messageId, title: autoMessage.title, force }, 'Auto message published');
+          logger.info(
+            { channel, accountId, autoMessageId, messageId, title: autoMessage.title, force },
+            'Auto message published',
+          );
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          logger.error({ channel, autoMessageId, error: message }, 'Auto message publish failed');
+          logger.error({ channel, accountId, autoMessageId, error: message }, 'Auto message publish failed');
           throw error;
         }
 
@@ -127,28 +137,22 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
       }
 
       if (!offerId) {
-        logger.warn({ channel, jobId: job.id }, 'Sender job without offerId or autoMessageId, skipping');
+        logger.warn({ channel, accountId, jobId: job.id }, 'Sender job without offerId or autoMessageId, skipping');
         return;
       }
 
       const offer = await findOfferById(offerId);
       if (!offer) {
-        logger.warn({ channel, offerId }, 'Offer not found, skipping');
+        logger.warn({ channel, accountId, offerId }, 'Offer not found, skipping');
         return;
       }
 
-      // O estado por canal vem da entrega, não de Offer.sentAt: uma oferta já
-      // publicada no WhatsApp continua pendente para o Telegram.
-      const delivery = await findDelivery(offerId, channel);
+      const delivery = await findDelivery(offerId, channel, accountId);
       if (delivery?.sentAt) {
-        logger.info({ channel, offerId }, 'Offer already sent to this channel, skipping');
+        logger.info({ channel, accountId, offerId }, 'Offer already sent to this channel/account, skipping');
         return;
       }
 
-      // Geração sob demanda: só chamamos o ML para criar o link de afiliado no
-      // momento do envio, e apenas se a oferta ainda não tiver um link salvo.
-      // Guarda-corpos para nunca travar a fila: timeout curto (cai no fallback)
-      // e sem abrir Chromium dentro do caminho de envio.
       if (!offer.affiliateLink && offer.permalink) {
         const affiliateLink = await buildAffiliateLink(offer.permalink, offer.mercadoLivreId, undefined, {
           allowBrowser: false,
@@ -156,25 +160,23 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
         });
         await updateOfferAffiliateLink(offerId, affiliateLink);
         offer.affiliateLink = affiliateLink;
-        logger.info({ channel, offerId }, 'Affiliate link gerado sob demanda no envio');
+        logger.info({ channel, accountId, offerId }, 'Affiliate link gerado sob demanda no envio');
       }
 
       const caption = await formatOfferMessage(offer);
 
       try {
         const { messageId } = await publisher.publish(offer, caption);
-        await markOfferDelivered(offerId, channel, messageId);
+        await markOfferDelivered(offerId, channel, messageId, accountId);
         recordSendSuccess(channel);
       } catch (error) {
-        // Guardamos o motivo antes de repropagar: o BullMQ ainda vai retentar,
-        // mas o painel precisa saber por que este canal está travado.
         const message = error instanceof Error ? error.message : String(error);
-        await markOfferDeliveryFailed(offerId, channel, message).catch(() => {});
+        await markOfferDeliveryFailed(offerId, channel, message, accountId).catch(() => {});
         recordSendFailure(channel);
         throw error;
       }
 
-      logger.info({ channel, offerId, title: offer.title, force }, 'Offer published');
+      logger.info({ channel, accountId, offerId, title: offer.title, force }, 'Offer published');
 
       markPacedSend(force);
     },
@@ -185,7 +187,7 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
   );
 
   worker.on('failed', (job, error) => {
-    logger.error({ channel, jobId: job?.id, error }, 'Sender job failed');
+    logger.error({ channel, accountId: workerAccountId, jobId: job?.id, error }, 'Sender job failed');
   });
 
   return worker;

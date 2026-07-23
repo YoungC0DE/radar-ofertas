@@ -57,8 +57,9 @@ public/                    → CSS/JS estáticos servidos em /manager/assets/*
 - Componentes reutilizáveis em `views/components/` — não duplicar markup de cards/ícones.
 - Novas rotas: adicionar em `http/routes/index.ts` no grupo do domínio correto.
 - Evitar controllers importando `src/` direto — preferir models (exceções atuais: offers, dashboard).
-- Estado de workers/QR/conexão em memória — não escala para múltiplas instâncias do manager.
+- Workers: status via Redis + `owner.lock` (WhatsApp). Spawn pelo painel só com `MANAGER_CAN_SPAWN_WORKERS=true`.
+- QR WhatsApp: worker publica em Redis; painel lê (`redis-state.ts`). Login ML permanece local ao manager (single-node).
 
 ## Multi-conta
 
-Página `/manager/accounts` implementada (add, toggle, delete). Feature de envio por conta ainda incompleta no worker — ver `.cursor/docs/accounts.md`.
+Página `/manager/accounts` implementada (add, toggle, delete). Runtime de envio por conta completo via `WORKER_ACCOUNT_ID`. Pendente: spawn de workers por conta no painel — ver `.cursor/docs/accounts.md`.

@@ -1,8 +1,21 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { hostname } from 'node:os';
 import type { Channel } from '../../src/channels/types.js';
+import { env } from '../../src/config/env.js';
+import {
+  getWorkerHeartbeat,
+  isWorkerHeartbeatFresh,
+  resolveWorkerAccountId,
+} from '../../src/utils/redis-state.js';
 import { getWhatsAppOwnerStatus } from '../../src/whatsapp/index.js';
 import { logger } from '../../src/utils/logger.js';
+
+const SPAWN_DISABLED_DETAIL =
+  'Workers gerenciados externamente — use Docker ou npm run worker no terminal.';
+
+export function canManagerSpawnWorkers(): boolean {
+  return env.MANAGER_CAN_SPAWN_WORKERS;
+}
 
 const isWindows = process.platform === 'win32';
 
@@ -110,9 +123,61 @@ async function stopWhatsAppExternalOwner(): Promise<void> {
   killPidTree(owner.pid);
 }
 
+async function deriveExternalWorkerState(channel: Channel): Promise<WorkerState> {
+  const accountId = resolveWorkerAccountId();
+
+  if (channel === 'whatsapp') {
+    const owner = await getWhatsAppOwnerStatus();
+    if (owner.active) {
+      return {
+        status: 'running',
+        startedAt: null,
+        detail: externalOwnerDetail(owner.pid!, owner.host),
+      };
+    }
+  }
+
+  const heartbeat = await getWorkerHeartbeat(channel, accountId);
+  if (heartbeat && isWorkerHeartbeatFresh(heartbeat)) {
+    const hostLabel = heartbeat.host !== hostname() ? heartbeat.host : 'local';
+    return {
+      status: 'running',
+      startedAt: heartbeat.startedAt || null,
+      detail: `Ativo (PID ${heartbeat.pid}, ${hostLabel})`,
+    };
+  }
+
+  if (!canManagerSpawnWorkers()) {
+    return {
+      status: 'stopped',
+      startedAt: null,
+      detail: SPAWN_DISABLED_DETAIL,
+    };
+  }
+
+  return { status: 'stopped', startedAt: null, detail: null };
+}
+
 export async function getWorkerState(channel: Channel = 'whatsapp'): Promise<WorkerState> {
   const current = slot(channel);
-  if (channel === 'whatsapp') await syncWhatsAppFromExternalOwner(current);
+
+  if (channel === 'whatsapp') {
+    await syncWhatsAppFromExternalOwner(current);
+  }
+
+  if (hasLocalWorker(current)) {
+    return { status: current.status, startedAt: current.startedAt, detail: current.detail };
+  }
+
+  if (current.externalOwner && current.status === 'running') {
+    return { status: current.status, startedAt: current.startedAt, detail: current.detail };
+  }
+
+  const external = await deriveExternalWorkerState(channel);
+  if (external.status !== 'stopped' || !canManagerSpawnWorkers()) {
+    return external;
+  }
+
   return { status: current.status, startedAt: current.startedAt, detail: current.detail };
 }
 
@@ -122,6 +187,10 @@ export async function isWorkerRunning(channel: Channel = 'whatsapp'): Promise<bo
 }
 
 export async function startWorker(channel: Channel = 'whatsapp'): Promise<WorkerState> {
+  if (!canManagerSpawnWorkers()) {
+    return deriveExternalWorkerState(channel);
+  }
+
   const current = slot(channel);
 
   if (channel === 'whatsapp') {
@@ -202,6 +271,10 @@ export async function startWorker(channel: Channel = 'whatsapp'): Promise<Worker
 }
 
 export async function stopWorker(channel: Channel = 'whatsapp'): Promise<WorkerState> {
+  if (!canManagerSpawnWorkers()) {
+    return deriveExternalWorkerState(channel);
+  }
+
   const current = slot(channel);
   const proc = current.proc;
 
@@ -235,6 +308,10 @@ export async function stopWorker(channel: Channel = 'whatsapp'): Promise<WorkerS
 }
 
 export async function restartWorker(channel: Channel = 'whatsapp'): Promise<WorkerState> {
+  if (!canManagerSpawnWorkers()) {
+    return deriveExternalWorkerState(channel);
+  }
+
   await stopWorker(channel);
   await new Promise((resolve) => setTimeout(resolve, 500));
   return startWorker(channel);

@@ -10,8 +10,11 @@ src/channels/
 ├── index.ts              → registro dos publishers + canais ligados
 ├── whatsapp-publisher.ts → sessão Baileys, lock de dono
 ├── telegram-publisher.ts → Bot API stateless
-├── publisher-factory.ts  → getPublisher(channel)
-└── worker-runner.ts      → boot compartilhado dos workers
+├── publisher-factory.ts  → getPublisher(channel, accountId)
+└── worker-runner.ts      → boot compartilhado + heartbeat Redis
+
+src/accounts/
+└── worker-publisher.ts   → loadWorkerPublisher(platform) — resolve conta via WORKER_ACCOUNT_ID
 
 src/worker.ts           → processo do WhatsApp
 src/worker-telegram.ts  → processo do Telegram
@@ -50,12 +53,12 @@ Uma linha por `(oferta, canal, conta)` — é a **fonte da verdade** de quem rec
 
 ## Filas
 
-| Canal | Fila (default) | Worker |
-|-------|----------------|--------|
-| WhatsApp | `offer-sender` | `src/worker.ts` |
-| Telegram | `offer-sender-telegram` | `src/worker-telegram.ts` |
+| Canal | Fila (default) | Fila (conta) | Worker |
+|-------|----------------|--------------|--------|
+| WhatsApp | `offer-sender` | `offer-sender-{accountId}` | `src/worker.ts` |
+| Telegram | `offer-sender-telegram` | `offer-sender-telegram-{accountId}` | `src/worker-telegram.ts` |
 
-O nome `offer-sender` é histórico — mantido para não órfãos os jobs em voo. Job id: `send-offer-{canal}-{offerId}` (ou com `{accountId}` para contas não-default).
+Job id: `send-offer-{canal}-{offerId}` (default) ou `send-offer-{canal}-{accountId}-{offerId}`.
 
 ## Tipos de publicação
 
@@ -77,9 +80,9 @@ Todos passam pelo mesmo `jobs/sender.ts` e pelo `ChannelPublisher.publish()` ou 
 
 O fan-out (`dispatchOffer`), o painel e as stats passam a incluir o canal sozinhos — todos derivam de `getEnabledChannels()`.
 
-## Multi-conta (parcial)
+## Multi-conta
 
-Schema e dispatch prontos (`account_id` em `offer_deliveries`). Worker e fila ainda operam só na conta `default`. Ver [Contas](./accounts.md).
+Runtime completo: `dispatchOffer` enfileira por `accountId`, sender lê `accountId` do job, publishers resolvem auth path por conta. Worker consome conta via `WORKER_ACCOUNT_ID`. Pendente: spawn de workers por conta no painel. Ver [Contas](./accounts.md).
 
 ## Princípios
 

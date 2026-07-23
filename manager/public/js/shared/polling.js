@@ -25,13 +25,13 @@
     return '<span class="badge warn">Parado</span>';
   }
 
-  function setupWorkerCard(prefix, channel) {
+  function setupWorkerCard(prefix, channel, spawnEnabled = true) {
     const startBtn = document.getElementById(`${prefix}-start`);
     const restartBtn = document.getElementById(`${prefix}-restart`);
     const stopBtn = document.getElementById(`${prefix}-stop`);
     const badge = document.getElementById(`${prefix}-badge`);
     const detail = document.getElementById(`${prefix}-detail`);
-    if (!startBtn || !badge || !detail) return;
+    if (!badge || !detail) return;
 
     const query = channel ? `?channel=${channel}` : '';
     const poller = createPoller(poll, 2500);
@@ -41,8 +41,9 @@
       badge.innerHTML = workerBadgeHtml(state.status);
       detail.textContent =
         state.detail ?? (running ? 'Processo de envio em execução' : 'Processo de envio parado');
-      startBtn.disabled = running;
-      if (stopBtn) stopBtn.disabled = !running;
+      if (startBtn) startBtn.disabled = !spawnEnabled || running;
+      if (stopBtn) stopBtn.disabled = !spawnEnabled || !running;
+      if (restartBtn) restartBtn.disabled = !spawnEnabled;
     }
 
     async function poll() {
@@ -53,6 +54,7 @@
     }
 
     async function action(endpoint, pending) {
+      if (!spawnEnabled) return;
       [startBtn, restartBtn, stopBtn].forEach((btn) => {
         if (btn) btn.disabled = true;
       });
@@ -65,7 +67,7 @@
       setTimeout(poll, 600);
     }
 
-    startBtn.addEventListener('click', () => action('/manager/settings/worker/start', 'Iniciando worker…'));
+    startBtn?.addEventListener('click', () => action('/manager/settings/worker/start', 'Iniciando worker…'));
     restartBtn?.addEventListener('click', () => action('/manager/settings/worker/restart', 'Reiniciando worker…'));
     stopBtn?.addEventListener('click', () => action('/manager/settings/worker/stop', 'Parando worker…'));
     poller.start();

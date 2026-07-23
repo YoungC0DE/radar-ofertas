@@ -5,12 +5,14 @@
 | Serviço | Imagem | Porta | Função |
 |---------|--------|-------|--------|
 | postgres | postgres:16-alpine | 5432 | Banco de dados |
-| redis | redis:7-alpine | 6379 | Filas BullMQ |
+| redis | redis:7-alpine | 6379 | Filas BullMQ + estado compartilhado |
 | migrate | build local | — | Aplica migrations (one-shot) |
 | app | build local (bookworm + Chromium) | — | Collector (scraping + enfileira) |
 | worker | build local | — | WhatsApp — envio |
 | worker-telegram | build local | — | Telegram — envio |
-| manager | build local | `MANAGER_PORT` (3000) | Painel admin |
+| manager | build local | `MANAGER_PORT` (3000) | Painel admin (stateless) |
+
+O serviço `manager` define `MANAGER_CAN_SPAWN_WORKERS=false` — não inicia workers pelo painel.
 
 ## Primeiro deploy
 
@@ -29,23 +31,23 @@ Painel: `http://localhost:3000/manager`
 
 ## Autenticação WhatsApp
 
-Via painel (recomendado em dev):
+O worker é dono da sessão. O QR é publicado no Redis e exibido pelo painel.
 
-1. `npm run up` ou `npm run manager`
-2. Settings → Conectar WhatsApp → escanear QR
-3. Iniciar worker em Settings → Worker de envio
+1. `docker compose up -d` (workers sobem automaticamente)
+2. Settings → Conectar WhatsApp → escanear QR exibido no modal
+3. Status do worker visível em Settings → Operações (via `owner.lock` + heartbeat Redis)
 
-Via CLI:
+Via CLI (no host):
 
 ```bash
 npm run wa:login
 ```
 
-Ou via worker Docker: `docker compose logs -f worker` e escanear QR. Sessão persistida em `./data/auth_info_baileys`.
+Ou via logs do worker Docker: `docker compose logs -f worker` e escanear QR no terminal. Sessão persistida em `./data/auth_info_baileys`.
 
 ## Autenticação Mercado Livre (afiliado)
 
-Via painel (recomendado):
+Via painel (single-node — abre browser local ao manager):
 
 1. Settings → Conectar Mercado Livre
 2. Login manual no navegador aberto
@@ -71,6 +73,16 @@ TELEGRAM_CHAT_ID=@meucanal
 
 O serviço `worker-telegram` encerra com exit 0 se `TELEGRAM_ENABLED` não estiver ligado.
 
+## Multi-conta
+
+Para worker de conta adicional:
+
+```bash
+WORKER_ACCOUNT_ID=minha-conta-wa docker compose run --rm worker
+```
+
+Ou adicionar serviço no `docker-compose.yml` com `WORKER_ACCOUNT_ID` no environment.
+
 ## Variáveis obrigatórias
 
 | Variável | Descrição |
@@ -81,7 +93,7 @@ O serviço `worker-telegram` encerra com exit 0 se `TELEGRAM_ENABLED` não estiv
 | `ML_CATEGORIES` | Categorias ou URLs de listagem |
 | `AFFILIATE_CONFIG` | Tag de afiliado (`{"tag":"sua-tag"}`) |
 
-Opcionais: `APP_TIMEZONE`, `ML_AUTH_PATH`, `ML_USE_BROWSER_FALLBACK`, `ML_BROWSER_HEADLESS`, `ML_SEARCH_LIMIT`, `ML_HTTP_TIMEOUT_MS`, `QUEUE_CONFIG`, `MANAGER_PORT`, `MANAGER_TOKEN`, `REDIS_ENABLED`, `TELEGRAM_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+Opcionais: `APP_TIMEZONE`, `ML_AUTH_PATH`, `ML_USE_BROWSER_FALLBACK`, `ML_BROWSER_HEADLESS`, `ML_SEARCH_LIMIT`, `ML_HTTP_TIMEOUT_MS`, `QUEUE_CONFIG`, `MANAGER_PORT`, `MANAGER_TOKEN`, `MANAGER_CAN_SPAWN_WORKERS`, `WORKER_ACCOUNT_ID`, `REDIS_ENABLED`, `TELEGRAM_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
 
 ## Docker + Playwright
 
@@ -99,16 +111,20 @@ docker compose up -d postgres redis
 
 # Setup
 npm run check
+npm run migrate
 
-# Collector + manager (workers via painel)
+# Collector + manager (workers: painel em dev ou terminal)
 npm run up
 
 # Ou separado:
 npm run dev              # collector
 npm run worker           # sender WhatsApp
+WORKER_ACCOUNT_ID=x npm run worker   # conta específica
 npm run worker:telegram  # sender Telegram
 npm run manager          # painel
 ```
+
+Em dev local, `MANAGER_CAN_SPAWN_WORKERS=true` (default) permite iniciar workers pelo painel.
 
 ## Scripts npm
 

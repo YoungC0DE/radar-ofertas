@@ -63,6 +63,21 @@ Mensagens automáticas independentes de ofertas (bom dia, códigos promocionais,
 
 Gerenciadas em `/manager/template` (seção auto-messages). Lógica em `src/auto-messages/`.
 
+### Tabela `accounts`
+
+Contas de envio e sessão (WhatsApp, Telegram, Mercado Livre afiliado).
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| id | string | PK — ex: `default`, `whatsapp-abc123` |
+| platform | string | `whatsapp` \| `telegram` \| `mercado_livre` |
+| label | string | Nome exibido no painel |
+| enabled | boolean | Conta ativa |
+| config | json | Config por plataforma (validado com Zod) |
+| created_at | datetime | Quando foi criada |
+
+Índice em `(platform, enabled)`. Migration `20260723140000_add_accounts_table` migra JSON legado de `settings.accounts`.
+
 ### Tabela `settings` (key-value)
 
 Configuração runtime editável pelo manager. Chave primária: `key` (string).
@@ -86,7 +101,19 @@ Configuração runtime editável pelo manager. Chave primária: `key` (string).
 | `mlCustomSources` | JSON — URLs customizadas de coleta por canal |
 | `mlEnvSourceFlags` | JSON — ativar/desativar categorias do `.env` por canal |
 | `couponsUrl` | String — URL da página de cupons ML |
-| `accounts` | JSON — array de contas multi-plataforma |
+
+> **Legado:** contas viviam em `settings.accounts` (JSON). Migradas para a tabela `accounts` na migration `20260723140000`.
+
+## Chaves Redis (além do BullMQ)
+
+| Chave | Tipo | Uso |
+|-------|------|-----|
+| `radar:app-logs` | LIST | Logs compartilhados (`log-store.ts`) |
+| `radar:ml-scrape-count` | STRING | Contador de visitas ML |
+| `radar:worker:{channel}:{accountId}` | HASH | Heartbeat do worker (TTL 30s) |
+| `radar:connect:wa:{accountId}` | HASH | QR/status WhatsApp (TTL 120s) |
+
+Ver `src/utils/redis-state.ts` e [Manager](./manager.md).
 
 ## Comandos
 
@@ -104,6 +131,7 @@ npx prisma studio        # UI visual (não há script npm dedicado)
 | Auto-messages | `auto-messages/repository.ts` |
 | Settings (score, brand, filas, template) | `config/*-config*.ts`, `queue-config-store.ts`, `offers/message-template.ts`, `whatsapp/channel-cache.ts` |
 | Contas | `accounts/repository.ts` |
+| Estado Redis (heartbeat, QR) | `utils/redis-state.ts` |
 | Fontes ML | `config/ml-sources-config.ts` |
 | Cupons (URL) | `config/coupons-config-store.ts` |
 

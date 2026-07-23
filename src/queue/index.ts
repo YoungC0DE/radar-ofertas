@@ -1,4 +1,5 @@
 import { Queue } from 'bullmq';
+import { getEnabledAccountIdsForChannel } from '../accounts/channel-accounts.js';
 import { getCollectorIntervalMinutes } from '../config/queue-config-store.js';
 import { env } from '../config/env.js';
 import { CHANNELS, isChannelEnabled } from '../channels/index.js';
@@ -34,6 +35,7 @@ export interface SenderJobData {
   autoMessageId?: string;
   text?: string;
   force?: boolean;
+  accountId?: string;
 }
 
 /** Job id determinístico: garante um envio por oferta por canal por conta. */
@@ -55,6 +57,25 @@ const connection = {
   maxRetriesPerRequest: null as null,
 };
 
+/** Instâncias reutilizadas por nome — evita abrir/fechar conexão Redis a cada enqueue. */
+const queueCache = new Map<string, Queue>();
+
+function getQueue<T>(name: string): Queue<T> {
+  const existing = queueCache.get(name);
+  if (existing) {
+    return existing as Queue<T>;
+  }
+
+  const queue = new Queue<T>(name, { connection });
+  queueCache.set(name, queue);
+  return queue;
+}
+
+export async function closeAllQueues(): Promise<void> {
+  await Promise.all([...queueCache.values()].map((queue) => queue.close()));
+  queueCache.clear();
+}
+
 export function isRedisEnabled(): boolean {
   return env.REDIS_ENABLED;
 }
@@ -67,12 +88,12 @@ function assertRedisEnabled(feature: string): void {
 
 export function getCollectorQueue(): Queue<CollectorJobData> {
   assertRedisEnabled('filas de coleta');
-  return new Queue<CollectorJobData>(QUEUE_NAMES.OFFER_COLLECTOR, { connection });
+  return getQueue<CollectorJobData>(QUEUE_NAMES.OFFER_COLLECTOR);
 }
 
-export function getSenderQueue(channel: Channel): Queue<SenderJobData> {
+export function getSenderQueue(channel: Channel, accountId = 'default'): Queue<SenderJobData> {
   assertRedisEnabled('filas de envio');
-  return new Queue<SenderJobData>(getSenderQueueName(channel), { connection });
+  return getQueue<SenderJobData>(getSenderQueueName(channel, accountId));
 }
 
 export async function scheduleCollectorJob(): Promise<void> {
@@ -131,72 +152,59 @@ export const SENDER_JOB_OPTIONS = {
 
 export async function enqueueOfferSend(channel: Channel, offerId: string, accountId = 'default'): Promise<void> {
   assertRedisEnabled('enfileiramento de envio');
-  const queue = getSenderQueue(channel);
-  try {
-    await queue.add('send', { offerId }, { jobId: senderJobId(channel, offerId, accountId), ...SENDER_JOB_OPTIONS });
-  } finally {
-    await queue.close();
-  }
+  await getSenderQueue(channel, accountId).add(
+    'send',
+    { offerId, accountId },
+    { jobId: senderJobId(channel, offerId, accountId), ...SENDER_JOB_OPTIONS },
+  );
 }
 
 export async function enqueueAutoMessageSend(
   channel: Channel,
   autoMessageId: string,
+  accountId = 'default',
   options: { force?: boolean } = {},
 ): Promise<void> {
   assertRedisEnabled('enfileiramento de mensagem automática');
-  const queue = getSenderQueue(channel);
   const suffix = `now-${Date.now()}`;
-  try {
-    await queue.add(
-      'send-auto-message',
-      { autoMessageId, force: options.force },
-      { jobId: autoMessageJobId(channel, autoMessageId, suffix), ...SENDER_JOB_OPTIONS },
-    );
-  } finally {
-    await queue.close();
-  }
+  await getSenderQueue(channel, accountId).add(
+    'send-auto-message',
+    { autoMessageId, force: options.force, accountId },
+    { jobId: autoMessageJobId(channel, autoMessageId, suffix), ...SENDER_JOB_OPTIONS },
+  );
 }
 
 export async function enqueueTextMessageSend(
   channel: Channel,
   text: string,
+  accountId = 'default',
   options: { force?: boolean } = {},
 ): Promise<void> {
   assertRedisEnabled('enfileiramento de mensagem de texto');
-  const queue = getSenderQueue(channel);
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  try {
-    await queue.add(
-      'send-text',
-      { text, force: options.force },
-      { jobId: textMessageJobId(channel, suffix), ...SENDER_JOB_OPTIONS },
-    );
-  } finally {
-    await queue.close();
-  }
+  await getSenderQueue(channel, accountId).add(
+    'send-text',
+    { text, force: options.force, accountId },
+    { jobId: textMessageJobId(channel, suffix), ...SENDER_JOB_OPTIONS },
+  );
 }
 
 export async function enqueueScheduledAutoMessageSend(
   channel: Channel,
   autoMessageId: string,
   delayMs: number,
+  accountId = 'default',
 ): Promise<void> {
   assertRedisEnabled('agendamento de mensagem automática');
-  const queue = getSenderQueue(channel);
-  try {
-    await queue.add(
-      'send-auto-message',
-      { autoMessageId },
-      {
-        jobId: autoMessageJobId(channel, autoMessageId, 'scheduled'),
-        delay: delayMs,
-        ...SENDER_JOB_OPTIONS,
-      },
-    );
-  } finally {
-    await queue.close();
-  }
+  await getSenderQueue(channel, accountId).add(
+    'send-auto-message',
+    { autoMessageId, accountId },
+    {
+      jobId: autoMessageJobId(channel, autoMessageId, 'scheduled'),
+      delay: delayMs,
+      ...SENDER_JOB_OPTIONS,
+    },
+  );
 }
 
 export async function cancelScheduledAutoMessageJobs(autoMessageId: string): Promise<void> {
@@ -204,12 +212,12 @@ export async function cancelScheduledAutoMessageJobs(autoMessageId: string): Pro
 
   for (const channel of CHANNELS) {
     if (!isChannelEnabled(channel)) continue;
-    const queue = getSenderQueue(channel);
-    try {
-      const job = await queue.getJob(autoMessageJobId(channel, autoMessageId, 'scheduled'));
+    const accountIds = await getEnabledAccountIdsForChannel(channel);
+    for (const accountId of accountIds) {
+      const job = await getSenderQueue(channel, accountId).getJob(
+        autoMessageJobId(channel, autoMessageId, 'scheduled'),
+      );
       if (job) await job.remove();
-    } finally {
-      await queue.close();
     }
   }
 }

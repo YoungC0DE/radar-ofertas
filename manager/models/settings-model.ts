@@ -43,7 +43,7 @@ import {
   getWhatsAppSessionStatus,
   type SessionStatus,
 } from './session-model.js';
-import { getWorkerState, type WorkerState } from './process-model.js';
+import { getWorkerState, canManagerSpawnWorkers, type WorkerState } from './process-model.js';
 
 export type SettingsSaveType = 'channel' | 'interval' | 'brand' | 'score' | 'hours' | 'senderDelay' | 'mlSources' | 'couponsUrl' | null;
 
@@ -71,6 +71,7 @@ export interface SettingsData {
   tgSession: SessionStatus | null;
   workerState: WorkerState;
   telegramWorkerState: WorkerState;
+  canSpawnWorkers: boolean;
   mlCouponsUrl: string;
   saved: SettingsSaveType;
   error: string | null;
@@ -137,6 +138,7 @@ export async function loadSettingsData(
     tgSession,
     workerState: await getWorkerState('whatsapp'),
     telegramWorkerState: await getWorkerState('telegram'),
+    canSpawnWorkers: canManagerSpawnWorkers(),
     mlCouponsUrl,
     saved,
     error,

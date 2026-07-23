@@ -1,4 +1,5 @@
 import type { Account, WhatsAppAccount, TelegramAccount } from '../accounts/types.js';
+import { resolveAccountAuthPath } from '../accounts/paths.js';
 import type { ChannelPublisher } from './types.js';
 import {
   connectWhatsApp,
@@ -6,6 +7,7 @@ import {
   isPlaceholderChannelId,
   requireWhatsAppSocket,
   sendOffer,
+  setWhatsAppAuthPath,
   validateWhatsAppChannel,
   WhatsAppOwnedElsewhereError,
 } from '../whatsapp/index.js';
@@ -26,6 +28,8 @@ export function createWhatsAppPublisher(account: WhatsAppAccount): ChannelPublis
     isEnabled: () => account.enabled,
 
     async verify() {
+      setWhatsAppAuthPath(resolveAccountAuthPath(id, 'whatsapp'));
+
       if (isPlaceholderChannelId(config.channelId)) {
         return {
           ok: false,

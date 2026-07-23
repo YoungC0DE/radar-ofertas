@@ -64,11 +64,19 @@ export interface WorkerCardOptions {
   icon: string;
   status: string;
   detail: string;
+  spawnEnabled?: boolean;
 }
 
 export function renderWorkerCard(options: WorkerCardOptions): string {
-  const { prefix, name, icon, status, detail } = options;
+  const { prefix, name, icon, status, detail, spawnEnabled = true } = options;
   const running = status === 'running' || status === 'starting';
+
+  const actionsHtml = spawnEnabled
+    ? `
+      <button type="button" class="btn primary" id="${prefix}-start"${running ? ' disabled' : ''}>Iniciar</button>
+      <button type="button" class="btn" id="${prefix}-restart">Reiniciar</button>
+      <button type="button" class="btn btn-danger" id="${prefix}-stop"${running ? '' : ' disabled'}>Parar</button>`
+    : '<span class="meta">Gerenciado externamente (Docker/terminal)</span>';
 
   return renderConnectCard({
     service: 'worker',
@@ -77,9 +85,6 @@ export function renderWorkerCard(options: WorkerCardOptions): string {
     detail,
     detailId: `${prefix}-detail`,
     badgeHtml: `<span id="${prefix}-badge">${workerStatusBadge(status)}</span>`,
-    actionsHtml: `
-      <button type="button" class="btn primary" id="${prefix}-start"${running ? ' disabled' : ''}>Iniciar</button>
-      <button type="button" class="btn" id="${prefix}-restart">Reiniciar</button>
-      <button type="button" class="btn btn-danger" id="${prefix}-stop"${running ? '' : ' disabled'}>Parar</button>`,
+    actionsHtml,
   });
 }

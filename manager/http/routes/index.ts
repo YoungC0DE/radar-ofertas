@@ -411,12 +411,12 @@ export const connectionRoutes: RouteDefinition[] = [
   {
     method: 'POST',
     pattern: '/manager/settings/connect/wa/start',
-    handler: ({ res }) => sendJson(res, 200, startWhatsAppConnectJson()),
+    handler: async ({ res }) => sendJson(res, 200, await startWhatsAppConnectJson()),
   },
   {
     method: 'GET',
     pattern: '/manager/settings/connect/wa/status',
-    handler: ({ res }) => sendJson(res, 200, getWhatsAppConnectJson()),
+    handler: async ({ res }) => sendJson(res, 200, await getWhatsAppConnectJson()),
   },
   {
     method: 'POST',

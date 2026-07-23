@@ -25,3 +25,4 @@ export {
   loadAccounts,
   saveAccounts,
 } from './repository.js';
+export { getEnabledAccountIdsForChannel } from './channel-accounts.js';

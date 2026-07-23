@@ -2,6 +2,7 @@
   const pageData = JSON.parse(document.getElementById('settings-page-data')?.textContent || '{}');
   const brandInitial = pageData.brandInitial || 'R';
   const brandLogoData = pageData.brandLogoHref || '';
+  const canSpawnWorkers = pageData.canSpawnWorkers !== false;
   const { openModal, closeModal, bindModalDismiss } = window.RadarModal;
 
       const linkInput = document.getElementById('channel-invite-link');
@@ -324,8 +325,8 @@
             // Cada canal tem seu card, seus botões e seu polling — o ?channel= diz ao
       // painel qual processo controlar. O card do Telegram só existe quando o
       // canal está ligado, então saímos fora se os elementos não estiverem lá.
-      RadarPolling.setupWorkerCard('worker', 'whatsapp');
-      RadarPolling.setupWorkerCard('worker-tg', 'telegram');
+      RadarPolling.setupWorkerCard('worker', 'whatsapp', canSpawnWorkers);
+      RadarPolling.setupWorkerCard('worker-tg', 'telegram', canSpawnWorkers);
 
       // --- Operações: Prisma generate ---
       const prismaBtn = document.getElementById('prisma-generate');

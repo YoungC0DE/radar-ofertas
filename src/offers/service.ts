@@ -1,6 +1,7 @@
 import { getEnabledChannels, isChannelEnabled } from '../channels/index.js';
 import type { Channel } from '../channels/types.js';
 import { findAccountsByPlatform } from '../accounts/repository.js';
+import { getEnabledAccountIdsForChannel } from '../accounts/channel-accounts.js';
 import {
   getActiveMlCategoriesForChannel,
   getChannelsForCategory,
@@ -290,18 +291,17 @@ async function removeSenderJobs(offerIds: string[]): Promise<void> {
   if (!isRedisEnabled() || offerIds.length === 0) return;
 
   for (const channel of getEnabledChannels()) {
-    const queue = getSenderQueue(channel);
-    try {
+    const accountIds = await getEnabledAccountIdsForChannel(channel);
+    for (const accountId of accountIds) {
+      const queue = getSenderQueue(channel, accountId);
       for (const offerId of offerIds) {
         try {
-          const job = await queue.getJob(senderJobId(channel, offerId));
+          const job = await queue.getJob(senderJobId(channel, offerId, accountId));
           if (job) await job.remove();
         } catch (error) {
-          logger.warn({ offerId, channel, error }, 'Failed to remove sender job');
+          logger.warn({ offerId, channel, accountId, error }, 'Failed to remove sender job');
         }
       }
-    } finally {
-      await queue.close();
     }
   }
 }
@@ -354,10 +354,13 @@ export async function sendOfferNow(offerId: string, channel?: Channel): Promise<
     throw new Error('Nenhum canal habilitado — ligue o WhatsApp ou o Telegram');
   }
 
-  const pending: Channel[] = [];
+  const pending: Array<{ channel: Channel; accountId: string }> = [];
   for (const target of targets) {
-    const delivery = await findDelivery(offerId, target);
-    if (!delivery?.sentAt) pending.push(target);
+    const accountIds = await getEnabledAccountIdsForChannel(target);
+    for (const accountId of accountIds) {
+      const delivery = await findDelivery(offerId, target, accountId);
+      if (!delivery?.sentAt) pending.push({ channel: target, accountId });
+    }
   }
 
   if (pending.length === 0) {
@@ -366,23 +369,22 @@ export async function sendOfferNow(offerId: string, channel?: Channel): Promise<
     );
   }
 
-  for (const target of pending) {
-    await openOfferDelivery(offerId, target);
-    const queue = getSenderQueue(target);
-    const jobId = senderJobId(target, offerId);
+  for (const { channel: target, accountId } of pending) {
+    await openOfferDelivery(offerId, target, accountId);
+    const queue = getSenderQueue(target, accountId);
+    const jobId = senderJobId(target, offerId, accountId);
 
-    try {
-      const existing = await queue.getJob(jobId);
-      if (existing) {
-        const state = await existing.getState();
-        // Um job já rodando vai concluir sozinho — removê-lo agora perderia o envio.
-        if (state === 'active') continue;
-        await existing.remove();
-      }
-
-      await queue.add('send', { offerId, force: true }, { jobId, priority: 1, ...SENDER_JOB_OPTIONS });
-    } finally {
-      await queue.close();
+    const existing = await queue.getJob(jobId);
+    if (existing) {
+      const state = await existing.getState();
+      if (state === 'active') continue;
+      await existing.remove();
     }
+
+    await queue.add(
+      'send',
+      { offerId, accountId, force: true },
+      { jobId, priority: 1, ...SENDER_JOB_OPTIONS },
+    );
   }
 }

@@ -1,3 +1,4 @@
+import { Queue } from 'bullmq';
 import { getEnabledChannels } from '../../src/channels/index.js';
 import { CHANNEL_LABELS, type Channel } from '../../src/channels/types.js';
 import { getCollectorQueue, getSenderQueue, isRedisEnabled } from '../../src/queue/index.js';
@@ -33,7 +34,7 @@ const emptyCounts = (): QueueCounts => ({
   completed: 0,
 });
 
-async function readCounts(queue: ReturnType<typeof getCollectorQueue>): Promise<QueueCounts> {
+async function readCounts(queue: Queue): Promise<QueueCounts> {
   const counts = await queue.getJobCounts('waiting', 'active', 'delayed', 'failed', 'completed');
   return {
     waiting: counts.waiting ?? 0,

@@ -3,6 +3,7 @@ import {
   saveAccounts,
   invalidateAccountsCache,
 } from '../../src/accounts/repository.js';
+import { resolveAccountAuthPath } from '../../src/accounts/paths.js';
 import {
   ACCOUNT_PLATFORMS,
   DEFAULT_ACCOUNT_ID,
@@ -50,7 +51,7 @@ export async function addAccount(form: Record<string, string>): Promise<SaveResu
         platform: 'whatsapp',
         label: label.trim(),
         enabled: true,
-        config: { channelId: '', authPath: `./data/auth_${id}` },
+        config: { channelId: '', authPath: resolveAccountAuthPath(id, 'whatsapp') },
       }
     : platform === 'telegram'
       ? {
@@ -65,11 +66,12 @@ export async function addAccount(form: Record<string, string>): Promise<SaveResu
           platform: 'mercado_livre',
           label: label.trim(),
           enabled: true,
-          config: { authPath: `./data/ml_auth_${id}` },
+          config: { authPath: resolveAccountAuthPath(id, 'mercado_livre') },
         };
 
   accounts.push(newAccount);
   await saveAccounts(accounts);
+  invalidateAccountsCache();
   return { ok: true };
 }
 
@@ -100,6 +102,7 @@ export async function updateAccount(
   }
 
   await saveAccounts(accounts);
+  invalidateAccountsCache();
   return { ok: true };
 }
 
@@ -130,5 +133,6 @@ export async function toggleAccount(accountId: string): Promise<SaveResult> {
 
   account.enabled = !account.enabled;
   await saveAccounts(accounts);
+  invalidateAccountsCache();
   return { ok: true };
 }

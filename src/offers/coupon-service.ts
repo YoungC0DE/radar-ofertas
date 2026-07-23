@@ -1,5 +1,8 @@
 import { QueueEvents } from 'bullmq';
-import { CHANNEL_LABELS, getEnabledChannels, getPublisher } from '../channels/index.js';
+import { getEnabledAccountIdsForChannel } from '../accounts/channel-accounts.js';
+import { findAccountById } from '../accounts/repository.js';
+import { DEFAULT_ACCOUNT_ID } from '../accounts/types.js';
+import { CHANNEL_LABELS, getEnabledChannels } from '../channels/index.js';
 import type { Channel } from '../channels/types.js';
 import type { MlCoupon } from '../mercado-livre/types.js';
 import {
@@ -11,7 +14,7 @@ import {
   textMessageJobId,
 } from '../queue/index.js';
 import { logger } from '../utils/logger.js';
-import { getWhatsAppSocket } from '../whatsapp/index.js';
+import { getWhatsAppSocket, requireWhatsAppSocket, sendOffer } from '../whatsapp/index.js';
 import { formatCouponMessage } from './coupon-message.js';
 
 const IMMEDIATE_SEND_TIMEOUT_MS = 90_000;
@@ -24,44 +27,48 @@ function channelSendOrder(channels: Channel[]): Channel[] {
   });
 }
 
-async function sendTextMessageNow(channel: Channel, text: string): Promise<void> {
-  const publisher = getPublisher(channel);
-
-  if (channel === 'telegram') {
-    await publisher.publishText(text);
-    return;
-  }
-
-  if (getWhatsAppSocket()) {
-    await publisher.publishText(text);
-    return;
-  }
-
+async function sendTextMessageViaQueue(channel: Channel, accountId: string, text: string): Promise<void> {
   if (!isRedisEnabled()) {
-    throw new Error('Inicie o worker de WhatsApp em Configuração para enviar cupons.');
+    throw new Error('Inicie o worker em Configuração para enviar cupons.');
   }
 
-  const queue = getSenderQueue(channel);
-  const queueEvents = new QueueEvents(getSenderQueueName(channel), { connection: getQueueConnection() });
-  const suffix = `coupon-${Date.now()}`;
+  const queue = getSenderQueue(channel, accountId);
+  const queueEvents = new QueueEvents(getSenderQueueName(channel, accountId), { connection: getQueueConnection() });
+  const suffix = `coupon-${Date.now()}-${accountId}`;
 
   try {
     await queueEvents.waitUntilReady();
     const job = await queue.add(
       'send-text',
-      { text, force: true },
+      { text, force: true, accountId },
       { jobId: textMessageJobId(channel, suffix), priority: 1, ...SENDER_JOB_OPTIONS },
     );
     await job.waitUntilFinished(queueEvents, IMMEDIATE_SEND_TIMEOUT_MS);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (/timeout|timed out/i.test(message)) {
-      throw new Error('Tempo esgotado — reinicie o worker de WhatsApp em Configuração e tente de novo.');
+      throw new Error('Tempo esgotado — reinicie o worker em Configuração e tente de novo.');
     }
     throw error;
   } finally {
-    await queue.close();
     await queueEvents.close();
+  }
+}
+
+async function sendTextMessageNow(channel: Channel, text: string): Promise<void> {
+  const accountIds = await getEnabledAccountIdsForChannel(channel);
+
+  for (const accountId of accountIds) {
+    if (channel === 'whatsapp' && accountId === DEFAULT_ACCOUNT_ID && getWhatsAppSocket()) {
+      const account = await findAccountById(accountId);
+      if (account?.platform === 'whatsapp') {
+        const sock = await requireWhatsAppSocket();
+        await sendOffer(sock, account.config.channelId, null, text);
+        continue;
+      }
+    }
+
+    await sendTextMessageViaQueue(channel, accountId, text);
   }
 }
 

@@ -16,7 +16,9 @@ import type { Boom } from '@hapi/boom';
 import P from 'pino';
 import qrcode from 'qrcode-terminal';
 import { env } from '../config/env.js';
+import { DEFAULT_ACCOUNT_ID } from '../accounts/types.js';
 import { logger } from '../utils/logger.js';
+import { publishWhatsAppConnectState } from '../utils/redis-state.js';
 
 const LIBSIGNAL_NOISE = [
   'Closing open session in favor of incoming prekey bundle',
@@ -42,6 +44,29 @@ let socket: WASocket | undefined;
 let isConnecting = false;
 let allowReconnect = true;
 let qrListener: ((qr: string) => void) | undefined;
+
+let activeAuthPath = env.WHATSAPP_AUTH_PATH;
+
+/** Auth path da conta ativa neste processo (default: WHATSAPP_AUTH_PATH do .env). */
+export function getWhatsAppAuthPath(): string {
+  return activeAuthPath;
+}
+
+export function setWhatsAppAuthPath(authPath: string): void {
+  activeAuthPath = authPath;
+}
+
+function activeAccountId(): string {
+  return env.WORKER_ACCOUNT_ID || DEFAULT_ACCOUNT_ID;
+}
+
+function syncConnectStateToRedis(
+  status: 'idle' | 'connecting' | 'qr' | 'connected' | 'error',
+  qr: string | null = null,
+  error: string | null = null,
+): void {
+  void publishWhatsAppConnectState(activeAccountId(), { status, qr, error });
+}
 
 // --- Dono único da sessão (lock entre processos) -----------------------------
 // Só um processo pode manter o socket do WhatsApp aberto ao mesmo tempo; dois
@@ -81,7 +106,7 @@ interface OwnerLock {
 }
 
 function ownerLockPath(): string {
-  return path.join(env.WHATSAPP_AUTH_PATH, 'owner.lock');
+  return path.join(getWhatsAppAuthPath(), 'owner.lock');
 }
 
 async function readOwnerLock(): Promise<OwnerLock | null> {
@@ -151,7 +176,7 @@ export async function getWhatsAppOwnerStatus(): Promise<WhatsAppOwnerStatus> {
 
 async function writeOwnerLock(): Promise<void> {
   const payload: OwnerLock = { pid: process.pid, host: hostname(), heartbeat: new Date().toISOString() };
-  await mkdir(env.WHATSAPP_AUTH_PATH, { recursive: true }).catch(() => {});
+  await mkdir(getWhatsAppAuthPath(), { recursive: true }).catch(() => {});
   await writeFile(ownerLockPath(), JSON.stringify(payload)).catch(() => {});
 }
 
@@ -201,7 +226,7 @@ export function isNewsletterChannelId(channelId: string): boolean {
 
 export async function hasWhatsAppCredentials(): Promise<boolean> {
   try {
-    await access(path.join(env.WHATSAPP_AUTH_PATH, 'creds.json'));
+    await access(path.join(getWhatsAppAuthPath(), 'creds.json'));
     return true;
   } catch {
     return false;
@@ -212,9 +237,9 @@ export async function clearWhatsAppCredentials(): Promise<void> {
   socket = undefined;
   isConnecting = false;
   qrListener = undefined;
-  await rm(env.WHATSAPP_AUTH_PATH, { recursive: true, force: true });
+  await rm(getWhatsAppAuthPath(), { recursive: true, force: true });
   logger.warn(
-    { path: env.WHATSAPP_AUTH_PATH },
+    { path: getWhatsAppAuthPath() },
     'Credenciais do WhatsApp removidas — escaneie um novo QR para reconectar',
   );
 }
@@ -286,6 +311,7 @@ async function createSocket(
       logger.info('Aguardando leitura do QR code para autenticar o WhatsApp');
       printQrCode(qr);
       qrListener?.(qr);
+      syncConnectStateToRedis('qr', qr);
     }
 
     if (connection === 'open') {
@@ -294,6 +320,7 @@ async function createSocket(
       qrListener = undefined;
       void writeOwnerLock();
       startOwnerHeartbeat();
+      syncConnectStateToRedis('connected');
       logger.info('WhatsApp connected');
     }
 
@@ -308,6 +335,7 @@ async function createSocket(
         // Sessão morta. Sem apagar as credenciais, o Baileys nunca emite um novo
         // QR (ele insiste no creds.json inválido). Limpamos para permitir re-scan.
         logger.error('WhatsApp logged out — limpando credenciais para permitir novo QR');
+        syncConnectStateToRedis('error', null, 'Sessão encerrada — escaneie um novo QR');
         void releaseOwnerLock();
         void clearWhatsAppCredentials();
         return;
@@ -368,7 +396,8 @@ export async function connectWhatsApp(options?: ConnectWhatsAppOptions): Promise
 
   isConnecting = true;
   allowReconnect = true;
-  const { state, saveCreds } = await useMultiFileAuthState(env.WHATSAPP_AUTH_PATH);
+  syncConnectStateToRedis('connecting');
+  const { state, saveCreds } = await useMultiFileAuthState(getWhatsAppAuthPath());
   const sock = await createSocket(state, saveCreds);
 
   return new Promise((resolve, reject) => {

@@ -70,6 +70,7 @@ function renderTelegramWorkerCard(data: SettingsData): string {
     icon: TELEGRAM_ICON,
     status: worker.status,
     detail,
+    spawnEnabled: data.canSpawnWorkers,
   });
 }
 
@@ -77,11 +78,14 @@ export function renderOperationsSection(data: SettingsData): string {
   const worker = data.workerState;
   const running = worker.status === 'running' || worker.status === 'starting';
   const workerDetail = worker.detail ?? (running ? 'Processo de envio em execução' : 'Processo de envio parado');
+  const opsHint = data.canSpawnWorkers
+    ? 'Controle os processos do bot direto pelo painel. Os workers aqui são gerenciados por este painel — não rode um <code>npm run worker</code> no terminal ao mesmo tempo. Cada canal tem seu próprio worker: parar um não afeta o outro.'
+    : 'Workers rodam como serviços separados (Docker ou terminal). O painel apenas exibe o status via Redis e <code>owner.lock</code> — não inicia nem para processos.';
 
   return `
     <section class="connect-section">
       <h2>Operações</h2>
-      <p class="meta">Controle os processos do bot direto pelo painel. Os workers aqui são gerenciados por este painel — não rode um <code>npm run worker</code> no terminal ao mesmo tempo. Cada canal tem seu próprio worker: parar um não afeta o outro.</p>
+      <p class="meta">${opsHint}</p>
       <div class="connect-grid">
         ${renderWorkerCard({
           prefix: 'worker',
@@ -89,6 +93,7 @@ export function renderOperationsSection(data: SettingsData): string {
           icon: WORKER_ICON,
           status: worker.status,
           detail: workerDetail,
+          spawnEnabled: data.canSpawnWorkers,
         })}
         ${renderTelegramWorkerCard(data)}
         ${renderConnectCard({

@@ -1,5 +1,6 @@
 import { getEnabledChannels } from '../channels/index.js';
 import type { Channel } from '../channels/types.js';
+import { getEnabledAccountIdsForChannel } from '../accounts/channel-accounts.js';
 import { getBrandName } from '../config/brand-config.js';
 import { env } from '../config/env.js';
 import {
@@ -164,7 +165,10 @@ export async function dispatchAutoMessage(
   }
 
   for (const channel of channels) {
-    await enqueueAutoMessageSend(channel, autoMessageId, { force: options.force === true });
+    const accountIds = await getEnabledAccountIdsForChannel(channel);
+    for (const accountId of accountIds) {
+      await enqueueAutoMessageSend(channel, autoMessageId, accountId, { force: options.force === true });
+    }
   }
 
   logger.info({ autoMessageId, channels, force: options.force }, 'Auto message enqueued');
@@ -198,7 +202,10 @@ export async function scheduleAutoMessage(
   });
 
   for (const channel of channels) {
-    await enqueueScheduledAutoMessageSend(channel, autoMessageId, delayMs);
+    const accountIds = await getEnabledAccountIdsForChannel(channel);
+    for (const accountId of accountIds) {
+      await enqueueScheduledAutoMessageSend(channel, autoMessageId, delayMs, accountId);
+    }
   }
 
   logger.info({ autoMessageId, scheduledAt: scheduledAt.toISOString(), channels }, 'Auto message scheduled');

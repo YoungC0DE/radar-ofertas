@@ -95,6 +95,13 @@ const envSchema = z.object({
     .transform((val) => val === 'true' || val === '1'),
   MANAGER_PORT: z.coerce.number().int().positive().default(3000),
   MANAGER_TOKEN: z.string().optional(),
+  /** Permite o painel iniciar/parar workers via spawn (dev). Desligar em produção/Docker. */
+  MANAGER_CAN_SPAWN_WORKERS: z
+    .string()
+    .default('true')
+    .transform((val) => val === 'true' || val === '1'),
+  /** Conta que este worker de envio consome (fila e sessão). Default: `default`. */
+  WORKER_ACCOUNT_ID: z.string().default(''),
 })
   // Só exigimos as credenciais do Telegram quando o canal está ligado: quem roda
   // apenas o WhatsApp não precisa preencher nada no .env.

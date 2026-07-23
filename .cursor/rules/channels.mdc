@@ -1,6 +1,6 @@
 ---
 description: Regras dos canais de envio (WhatsApp, Telegram)
-globs: src/channels/**,src/telegram/**,src/worker.ts,src/worker-telegram.ts
+globs: src/channels/**,src/telegram/**,src/worker.ts,src/worker-telegram.ts,src/accounts/worker-publisher.ts
 alwaysApply: false
 ---
 
@@ -10,7 +10,8 @@ alwaysApply: false
 - `channels/types.ts` define o contrato `ChannelPublisher`; `channels/index.ts` registra os publishers.
 - `jobs/sender.ts` é genérico — recebe um publisher. Nunca colocar `if (channel === ...)` nele.
 - Publisher não tem regra de negócio: só conecta, valida e publica (`publish` para ofertas, `publishText` para texto livre).
-- Boot dos workers em `channels/worker-runner.ts` — entries (`worker*.ts`) só passam o publisher.
+- Boot dos workers em `channels/worker-runner.ts` — entries (`worker*.ts`) usam `accounts/worker-publisher.ts`.
+- `worker-runner.ts` publica heartbeat Redis a cada 10s (`redis-state.ts`).
 - Canal desligado (`isEnabled() === false`): não enfileira e o worker encerra com exit 0.
 
 ## Estado de envio
@@ -21,14 +22,14 @@ alwaysApply: false
 - Nunca decidir "já enviei?" por `Offer.sentAt` num caminho de canal.
 - Abrir a entrega antes de enfileirar (`dispatchOffer`).
 
-## Multi-conta (parcial)
+## Multi-conta
 
-`dispatchOffer` itera contas habilitadas por plataforma. Worker ainda opera só na conta `default` — ver `.cursor/docs/accounts.md`.
+`dispatchOffer` itera contas habilitadas por plataforma. Fila, sender e publishers propagam `accountId`. Worker consome conta via `WORKER_ACCOUNT_ID`. Spawn por conta no painel ainda pendente — ver `.cursor/docs/accounts.md`.
 
 ## Adicionar canal
 
 1. `ChannelPublisher` em `channels/<canal>-publisher.ts`
 2. Registrar em `CHANNELS` + `PUBLISHERS`
 3. Fila em `SENDER_QUEUE_NAMES` (`queue/index.ts`)
-4. Entry `worker-<canal>.ts` com `runChannelWorker(publisher)`
+4. Entry `worker-<canal>.ts` com `loadWorkerPublisher('<canal>')` + `runChannelWorker`
 5. Serviço no `docker-compose.yml` + script no `package.json`

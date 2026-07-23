@@ -43,6 +43,8 @@ export function stubEnv(overrides: Partial<Env> = {}): Env {
     },
     MANAGER_PORT: 3000,
     MANAGER_TOKEN: undefined,
+    MANAGER_CAN_SPAWN_WORKERS: true,
+    WORKER_ACCOUNT_ID: '',
     ...overrides,
   };
 

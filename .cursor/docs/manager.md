@@ -79,8 +79,8 @@ Tudo persiste na tabela `settings` e é lido pelos processos via cache:
 
 | Integração | Fluxo no painel | Persistência |
 |------------|-----------------|--------------|
-| WhatsApp | QR em Settings → Conectar | `WHATSAPP_AUTH_PATH` |
-| Mercado Livre | Navegador → login manual → "Salvar sessão" | `ML_AUTH_PATH` |
+| WhatsApp | QR em Settings → Conectar (lido do Redis, publicado pelo worker) | `WHATSAPP_AUTH_PATH` |
+| Mercado Livre | Navegador → login manual → "Salvar sessão" (single-node) | `ML_AUTH_PATH` |
 | Telegram | Validação via `npm run check` (token + chatId) | `.env` |
 
 APIs JSON de conexão:
@@ -95,20 +95,29 @@ APIs JSON de conexão:
 | `/manager/settings/connect/ml/status` | GET | Status do fluxo ML |
 | `/manager/settings/connect/telegram/status` | GET | Status da config Telegram |
 
-> O painel desconecta o socket WhatsApp após salvar credenciais — o **worker** é o único processo que mantém conexão ativa para envio.
+> O **worker** é dono da sessão WhatsApp. O QR e o status de conexão são publicados em Redis (`radar:connect:wa:{accountId}`) pelo worker; o painel apenas lê e renderiza (stateless, replicável).
 
-## Workers de envio (via painel)
+## Workers de envio
 
 O `npm run up` sobe collector + manager, **não** os workers — evita dois processos disputando a sessão WhatsApp.
 
+| Modo | Comportamento |
+|------|---------------|
+| Dev (`MANAGER_CAN_SPAWN_WORKERS=true`) | Painel pode iniciar/parar workers via spawn |
+| Produção/Docker (`MANAGER_CAN_SPAWN_WORKERS=false`) | Workers são serviços separados; painel só exibe status |
+
+Status derivado de:
+- **WhatsApp:** `owner.lock` na pasta de auth + heartbeat Redis (`radar:worker:{channel}:{accountId}`)
+- **Telegram:** heartbeat Redis
+
 | Endpoint | Método | Função |
 |----------|--------|--------|
-| `/manager/settings/worker/start` | POST | Inicia worker (`?channel=whatsapp\|telegram`) |
-| `/manager/settings/worker/stop` | POST | Encerra worker |
-| `/manager/settings/worker/restart` | POST | Reinicia worker |
-| `/manager/settings/worker/status` | GET | Status do processo |
+| `/manager/settings/worker/start` | POST | Inicia worker (`?channel=whatsapp\|telegram`) — só com spawn habilitado |
+| `/manager/settings/worker/stop` | POST | Encerra worker — só com spawn habilitado |
+| `/manager/settings/worker/restart` | POST | Reinicia worker — só com spawn habilitado |
+| `/manager/settings/worker/status` | GET | Status do processo (externo ou local) |
 
-Estado dos workers em memória (`process-model.ts`) — não sobrevive a restart do manager nem escala para múltiplas instâncias.
+Login ML (`connection-model.ts`) permanece stateful no processo do manager — operação single-node/dev.
 
 ## Segurança
 

@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Avaliação Técnica — Radar Ofertas</title>
+  <style>
+    @page { margin: 22mm 18mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      color: #1a1a2e;
+      line-height: 1.55;
+      font-size: 11pt;
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    h1 { font-size: 22pt; margin: 0 0 4px; color: #0f172a; }
+    .subtitle { color: #64748b; font-size: 10pt; margin-bottom: 28px; }
+    h2 { font-size: 14pt; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; margin-top: 28px; }
+    h3 { font-size: 11.5pt; color: #334155; margin-top: 18px; }
+    .scores {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      margin: 24px 0;
+    }
+    .score-card {
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 14px;
+      text-align: center;
+      background: #f8fafc;
+    }
+    .score-card .value { font-size: 24pt; font-weight: 700; color: #2563eb; line-height: 1; }
+    .score-card .label { font-size: 9pt; color: #64748b; margin-top: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .average {
+      text-align: center;
+      background: #0f172a;
+      color: #fff;
+      border-radius: 10px;
+      padding: 16px;
+      margin: 20px 0 28px;
+    }
+    .average .value { font-size: 32pt; font-weight: 700; }
+    .average .label { font-size: 10pt; opacity: 0.85; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 10pt; }
+    th, td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; }
+    th { background: #f1f5f9; font-weight: 600; }
+    ul { margin: 8px 0; padding-left: 20px; }
+    li { margin: 4px 0; }
+    .pro { color: #166534; }
+    .con { color: #991b1b; }
+    .tag { display: inline-block; background: #dbeafe; color: #1e40af; font-size: 8pt; padding: 2px 8px; border-radius: 99px; margin-right: 4px; }
+    .footer { margin-top: 36px; padding-top: 12px; border-top: 1px solid #e2e8f0; font-size: 9pt; color: #94a3b8; text-align: center; }
+    .bar-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; font-size: 10pt; }
+    .bar-label { width: 100px; flex-shrink: 0; }
+    .bar-track { flex: 1; height: 10px; background: #e2e8f0; border-radius: 5px; overflow: hidden; }
+    .bar-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #6366f1); border-radius: 5px; }
+    .bar-value { width: 36px; text-align: right; font-weight: 600; }
+    code { background: #f1f5f9; padding: 1px 5px; border-radius: 4px; font-size: 9pt; }
+    .page-break { page-break-before: always; }
+  </style>
+</head>
+<body>
+
+<h1>Avaliação Técnica</h1>
+<p class="subtitle">Radar Ofertas · Node.js / TypeScript · Julho 2026 · Análise pós Fases 1–4 (escalabilidade)</p>
+
+<div class="scores">
+  <div class="score-card"><div class="value">8,0</div><div class="label">Arquitetura</div></div>
+  <div class="score-card"><div class="value">7,5</div><div class="label">Qualidade</div></div>
+  <div class="score-card"><div class="value">8,5</div><div class="label">Organização</div></div>
+  <div class="score-card"><div class="value">7,0</div><div class="label">Escalabilidade</div></div>
+  <div class="score-card"><div class="value">5,5</div><div class="label">Segurança</div></div>
+</div>
+
+<div class="average">
+  <div class="value">7,3</div>
+  <div class="label">Média geral (5 dimensões)</div>
+</div>
+
+<div class="bar-row"><span class="bar-label">Arquitetura</span><div class="bar-track"><div class="bar-fill" style="width:80%"></div></div><span class="bar-value">8,0</span></div>
+<div class="bar-row"><span class="bar-label">Qualidade</span><div class="bar-track"><div class="bar-fill" style="width:75%"></div></div><span class="bar-value">7,5</span></div>
+<div class="bar-row"><span class="bar-label">Organização</span><div class="bar-track"><div class="bar-fill" style="width:85%"></div></div><span class="bar-value">8,5</span></div>
+<div class="bar-row"><span class="bar-label">Escalabilidade</span><div class="bar-track"><div class="bar-fill" style="width:70%"></div></div><span class="bar-value">7,0</span></div>
+<div class="bar-row"><span class="bar-label">Segurança</span><div class="bar-track"><div class="bar-fill" style="width:55%; background: linear-gradient(90deg, #f59e0b, #ef4444)"></div></div><span class="bar-value">5,5</span></div>
+
+<h2>Resumo executivo</h2>
+<p>
+  O <strong>Radar Ofertas</strong> é um bot de coleta e publicação de ofertas do Mercado Livre com painel administrativo,
+  filas BullMQ, PostgreSQL/Prisma e envio multi-canal (WhatsApp/Telegram). A base em <code>src/</code> segue
+  organização por domínio com separação clara entre regras de negócio, integrações e orquestração.
+</p>
+<p>
+  Após as Fases 1–4 de escalabilidade (pool de filas, multi-conta runtime, contas em Prisma, manager stateless),
+  o projeto evoluiu de um MVP operacional para uma base sólida single-tenant com caminho claro para N contas.
+  Os maiores gaps restantes são operacionais (spawn por conta, token Telegram) e de <strong>segurança</strong>
+  (painel sem CSRF, auth opcional, XSS em atributos JS) — adequado para rede confiável/VPN, não para exposição pública sem hardening.
+</p>
+
+<p>
+  <span class="tag">~102 arquivos src/</span>
+  <span class="tag">~62 arquivos manager/</span>
+  <span class="tag">12 testes unitários</span>
+  <span class="tag">TS strict</span>
+  <span class="tag">CI: tsc + test</span>
+</p>
+
+<h2>1. Arquitetura — 8,0 / 10</h2>
+
+<h3>Pontos fortes</h3>
+<ul>
+  <li class="pro"><strong>Processos separados:</strong> collector (<code>app.ts</code>), workers por canal (<code>worker.ts</code>, <code>worker-telegram.ts</code>), manager — cada um com entry point e fila própria.</li>
+  <li class="pro"><strong>Contrato de canal:</strong> <code>ChannelPublisher</code> em <code>channels/types.ts</code> — sender genérico (<code>jobs/sender.ts</code>) sem <code>if (whatsapp)</code>.</li>
+  <li class="pro"><strong>Delivery-first:</strong> <code>dispatchOffer</code> abre <code>OfferDelivery</code> antes de enfileirar — rastreabilidade e idempotência.</li>
+  <li class="pro"><strong>Fan-out multi-conta:</strong> enfileiramento por <code>(canal, accountId)</code> com filas nomeadas (<code>getSenderQueueName</code>).</li>
+  <li class="pro"><strong>Config runtime:</strong> score, brand, horários, templates em tabela <code>settings</code> com cache e fallback ENV.</li>
+  <li class="pro"><strong>Scraping híbrido:</strong> HTTP primeiro, Playwright fallback, circuit breaker — decisão documentada e implementada.</li>
+  <li class="pro"><strong>Manager como UI:</strong> MVC server-rendered reutiliza <code>src/</code>; regras de oferta não vivem no painel.</li>
+</ul>
+
+<h3>Pontos fracos</h3>
+<ul>
+  <li class="con">Login ML (Playwright) permanece stateful no manager — não replicável em cluster.</li>
+  <li class="con">Telegram multi-conta incompleto: token ainda lê <code>env.TELEGRAM_BOT_TOKEN</code> global.</li>
+  <li class="con">Collector + auto-messages no mesmo processo — acoplamento aceitável, mas limita escala independente.</li>
+  <li class="con"><code>telegram-publisher.ts</code> legado coexistindo com <code>publisher-factory.ts</code>.</li>
+</ul>
+
+<table>
+  <tr><th>Critério</th><th>Avaliação</th></tr>
+  <tr><td>Separação de domínios</td><td>Excelente — offers/, mercado-livre/, accounts/, channels/</td></tr>
+  <tr><td>Modelo de processos</td><td>Muito bom — Docker Compose com serviços independentes</td></tr>
+  <tr><td>Abstrações</td><td>Bom — ChannelPublisher, ServiceDeps, repository pattern</td></tr>
+  <tr><td>Acoplamento residual</td><td>Moderado — manager/process-model, Telegram token global</td></tr>
+</table>
+
+<h2>2. Qualidade de código — 7,5 / 10</h2>
+
+<h3>Pontos fortes</h3>
+<ul>
+  <li class="pro"><strong>TypeScript strict:</strong> <code>strict: true</code>, <code>noUnusedLocals</code>, <code>verbatimModuleSyntax</code>.</li>
+  <li class="pro"><strong>ENV com Zod:</strong> validação centralizada em <code>config/env.ts</code> com lazy proxy e stub para testes.</li>
+  <li class="pro"><strong>Testabilidade:</strong> <code>ServiceDeps</code> injetável; <code>service.test.ts</code> com 10+ casos.</li>
+  <li class="pro"><strong>Validação de contas:</strong> Zod em <code>account-config.ts</code> — shape tipado na leitura/gravação.</li>
+  <li class="pro"><strong>Error handling:</strong> <code>DelayedError</code> para pacing, circuit breaker ML, retries BullMQ (5x, backoff 30s).</li>
+  <li class="pro"><strong>Logger centralizado:</strong> pino em <code>utils/logger.ts</code> + log-store Redis.</li>
+  <li class="pro">Sem <code>@ts-ignore</code> ou <code>as any</code> espalhados — disciplina razoável.</li>
+</ul>
+
+<h3>Pontos fracos</h3>
+<ul>
+  <li class="con"><code>tsc</code> falha em ~14 erros (Baileys types, cheerio, manager unused imports) — gate de CI configurado mas código não limpo.</li>
+  <li class="con">12 testes unitários — bom para domínio crítico, mas sem cobertura de jobs/, whatsapp/, manager/.</li>
+  <li class="con">Sem ESLint/Prettier — estilo depende de convenção manual.</li>
+  <li class="con"><code>npm test</code> com glob falha no Windows (PowerShell).</li>
+  <li class="con"><code>accounts/repository.ts</code> silencia erro de DB e cai para ENV — pode mascarar falhas.</li>
+</ul>
+
+<table>
+  <tr><th>Área testada</th><th>Arquivos</th></tr>
+  <tr><td>Ofertas / score / sampling</td><td>service.test.ts, sampling.test.ts, message-template.test.ts</td></tr>
+  <tr><td>Mercado Livre</td><td>parser, circuit-breaker, category-url, coupon-parser</td></tr>
+  <tr><td>Contas / Redis</td><td>account-config.test.ts, redis-state.test.ts</td></tr>
+  <tr><td>Sem testes</td><td>jobs/, whatsapp/, telegram/, manager/</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<h2>3. Organização — 8,5 / 10</h2>
+
+<h3>Pontos fortes</h3>
+<ul>
+  <li class="pro">Estrutura por domínio previsível — alinhada a <code>.cursor/rules/architecture.mdc</code>.</li>
+  <li class="pro">Naming consistente: <code>kebab-case</code> em arquivos, <code>camelCase</code> em funções, <code>PascalCase</code> em tipos.</li>
+  <li class="pro">Imports NodeNext com extensão <code>.js</code> — padrão ESM correto.</li>
+  <li class="pro">Manager MVC bem decomposto: controllers finos, models por página, views em seções/components.</li>
+  <li class="pro">Documentação interna rica em <code>.cursor/docs/</code> — architecture, accounts, queues, manager, deployment.</li>
+  <li class="pro">Migrations versionadas; schema Prisma com índices adequados.</li>
+</ul>
+
+<h3>Pontos fracos</h3>
+<ul>
+  <li class="con"><code>manager/routes/</code> é thin re-export de <code>http/routes/</code> — camada duplicada.</li>
+  <li class="con">Build <code>tsc</code> compila só <code>src/</code>; manager roda via <code>tsx</code> — sem artefato compilado do painel.</li>
+  <li class="con">Alguns arquivos legados coexistem com factories novas (publishers).</li>
+</ul>
+
+<table>
+  <tr><th>Domínio</th><th>Arquivos (~)</th><th>Responsabilidade</th></tr>
+  <tr><td>mercado-livre/</td><td>16</td><td>Scraping, afiliado, cupons</td></tr>
+  <tr><td>offers/</td><td>12</td><td>Regras de negócio, persistência</td></tr>
+  <tr><td>accounts/</td><td>9</td><td>Multi-conta, paths, Zod</td></tr>
+  <tr><td>channels/</td><td>6</td><td>Contrato + publishers</td></tr>
+  <tr><td>manager/</td><td>62</td><td>Painel MVC (~54 rotas)</td></tr>
+</table>
+
+<h2>4. Escalabilidade — 7,0 / 10</h2>
+
+<h3>O que escala bem (pós Fases 1–4)</h3>
+<ul>
+  <li class="pro"><strong>Pool de filas BullMQ:</strong> <code>getQueue()</code> reutilizável — sem overhead de criar/fechar Queue a cada enqueue.</li>
+  <li class="pro"><strong>Filas por conta:</strong> <code>offer-sender-{accountId}</code> — isolamento de jobs por conta.</li>
+  <li class="pro"><strong>Contas em Prisma:</strong> tabela <code>accounts</code> com validação Zod — base para FKs futuras.</li>
+  <li class="pro"><strong>Manager stateless:</strong> <code>MANAGER_CAN_SPAWN_WORKERS=false</code> no Docker; status via Redis + <code>owner.lock</code>.</li>
+  <li class="pro"><strong>QR/status no Redis:</strong> <code>radar:connect:wa:{accountId}</code> — painel replicável atrás de load balancer.</li>
+  <li class="pro"><strong>Heartbeat worker:</strong> <code>radar:worker:{channel}:{accountId}</code> — detecção cross-process.</li>
+  <li class="pro"><strong>Delivery por conta:</strong> unique <code>(offer_id, channel, account_id)</code> — fonte da verdade granular.</li>
+</ul>
+
+<h3>Gargalos e limites</h3>
+<ul>
+  <li class="con"><strong>WhatsApp:</strong> 1 sessão Baileys = 1 processo — não escala horizontalmente no mesmo número.</li>
+  <li class="con"><strong>Collector singleton:</strong> um worker <code>offer-collector</code>; Playwright é CPU/RAM pesado.</li>
+  <li class="con"><strong>Pacing in-process:</strong> <code>lastPacedSendAt</code> em memória — race se <code>senderConcurrency &gt; 1</code>.</li>
+  <li class="con"><strong>Spawn por conta:</strong> painel ainda não sobe workers com <code>WORKER_ACCOUNT_ID</code> — manual via Docker/terminal.</li>
+  <li class="con"><strong>Caches locais:</strong> accounts, queue-config, metrics — inconsistentes entre réplicas sem Redis.</li>
+  <li class="con"><strong>Auth manager:</strong> <code>MANAGER_TOKEN</code> opcional — acesso livre se ausente.</li>
+</ul>
+
+<table>
+  <tr><th>Componente</th><th>Escala horizontal?</th><th>Nota</th></tr>
+  <tr><td>Collector (app)</td><td>Parcial</td><td>Repeat job único; scraping pesado</td></tr>
+  <tr><td>Worker WhatsApp</td><td>Não (por sessão)</td><td>Lock de dono + Baileys</td></tr>
+  <tr><td>Worker Telegram</td><td>Sim (por conta)</td><td>Bot API stateless</td></tr>
+  <tr><td>Manager</td><td>Sim (pós Fase 4)</td><td>Redis + spawn desligado</td></tr>
+  <tr><td>PostgreSQL</td><td>Sim</td><td>Prisma + índices adequados</td></tr>
+  <tr><td>Redis</td><td>Sim</td><td>BullMQ + estado compartilhado</td></tr>
+</table>
+
+<h2>5. Segurança — 5,5 / 10</h2>
+
+<p>
+  O projeto foi desenhado como ferramenta operacional para uso local ou em rede confiável (VPN).
+  Para exposição na internet pública, há débitos significativos que precisam ser endereçados antes de produção.
+</p>
+
+<h3>Pontos fortes</h3>
+<ul>
+  <li class="pro"><strong>ORM parametrizado:</strong> Prisma em todo acesso a dados — sem SQL injection em regras de negócio. Raw queries só em <code>preflight.ts</code> com tagged templates.</li>
+  <li class="pro"><strong>Validação de entrada:</strong> Zod em <code>config/env.ts</code> e <code>account-config.ts</code> — shape tipado na leitura/gravação.</li>
+  <li class="pro"><strong>Escape HTML server-side:</strong> <code>escapeHtml()</code> em views do manager — mitiga XSS em conteúdo renderizado.</li>
+  <li class="pro"><strong>Path traversal bloqueado:</strong> <code>manager/http/static.ts</code> normaliza path e valida prefixo do diretório público.</li>
+  <li class="pro"><strong>Lock de sessão WhatsApp:</strong> <code>owner.lock</code> impede dois processos na mesma sessão Baileys — reduz hijack acidental.</li>
+  <li class="pro"><strong>Segredos fora do código:</strong> credenciais em <code>.env</code> (não commitado); <code>.env.example</code> sem valores reais.</li>
+  <li class="pro"><strong>Auth opcional documentada:</strong> <code>MANAGER_TOKEN</code> com Bearer ou query param — consciente do trade-off dev vs prod.</li>
+</ul>
+
+<h3>Vulnerabilidades e riscos</h3>
+
+<table>
+  <tr><th>Área</th><th>Risco</th><th>Evidência</th></tr>
+  <tr>
+    <td>Autenticação</td>
+    <td><strong>Alto</strong> se exposto</td>
+    <td><code>isAuthorized()</code> retorna <code>true</code> quando <code>MANAGER_TOKEN</code> não está definido — painel aberto por padrão</td>
+  </tr>
+  <tr>
+    <td>CSRF</td>
+    <td><strong>Alto</strong></td>
+    <td>Nenhum token CSRF nos ~20 POSTs destrutivos (delete oferta, contas, workers, settings)</td>
+  </tr>
+  <tr>
+    <td>XSS</td>
+    <td><strong>Médio</strong></td>
+    <td><code>escapeHtml</code> não escapa <code>'</code> — <code>accounts.ts</code> L60: <code>onsubmit="confirm('…${label}')"</code> quebrável com aspas no nome da conta</td>
+  </tr>
+  <tr>
+    <td>Token em URL</td>
+    <td><strong>Médio</strong></td>
+    <td><code>?token=</code> vaza em logs de servidor, histórico do browser e header Referer</td>
+  </tr>
+  <tr>
+    <td>DoS</td>
+    <td><strong>Médio</strong></td>
+    <td><code>readFormBody()</code> sem limite de tamanho — POST grande pode esgotar memória</td>
+  </tr>
+  <tr>
+    <td>Segredos em disco</td>
+    <td><strong>Médio</strong></td>
+    <td>Credenciais WhatsApp (<code>data/auth_*</code>), sessão ML e tokens Telegram em <code>accounts.config</code> JSON — sem criptografia at rest</td>
+  </tr>
+  <tr>
+    <td>Redis/Postgres</td>
+    <td><strong>Médio</strong> em dev</td>
+    <td>Docker Compose expõe portas 5432/6379 no host; Redis sem senha por padrão; QR WhatsApp legível em <code>radar:connect:wa:*</code></td>
+  </tr>
+  <tr>
+    <td>Headers HTTP</td>
+    <td><strong>Baixo–Médio</strong></td>
+    <td>Sem CSP, HSTS, X-Frame-Options ou X-Content-Type-Options no manager</td>
+  </tr>
+  <tr>
+    <td>Rate limiting</td>
+    <td><strong>Baixo–Médio</strong></td>
+    <td>Nenhum throttling em rotas do painel ou APIs JSON (<code>/manager/api/*</code>)</td>
+  </tr>
+  <tr>
+    <td>Client-side JS</td>
+    <td><strong>Baixo</strong></td>
+    <td><code>innerHTML</code> em <code>settings.js</code> e <code>polling.js</code> — dados majoritariamente controlados, mas padrão arriscado</td>
+  </tr>
+</table>
+
+<h3>Superfície de ataque por componente</h3>
+<table>
+  <tr><th>Componente</th><th>Exposto?</th><th>Proteção atual</th></tr>
+  <tr><td>Manager HTTP</td><td>Sim (porta 3000)</td><td>Token opcional; sem CSRF/rate limit</td></tr>
+  <tr><td>PostgreSQL</td><td>Dev: sim (5432)</td><td>Senha via ENV; Prisma ORM</td></tr>
+  <tr><td>Redis</td><td>Dev: sim (6379)</td><td>Sem auth default; estado QR/worker legível</td></tr>
+  <tr><td>Workers</td><td>Não (sem HTTP)</td><td>Processo interno; sessões em disco</td></tr>
+  <tr><td>Collector</td><td>Não (sem HTTP)</td><td>Só consome filas</td></tr>
+  <tr><td>Scraping ML</td><td>Outbound</td><td>User-agent configurável; circuit breaker</td></tr>
+</table>
+
+<h3>Recomendações prioritárias (segurança)</h3>
+<ol>
+  <li><strong><code>MANAGER_TOKEN</code> obrigatório em produção</strong> — validar no preflight profile <code>manager</code>; rejeitar boot sem token se <code>NODE_ENV=production</code>.</li>
+  <li><strong>CSRF tokens</strong> em todos os POSTs destrutivos — especialmente delete de ofertas e contas.</li>
+  <li><strong>Corrigir XSS em <code>accounts.ts</code></strong> — escapar <code>'</code> em <code>escapeHtml</code> ou remover <code>onsubmit</code> inline (usar <code>data-*</code> + JS).</li>
+  <li><strong>Migrar auth para cookie HttpOnly</strong> — eliminar <code>?token=</code> na URL; propagar sessão nos forms.</li>
+  <li><strong>Limitar <code>readFormBody</code></strong> — cap de 1 MB; retornar 413 se exceder.</li>
+  <li><strong>Redis/Postgres</strong> — não expor portas em produção; Redis com <code>requirepass</code>; rede interna Docker.</li>
+  <li><strong>Headers de segurança</strong> — CSP, X-Frame-Options, HSTS via reverse proxy (nginx/Caddy) ou middleware.</li>
+</ol>
+
+<div class="page-break"></div>
+
+<h2>Comparativo — antes vs depois das Fases 1–4</h2>
+<table>
+  <tr><th>Aspecto</th><th>Antes</th><th>Depois</th></tr>
+  <tr><td>Filas BullMQ</td><td>Criar/fechar Queue a cada enqueue</td><td>Pool reutilizável (<code>getQueue</code>)</td></tr>
+  <tr><td>Multi-conta</td><td>Só dispatch; worker usava default</td><td>Fila + sender + publisher por accountId</td></tr>
+  <tr><td>Contas</td><td>JSON em settings</td><td>Tabela Prisma + Zod</td></tr>
+  <tr><td>Manager</td><td>Estado em memória (workers, QR)</td><td>Redis + owner.lock; spawn condicional</td></tr>
+  <tr><td>Escalabilidade manager</td><td>1 réplica</td><td>N réplicas possíveis</td></tr>
+</table>
+
+<h2>Top 6 prioridades</h2>
+<ol>
+  <li><strong>Endurecer segurança do painel</strong> — CSRF, <code>MANAGER_TOKEN</code> obrigatório, fix XSS em <code>accounts.ts</code>.</li>
+  <li><strong>Corrigir <code>tsc</code></strong> — erros Baileys/cheerio/manager bloqueiam gate de qualidade.</li>
+  <li><strong>Spawn workers por conta</strong> — <code>process-model.ts</code> + templates Docker com <code>WORKER_ACCOUNT_ID</code>.</li>
+  <li><strong>Telegram multi-conta</strong> — <code>botToken</code> por conta no publisher.</li>
+  <li><strong>Expandir testes</strong> — jobs/sender, integração queue; glob cross-platform.</li>
+  <li><strong>Limitar <code>readFormBody</code></strong> e adicionar rate limiting no manager.</li>
+</ol>
+
+<h2>Conclusão</h2>
+<p>
+  O Radar Ofertas apresenta <strong>arquitetura madura para o escopo atual</strong> — coleta ML, filas, envio multi-canal
+  e painel administrativo — com decisões conscientes no código (delivery antes do enqueue, filas por canal/conta,
+  affiliate link lazy, scraping híbrido). A organização é um dos pontos mais fortes do projeto.
+</p>
+<p>
+  A qualidade de código é boa no núcleo (<code>src/</code>), com TypeScript rigoroso e testes nos domínios críticos,
+  mas perde pontos por dívidas de tipagem no manager/Baileys e cobertura estreita fora de <code>offers/</code> e
+  <code>mercado-livre/</code>.
+</p>
+<p>
+  A escalabilidade melhorou significativamente com as Fases 1–4, mas limites reais permanecem: WhatsApp é
+  intrinsecamente single-process por sessão, o collector é singleton, e multi-conta ainda exige operação manual
+  para contas adicionais.
+</p>
+<p>
+  Em <strong>segurança</strong>, o projeto está adequado para uso em ambiente controlado (localhost, VPN, rede interna),
+  mas <strong>não está pronto para exposição pública</strong> sem implementar CSRF, auth obrigatória, correção de XSS
+  e isolamento de Redis/Postgres. A nota 5,5 reflete essa distinção: boas práticas no núcleo (Prisma, Zod, escape HTML),
+  mas superfície de ataque significativa no painel administrativo.
+</p>
+
+<div class="footer">
+  Radar Ofertas — Avaliação técnica gerada em 23/07/2026 · Baseada em análise estática do código e documentação em .cursor/
+</div>
+
+</body>
+</html>

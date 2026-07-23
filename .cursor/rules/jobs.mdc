@@ -8,6 +8,7 @@ alwaysApply: false
 
 - Processos assíncronos em `jobs/` (collector, sender).
 - Configuração de filas em `queue/`; agendamento em `queue/sender-schedule.ts`.
+- Pool de filas reutilizáveis via `getQueue(name)` — `closeAllQueues()` no shutdown.
 - Collector consulta Mercado Livre via scraping híbrido (`mercado-livre/`) e processa auto-messages due; sender publica — nunca enviar direto após coleta.
 - Jobs idempotentes: verificar estado antes de agir.
 - Intervalos e janela operacional: `queue-config-store.ts` (DB → cache → fallback ENV).
@@ -18,25 +19,25 @@ alwaysApply: false
 - `offer-collector` — repeatable, processo `app.ts`.
 - `offer-sender` — standard, processo `worker.ts` (WhatsApp).
 - `offer-sender-telegram` — standard, processo `worker-telegram.ts`.
-- `offer-sender-{accountId}` / `offer-sender-telegram-{accountId}` — suportados em `getSenderQueueName`, mas enqueue ainda não usa.
+- `offer-sender-{accountId}` / `offer-sender-telegram-{accountId}` — filas por conta não-default.
 
-Uma fila por canal (futuramente por conta). Job id determinístico via `senderJobId(channel, offerId, accountId)`. Estado do envio em `OfferDelivery`, não em `Offer.sentAt`.
+Uma fila por canal e conta. Job id determinístico via `senderJobId(channel, offerId, accountId)`. Estado do envio em `OfferDelivery`, não em `Offer.sentAt`.
 
 ## Tipos de job no sender
 
 | Payload | Uso |
 |---------|-----|
-| `{ offerId }` | Envio de oferta |
-| `{ autoMessageId }` | Mensagem automática |
-| `{ text }` | Texto livre (cupons, manual) |
+| `{ offerId, accountId? }` | Envio de oferta |
+| `{ autoMessageId, accountId? }` | Mensagem automática |
+| `{ text, accountId? }` | Texto livre (cupons, manual) |
 
 ## Janela operacional
 
 Sender respeita `operatingHoursStart`/`operatingHoursEnd` (timezone `APP_TIMEZONE`). Jobs fora da janela ficam delayed até o próximo horário válido.
 
-## Multi-conta (débito)
+## Multi-conta
 
-`dispatchOffer` enfileira com `accountId`, mas `enqueueOfferSend` chama `getSenderQueue(channel)` sem accountId, e `jobs/sender.ts` usa `findDelivery(offerId, channel)` sem accountId. Corrigir antes de usar contas não-default.
+`dispatchOffer` enfileira com `accountId` via `getSenderQueue(channel, accountId)`. `jobs/sender.ts` lê `accountId` do job e usa em `findDelivery` / `markOfferDelivered`. Worker consome conta via `WORKER_ACCOUNT_ID`.
 
 ## Retry
 

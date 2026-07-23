@@ -52,6 +52,7 @@ export function renderSettingsPage(data: SettingsData): string {
     ${pageData('settings-page-data', {
       brandInitial: data.brandInitial,
       brandLogoHref: data.brandLogoHref,
+      canSpawnWorkers: data.canSpawnWorkers,
     })}
     ${pageScripts('shared/modal.js', 'shared/polling.js', 'settings.js')}`;
 

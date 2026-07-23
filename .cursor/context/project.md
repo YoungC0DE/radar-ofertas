@@ -21,8 +21,10 @@ Bot automatizado: **Mercado Livre → ofertas → canais (WhatsApp / Telegram)**
 | Sessão de afiliado persistida em arquivos locais | ✅ Adotada |
 | Config runtime em tabela `settings` (editável pelo manager) | ✅ Adotada |
 | Um canal = um processo = uma fila BullMQ | ✅ Adotada |
-| Worker gerenciado pelo painel (evita conflito WhatsApp) | ✅ Adotada |
-| Multi-conta por plataforma | 🟡 Parcial (schema + UI + dispatch; worker ainda usa `default`) |
+| Contas em tabela Prisma `accounts` | ✅ Adotada |
+| Multi-conta runtime (`WORKER_ACCOUNT_ID`, fila/sender por conta) | ✅ Adotada |
+| Manager stateless em produção (Redis + `owner.lock`) | ✅ Adotada |
+| Pool de filas BullMQ reutilizáveis | ✅ Adotada |
 | API Oficial do Mercado Livre | ❌ Descartada |
 
 ### Dois subsistemas no domínio `mercado-livre/`
@@ -48,11 +50,20 @@ Bot automatizado: **Mercado Livre → ofertas → canais (WhatsApp / Telegram)**
 
 ### Domínio `accounts/`
 
-Preparação para múltiplas contas por plataforma (WhatsApp, Telegram, ML). Persistência em `settings.accounts` (JSON). Conta `default` espelha o `.env`.
+Múltiplas contas por plataforma (WhatsApp, Telegram, ML). Persistência na tabela Prisma `accounts` com validação Zod de `config`. Conta `default` espelha o `.env`. Workers consomem conta via `WORKER_ACCOUNT_ID`.
 
 ### Domínio `channels/`
 
-Contrato `ChannelPublisher`, publishers WhatsApp/Telegram, factory e `worker-runner.ts` compartilhado.
+Contrato `ChannelPublisher`, publishers WhatsApp/Telegram, `publisher-factory.ts`, `worker-publisher.ts` e `worker-runner.ts` compartilhado (com heartbeat Redis).
+
+### Utils compartilhados (`utils/`)
+
+| Arquivo | Responsabilidade |
+|---------|------------------|
+| `logger.ts` | Pino centralizado |
+| `log-store.ts` | Logs compartilhados via Redis (`radar:app-logs`) |
+| `redis-state.ts` | Heartbeat de worker + QR/status WhatsApp no Redis |
+| `datetime.ts` | Timezone e janela operacional |
 
 ### Módulo `mercado-livre/`
 
@@ -75,6 +86,8 @@ mercado-livre/
 
 Painel MVC server-rendered: dashboard, ofertas, cupons, contas, fontes por canal, settings, template (ofertas + cupons + auto-messages), logs.
 
+Em **produção/Docker**: manager é leitor de estado (Redis + `owner.lock`), não spawna workers (`MANAGER_CAN_SPAWN_WORKERS=false`).
+
 ## Fluxo da aplicação
 
 ```
@@ -92,7 +105,7 @@ Deduplicação (mercado_livre_id unique + title+price)
         ↓
 Persistência + dispatchOffer (fan-out por canal × conta)
         ↓
-Filas BullMQ (offer-sender / offer-sender-telegram)
+Filas BullMQ (offer-sender / offer-sender-telegram / sufixo por accountId)
         ↓
 Envio via ChannelPublisher (WhatsApp Baileys / Telegram Bot API)
 ```
@@ -102,11 +115,13 @@ Envio via ChannelPublisher (WhatsApp Baileys / Telegram Bot API)
 | Entry | Comando | Função |
 |-------|---------|--------|
 | `app.ts` | `npm run dev` | Collector — agenda coleta, processa fila `offer-collector` |
-| `worker.ts` | `npm run worker` | Sender WhatsApp — fila `offer-sender` |
+| `worker.ts` | `npm run worker` | Sender WhatsApp — fila `offer-sender` (ou `offer-sender-{accountId}`) |
 | `worker-telegram.ts` | `npm run worker:telegram` | Sender Telegram — fila `offer-sender-telegram` |
 | `ml-login.ts` | `npm run ml:login` | Login afiliado ML — salva sessão em `ML_AUTH_PATH` |
 | `manager/server.ts` | `npm run manager` | Painel web em `/manager` |
-| `scripts/up.ts` | `npm run up` | Sobe collector + manager (workers via painel) |
+| `scripts/up.ts` | `npm run up` | Sobe collector + manager |
+
+Workers em produção: serviços Docker (`worker`, `worker-telegram`). Em dev: spawn pelo painel (`MANAGER_CAN_SPAWN_WORKERS=true`) ou `npm run worker` no terminal.
 
 ## Integrações
 
@@ -116,7 +131,7 @@ Envio via ChannelPublisher (WhatsApp Baileys / Telegram Bot API)
 | Mercado Livre (afiliado) | `mercado-livre/affiliate-link` | HTTP + cookies / Playwright |
 | Mercado Livre (cupons) | `mercado-livre/coupons` | HTTP + parse / Playwright |
 | PostgreSQL | `database/` + `offers/repository.ts` | Prisma ORM |
-| Redis | `queue/` | BullMQ |
+| Redis | `queue/` + `utils/log-store.ts` + `utils/redis-state.ts` | BullMQ + estado compartilhado |
 | WhatsApp | `whatsapp/` + `channels/whatsapp-publisher` | Baileys |
 | Telegram | `telegram/` + `channels/telegram-publisher` | Bot API (fetch) |
 
@@ -124,7 +139,7 @@ Envio via ChannelPublisher (WhatsApp Baileys / Telegram Bot API)
 
 - TypeScript `strict: true`; checagem de tipos via `npx tsc -p tsconfig.check.json` (inclui `src/` e `manager/`).
 - CI GitHub Actions: `npm ci` → `tsc` → `npm test` (`.github/workflows/ci.yml`).
-- 10 arquivos de teste unitário (`node:test` + `assert`).
+- 12 arquivos de teste unitário (`node:test` + `assert`).
 
 ## Requisitos
 
@@ -138,4 +153,4 @@ Envio via ChannelPublisher (WhatsApp Baileys / Telegram Bot API)
 
 Ver `.cursor/IMPLEMENTATION_BOARD.md` para status detalhado de tarefas.
 
-**Débito principal:** multi-conta incompleto — `dispatchOffer` enfileira com `accountId`, mas `getSenderQueue(channel)` e `jobs/sender.ts` ainda operam na conta `default`.
+**Débito principal:** painel ainda não spawna workers por conta habilitada — usar `WORKER_ACCOUNT_ID=x npm run worker` manualmente para contas adicionais.

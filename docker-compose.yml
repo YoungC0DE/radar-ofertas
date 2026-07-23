@@ -98,6 +98,7 @@ services:
     environment:
       <<: *app-environment
       MANAGER_PORT: "3000"
+      MANAGER_CAN_SPAWN_WORKERS: "false"
       SKIP_MIGRATIONS: "true"
 
 volumes:

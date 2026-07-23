@@ -18,7 +18,7 @@ src/
 │   ├── ml-sources-config.ts
 │   ├── queue-config-store.ts
 │   └── coupons-config-store.ts
-├── accounts/           → multi-conta (JSON em settings)
+├── accounts/           → multi-conta (tabela Prisma `accounts`)
 ├── channels/           → contrato de canal + publishers + worker-runner
 ├── whatsapp/           → Baileys + channel-cache
 ├── telegram/           → Bot API (fetch)
@@ -29,7 +29,7 @@ src/
 ├── queue/              → filas Redis + sender-schedule
 ├── database/           → Prisma
 ├── scripts/            → preflight, up
-└── utils/              → logger, datetime, log-store, metrics
+└── utils/              → logger, datetime, log-store, redis-state, metrics
 
 manager/                → painel web (MVC)
 ├── server.ts
@@ -68,18 +68,18 @@ Parâmetros operacionais (score, intervalos, horários, templates, brand, fontes
 | Collector | `app.ts` | Coleta periódica + enfileiramento + auto-messages due |
 | Sender WhatsApp | `worker.ts` | Envio WhatsApp com janela operacional |
 | Sender Telegram | `worker-telegram.ts` | Envio Telegram com janela operacional |
-| Manager | `manager/server.ts` | Painel admin + conexões + controle dos workers |
+| Manager | `manager/server.ts` | Painel admin — leitor de estado em produção |
 | ML Login | `ml-login.ts` | Setup manual de sessão afiliado (CLI) |
 
-O `npm run up` sobe collector + manager. Os workers são iniciados pelo painel para evitar conflito de sessão WhatsApp.
+O `npm run up` sobe collector + manager. Em **dev** (`MANAGER_CAN_SPAWN_WORKERS=true`), o painel pode spawnar workers. Em **produção/Docker**, workers são serviços separados (`worker`, `worker-telegram`).
 
 ### Um canal, um processo
 
 Cada canal de envio roda no seu próprio processo, com fila própria, e implementa o contrato `ChannelPublisher`. Falha isolada: uma queda do WhatsApp não impede o Telegram de publicar. O estado de envio é por `(canal, conta)` em `OfferDelivery` — ver [Canais](./channels.md).
 
-### Multi-conta (parcial)
+### Multi-conta
 
-Domínio `accounts/` + UI no manager + `account_id` em `offer_deliveries` + fan-out em `dispatchOffer`. Worker e fila ainda não propagam `accountId` — ver [Contas](./accounts.md).
+Domínio `accounts/` + tabela Prisma `accounts` + `account_id` em `offer_deliveries` + fan-out em `dispatchOffer`. Runtime completo: fila, sender e publishers por `accountId` via `WORKER_ACCOUNT_ID`. Pendente: spawn de workers por conta no painel — ver [Contas](./accounts.md).
 
 ## Fluxo completo
 
@@ -95,15 +95,16 @@ flowchart TD
     F --> H[offer-sender-telegram → worker-telegram.ts]
     G --> I[message-template + whatsapp/]
     H --> J[message-template + telegram/]
-    K[manager/] -.->|edita settings + conexões| L[(PostgreSQL)]
-    K -.->|inicia workers| F
+    K[manager/] -.->|edita settings + lê estado Redis| L[(PostgreSQL)]
+    W[worker] -.->|heartbeat + QR| R[(Redis)]
+    K -.->|lê estado| R
 ```
 
 ## Qualidade e CI
 
 - TypeScript `strict: true`; `tsconfig.check.json` inclui `src/` e `manager/`.
 - CI: `.github/workflows/ci.yml` — `npm ci` → `tsc` → `npm test`.
-- 10 testes unitários (`node:test`); cobertura em parser, score, sampling, circuit-breaker, coupon-parser.
+- 12 testes unitários (`node:test`); cobertura em parser, score, sampling, circuit-breaker, coupon-parser, account-config, redis-state.
 
 ## Princípios
 
@@ -111,7 +112,7 @@ flowchart TD
 - Sessão de afiliado em disco (`./data/ml_auth/`), nunca hardcoded.
 - Regras de negócio apenas em `offers/`, `auto-messages/` e `config/score-config.ts`.
 - Manager apenas orquestra UI — reutiliza `src/`.
-- Um único processo mantém conexão WhatsApp ativa por sessão (worker + lock de dono).
+- Um único processo mantém conexão WhatsApp ativa por sessão (worker + lock de dono + QR no Redis).
 - Um canal, um processo — o envio de um canal nunca derruba o outro.
 - Playwright não roda em cada ciclo de coleta — apenas fallback.
 

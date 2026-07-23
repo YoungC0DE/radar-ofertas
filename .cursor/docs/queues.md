@@ -7,12 +7,16 @@ Configuração em `src/queue/index.ts`. Agendamento de envio em `src/queue/sende
 | Nome | Tipo | Processo | Descrição |
 |------|------|----------|-----------|
 | `offer-collector` | Repeatable | `app.ts` | Coleta periódica via scraping ML |
-| `offer-sender` | Standard | `worker.ts` | Envio individual ao WhatsApp |
-| `offer-sender-telegram` | Standard | `worker-telegram.ts` | Envio individual ao Telegram |
-| `offer-sender-{accountId}` | Standard | (futuro) | Fila por conta WhatsApp não-default |
-| `offer-sender-telegram-{accountId}` | Standard | (futuro) | Fila por conta Telegram não-default |
+| `offer-sender` | Standard | `worker.ts` | Envio WhatsApp (conta `default`) |
+| `offer-sender-telegram` | Standard | `worker-telegram.ts` | Envio Telegram (conta `default`) |
+| `offer-sender-{accountId}` | Standard | `worker.ts` | Fila por conta WhatsApp não-default |
+| `offer-sender-telegram-{accountId}` | Standard | `worker-telegram.ts` | Fila por conta Telegram não-default |
 
-Uma fila por canal (e futuramente por conta). Cada worker tem seu ritmo e suas falhas isoladas. Ver [Canais](./channels.md).
+Uma fila por canal e por conta. Cada worker tem seu ritmo e suas falhas isoladas. Ver [Canais](./channels.md).
+
+## Pool de filas
+
+Instâncias `Queue` são reutilizadas via `getQueue(name)` — cache em memória com `closeAllQueues()` no shutdown. Evita overhead de criar/fechar conexão a cada `enqueue*`.
 
 ## Config runtime
 
@@ -67,14 +71,15 @@ O mesmo código (`jobs/sender.ts`) roda para todos os canais — muda só o `Cha
 | Campo | Uso |
 |-------|-----|
 | `offerId` | Envio de oferta |
+| `accountId` | Conta de envio (default: `'default'`) |
 | `autoMessageId` | Mensagem automática agendada |
 | `text` | Texto livre (cupons, envio manual) |
 | `force` | Ignora pacing/janela |
 
 Fluxo de oferta:
 
-1. Recebe `{ offerId }` da fila **daquele canal**.
-2. Verifica se a oferta existe e se a entrega **deste canal** ainda não foi concluída.
+1. Recebe `{ offerId, accountId? }` da fila **daquele canal e conta**.
+2. Verifica se a oferta existe e se a entrega **deste canal e conta** ainda não foi concluída.
 3. Gera link afiliado sob demanda se ainda não existir (timeout 10s, sem browser).
 4. Formata mensagem via `message-template` e publica pelo publisher do canal.
 5. Fecha a `OfferDelivery` com `sent_at` + `message_id` e aplica delay entre envios.
@@ -96,13 +101,25 @@ SENDER_JOB_OPTIONS = { attempts: 5, backoff: { type: 'exponential', delay: 30_00
 | Auto-message | `send-auto-message-{canal}-{autoMessageId}-{suffix}` |
 | Texto livre | `send-text-{canal}-{suffix}` |
 
-## Multi-conta (parcial)
+## Multi-conta
 
-`dispatchOffer` enfileira com `accountId` e usa `senderJobId(channel, offerId, accountId)`, mas `enqueueOfferSend` ainda chama `getSenderQueue(channel)` **sem** `accountId` — jobs de contas não-default vão para a fila errada. O sender também não lê `accountId` do job. Ver [Contas](./accounts.md).
+`dispatchOffer` enfileira com `accountId` via `getSenderQueue(channel, accountId)`. O sender lê `accountId` do job e usa em `findDelivery` / `markOfferDelivered`. Worker consome conta via `WORKER_ACCOUNT_ID`. Ver [Contas](./accounts.md).
+
+## Estado compartilhado no Redis
+
+Além das filas BullMQ, o Redis armazena:
+
+| Chave | Uso |
+|-------|-----|
+| `radar:app-logs` | Logs compartilhados (`log-store.ts`) |
+| `radar:worker:{channel}:{accountId}` | Heartbeat do worker (TTL 30s) |
+| `radar:connect:wa:{accountId}` | QR/status WhatsApp (TTL 120s) |
+
+Ver `src/utils/redis-state.ts` e [Manager](./manager.md).
 
 ## Desabilitar Redis
 
-`REDIS_ENABLED=false` — collector e sender rodam inline (útil para dev sem Redis).
+`REDIS_ENABLED=false` — collector e sender rodam inline (útil para dev sem Redis). QR no painel não funciona sem Redis.
 
 ## Idempotência
 
@@ -110,7 +127,3 @@ SENDER_JOB_OPTIONS = { attempts: 5, backoff: { type: 'exponential', delay: 30_00
 - `OfferDelivery` unique em `(offer_id, channel, account_id)`.
 - Entrega aberta **antes** de enfileirar (`openOfferDelivery` em `dispatchOffer`).
 - Job id determinístico garante um envio por oferta por canal por conta.
-
-## Implementação — overhead conhecido
-
-Cada `enqueue*` cria uma nova instância `Queue` e chama `queue.close()` no `finally`. Funciona, mas gera overhead de conexão Redis sob carga — candidato a pool de filas reutilizáveis.

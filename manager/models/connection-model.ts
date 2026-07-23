@@ -4,10 +4,15 @@ import {
   persistAffiliateSession,
   type AffiliateLoginSession,
 } from '../../src/mercado-livre/auth.js';
-import { connectWhatsApp, disconnectWhatsApp, WhatsAppOwnedElsewhereError } from '../../src/whatsapp/index.js';
+import { DEFAULT_ACCOUNT_ID } from '../../src/accounts/types.js';
+import { env } from '../../src/config/env.js';
+import { getWhatsAppConnectFromRedis } from '../../src/utils/redis-state.js';
 import { logger } from '../../src/utils/logger.js';
+import { canManagerSpawnWorkers, getWorkerState, startWorker } from './process-model.js';
 
 // --- WhatsApp connection flow -------------------------------------------------
+// Em produção o worker é dono da sessão e publica QR/status no Redis.
+// O painel apenas lê e renderiza (stateless, replicável).
 
 export type WhatsAppConnectStatus =
   | 'idle'
@@ -22,57 +27,50 @@ export interface WhatsAppConnectState {
   error: string | null;
 }
 
-let waStatus: WhatsAppConnectStatus = 'idle';
-let waQr: string | null = null;
-let waError: string | null = null;
-
-export function getWhatsAppConnectionState(): WhatsAppConnectState {
-  return { status: waStatus, qr: waQr, error: waError };
+function resolveAccountId(): string {
+  return env.WORKER_ACCOUNT_ID || DEFAULT_ACCOUNT_ID;
 }
 
-export function startWhatsAppConnection(): WhatsAppConnectState {
-  if (waStatus === 'connecting' || waStatus === 'qr') {
-    return getWhatsAppConnectionState();
+export async function getWhatsAppConnectionState(): Promise<WhatsAppConnectState> {
+  const redisState = await getWhatsAppConnectFromRedis(resolveAccountId());
+  if (redisState) {
+    return { status: redisState.status, qr: redisState.qr, error: redisState.error };
   }
 
-  waStatus = 'connecting';
-  waQr = null;
-  waError = null;
+  return { status: 'idle', qr: null, error: null };
+}
 
-  void connectWhatsApp({
-    onQr: (qr) => {
-      waQr = qr;
-      waStatus = 'qr';
-    },
-  })
-    .then(async () => {
-      waStatus = 'connected';
-      waQr = null;
-      // O painel só precisa autenticar e persistir as credenciais em disco.
-      // Manter este socket aberto brigaria com o worker (connectionReplaced),
-      // então desconectamos e deixamos o worker ser o único a usar o WhatsApp.
-      await disconnectWhatsApp().catch(() => {});
-    })
-    .catch((error: unknown) => {
-      if (error instanceof WhatsAppOwnedElsewhereError) {
-        // O worker já está conectado com a sessão. Não tentamos parear de novo
-        // (isso brigaria com o worker) — apenas mostramos que já está logado.
-        waStatus = 'connected';
-        waQr = null;
-        waError = null;
-        logger.info('WhatsApp já conectado no worker — painel apenas confirma a sessão.');
-        return;
-      }
-      waStatus = 'error';
-      waQr = null;
-      waError = error instanceof Error ? error.message : 'Falha ao conectar WhatsApp';
-      logger.error({ error }, 'WhatsApp connection from manager failed');
-    });
+export async function startWhatsAppConnection(): Promise<WhatsAppConnectState> {
+  const current = await getWhatsAppConnectionState();
+  if (current.status === 'connecting' || current.status === 'qr' || current.status === 'connected') {
+    return current;
+  }
 
-  return getWhatsAppConnectionState();
+  if (canManagerSpawnWorkers()) {
+    const worker = await getWorkerState('whatsapp');
+    if (worker.status !== 'running' && worker.status !== 'starting') {
+      await startWorker('whatsapp');
+    }
+    const after = await getWhatsAppConnectionState();
+    return after.status === 'idle'
+      ? { status: 'connecting', qr: null, error: null }
+      : after;
+  }
+
+  const worker = await getWorkerState('whatsapp');
+  if (worker.status !== 'running') {
+    return {
+      status: 'error',
+      qr: null,
+      error: 'Worker WhatsApp não detectado. Inicie o serviço worker (Docker ou terminal).',
+    };
+  }
+
+  return { status: 'connecting', qr: null, error: null };
 }
 
 // --- Mercado Livre connection flow -------------------------------------------
+// Fluxo stateful com Playwright — operação single-node/dev. Não replicável.
 
 export type MercadoLivreConnectStatus =
   | 'idle'

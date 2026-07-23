@@ -9,25 +9,40 @@ Domínio `src/accounts/` + página `/manager/accounts`. Permite cadastrar múlti
 | `types.ts` | `Account`, plataformas (`whatsapp` \| `telegram` \| `mercado_livre`), configs tipadas |
 | `paths.ts` | `resolveAccountAuthPath(accountId, platform)` |
 | `default-accounts.ts` | Conta `default` derivada do `.env` (compatibilidade) |
-| `repository.ts` | Persistência em `settings.accounts` (JSON) com cache em memória |
+| `account-config.ts` | Validação Zod de `config` por plataforma |
+| `repository.ts` | Persistência na tabela `accounts` (Prisma) com cache em memória |
+| `worker-publisher.ts` | Carrega publisher da conta via `WORKER_ACCOUNT_ID` |
+| `channel-accounts.ts` | `getEnabledAccountIdsForChannel()` |
 
 ### Persistência
 
-Contas **não** têm model Prisma — vivem como JSON na chave `accounts` da tabela `settings`:
+Contas vivem na tabela Prisma `accounts` (`id`, `platform`, `label`, `enabled`, `config` JSON, `created_at`).
+
+A migration `20260723140000_add_accounts_table` migra automaticamente o JSON legado de `settings.accounts` (se existir) e remove a chave antiga.
+
+Se a tabela estiver vazia no primeiro `loadAccounts()`, o repository faz seed com `buildDefaultAccountsFromEnv()`.
+
+`config` é validado com Zod em `account-config.ts` ao ler/gravar:
+
+| Plataforma | Campos em `config` |
+|------------|-------------------|
+| `whatsapp` | `channelId`, `authPath`, `channelName?`, `inviteLink?` |
+| `telegram` | `botToken`, `chatId` |
+| `mercado_livre` | `authPath` |
+
+Exemplo de linha:
 
 ```json
-[
-  {
-    "id": "minha-conta-wa",
-    "platform": "whatsapp",
-    "label": "Canal Principal",
-    "enabled": true,
-    "config": {
-      "channelId": "120363...@newsletter",
-      "authPath": "./data/accounts/minha-conta-wa/whatsapp"
-    }
+{
+  "id": "minha-conta-wa",
+  "platform": "whatsapp",
+  "label": "Canal Principal",
+  "enabled": true,
+  "config": {
+    "channelId": "120363...@newsletter",
+    "authPath": "./data/accounts/minha-conta-wa/whatsapp"
   }
-]
+}
 ```
 
 A conta `default` usa os mesmos paths do `.env` (`WHATSAPP_AUTH_PATH`, `ML_AUTH_PATH`, `TELEGRAM_BOT_TOKEN`, etc.). Contas adicionais usam `data/accounts/{id}/{platform}/`.
@@ -64,26 +79,24 @@ getSenderQueueName(channel, accountId)
 
 Job id determinístico: `send-offer-{canal}-{accountId}-{offerId}` (ou sem accountId quando `default`).
 
-## Status da feature (parcial)
+## Status da feature
 
 | Peça | Status |
 |------|--------|
-| Tipos + repository + paths | ✅ |
+| Tipos + repository + paths + validação Zod | ✅ |
+| Tabela `accounts` (Prisma) + migration de dados | ✅ |
 | Página `/manager/accounts` | ✅ |
 | `account_id` no schema + repository | ✅ |
 | `dispatchOffer` fan-out por conta | ✅ |
-| `senderJobId` com `accountId` | ✅ |
-| `getSenderQueue(channel, accountId)` | ❌ `enqueueOfferSend` usa `getSenderQueue(channel)` sem accountId |
-| `jobs/sender.ts` lê/marca delivery por conta | ❌ chama `findDelivery`/`markOfferDelivered` sem `accountId` |
-| Worker por conta (`WORKER_ACCOUNT_ID` ou spawn no painel) | ❌ |
-| Publishers/sessões parametrizados por conta | ❌ |
+| `enqueueOfferSend` com fila por `accountId` | ✅ |
+| `jobs/sender.ts` delivery por conta | ✅ |
+| Worker por conta (`WORKER_ACCOUNT_ID`) | ✅ |
+| Publishers/sessões parametrizados por conta | ✅ |
+| Painel spawna workers com `WORKER_ACCOUNT_ID` | ❌ |
 
 ### Próximos passos
 
-1. Passar `accountId` em `getSenderQueue` / `enqueueOfferSend` e no payload do job (`SenderJobData`).
-2. `jobs/sender.ts`: ler `accountId` do job e usar em `findDelivery` / `markOfferDelivered`.
-3. Workers parametrizados — um processo por conta WhatsApp (Baileys não escala horizontalmente na mesma sessão).
-4. `whatsapp/index.ts` e `mercado-livre/session.ts` receberem `accountId` para resolver auth path da conta.
+1. `manager/models/process-model.ts` — spawn de workers com `WORKER_ACCOUNT_ID` por conta habilitada.
 
 ## Documentação relacionada
 

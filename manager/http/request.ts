@@ -3,7 +3,9 @@ import { URL } from 'node:url';
 
 import { prisma } from '../../src/database/client.js';
 import { env } from '../../src/config/env.js';
+import { closeAllQueues } from '../../src/queue/index.js';
 import { closeLogStore } from '../../src/utils/log-store.js';
+import { closeRedisState } from '../../src/utils/redis-state.js';
 import { logger } from '../../src/utils/logger.js';
 import { toManagerErrorMessage } from '../views/error-message.js';
 import { escapeHtml } from '../views/helpers.js';
@@ -170,6 +172,8 @@ export function createRouter(routes: RouteDefinition[]) {
 }
 
 export async function shutdownManager(): Promise<void> {
+  await closeAllQueues();
   await closeLogStore();
+  await closeRedisState();
   await prisma.$disconnect();
 }

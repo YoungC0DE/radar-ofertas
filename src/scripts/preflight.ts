@@ -3,7 +3,7 @@ import { env } from '../config/env.js';
 import { prisma } from '../database/client.js';
 import { buildMlCategoryRows, hydrateMlSourcesCache } from '../config/ml-sources-config.js';
 import { hasValidSession, loadSessionMeta, loadStorageState } from '../mercado-livre/session.js';
-import { getCollectorQueue, isRedisEnabled } from '../queue/index.js';
+import { getCollectorQueue, isRedisEnabled, closeAllQueues } from '../queue/index.js';
 import { formatIsoInTimezone } from '../utils/datetime.js';
 
 export type PreflightProfile = 'all' | 'collector' | 'worker' | 'worker-telegram' | 'manager';
@@ -102,8 +102,6 @@ async function checkRedis(): Promise<PreflightItem> {
       detail: message,
       fix: 'Confira REDIS_URL no .env',
     };
-  } finally {
-    await queue.close();
   }
 }
 
@@ -292,6 +290,7 @@ if (isDirectRun) {
       process.exit(1);
     })
     .finally(async () => {
+      await closeAllQueues();
       await prisma.$disconnect();
     });
 }

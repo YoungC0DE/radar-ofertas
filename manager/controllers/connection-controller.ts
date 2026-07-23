@@ -8,12 +8,12 @@ import {
 } from '../models/connection-model.js';
 import { getTelegramSessionStatus } from '../models/session-model.js';
 
-export function startWhatsAppConnectJson(): string {
-  return JSON.stringify(startWhatsAppConnection());
+export async function startWhatsAppConnectJson(): Promise<string> {
+  return JSON.stringify(await startWhatsAppConnection());
 }
 
-export function getWhatsAppConnectJson(): string {
-  return JSON.stringify(getWhatsAppConnectionState());
+export async function getWhatsAppConnectJson(): Promise<string> {
+  return JSON.stringify(await getWhatsAppConnectionState());
 }
 
 export function startMercadoLivreConnectJson(): string {

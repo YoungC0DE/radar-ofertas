@@ -1,29 +1,66 @@
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../database/client.js';
+import { parseAccountRecord, parseAccountRow } from './account-config.js';
 import { buildDefaultAccountsFromEnv } from './default-accounts.js';
 import { DEFAULT_ACCOUNT_ID, type Account, type AccountPlatform } from './types.js';
 
-const SETTING_KEY = 'accounts';
-
 let accountsCache: Account[] | null = null;
 
-function parseAccountsJson(raw: string): Account[] {
-  const parsed: unknown = JSON.parse(raw);
-  if (!Array.isArray(parsed)) {
-    throw new Error('accounts setting must be a JSON array');
-  }
-  return parsed as Account[];
+function accountToRow(account: Account): {
+  id: string;
+  platform: string;
+  label: string;
+  enabled: boolean;
+  config: Prisma.InputJsonValue;
+} {
+  return {
+    id: account.id,
+    platform: account.platform,
+    label: account.label,
+    enabled: account.enabled,
+    config: account.config as unknown as Prisma.InputJsonValue,
+  };
+}
+
+async function persistAccounts(accounts: Account[]): Promise<Account[]> {
+  const validated = accounts.map((account) => parseAccountRecord(account));
+  const ids = validated.map((account) => account.id);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.account.deleteMany({ where: { id: { notIn: ids } } });
+    for (const account of validated) {
+      const row = accountToRow(account);
+      await tx.account.upsert({
+        where: { id: account.id },
+        create: row,
+        update: {
+          platform: row.platform,
+          label: row.label,
+          enabled: row.enabled,
+          config: row.config,
+        },
+      });
+    }
+  });
+
+  accountsCache = validated;
+  return validated;
+}
+
+async function seedDefaultAccounts(): Promise<Account[]> {
+  return persistAccounts(buildDefaultAccountsFromEnv());
 }
 
 export async function loadAccounts(): Promise<Account[]> {
   if (accountsCache) return accountsCache;
 
   try {
-    const row = await prisma.setting.findUnique({ where: { key: SETTING_KEY } });
-    if (!row?.value) {
-      accountsCache = buildDefaultAccountsFromEnv();
-      return accountsCache;
+    const rows = await prisma.account.findMany({ orderBy: { createdAt: 'asc' } });
+    if (rows.length === 0) {
+      return seedDefaultAccounts();
     }
-    accountsCache = parseAccountsJson(row.value);
+
+    accountsCache = rows.map((row) => parseAccountRow(row));
     return accountsCache;
   } catch {
     accountsCache = buildDefaultAccountsFromEnv();
@@ -32,13 +69,8 @@ export async function loadAccounts(): Promise<Account[]> {
 }
 
 export async function saveAccounts(accounts: Account[]): Promise<void> {
-  const json = JSON.stringify(accounts);
-  await prisma.setting.upsert({
-    where: { key: SETTING_KEY },
-    update: { value: json },
-    create: { key: SETTING_KEY, value: json },
-  });
-  accountsCache = accounts;
+  invalidateAccountsCache();
+  await persistAccounts(accounts);
 }
 
 export async function findAccountById(id: string): Promise<Account | null> {
