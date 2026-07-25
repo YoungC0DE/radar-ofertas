@@ -16,6 +16,22 @@ redis.call('SET', key, tostring(now))
 return 0
 `;
 
+/** Encadeia slots futuros no enqueue — evita vários jobs com o mesmo delay de pacing. */
+const RESERVE_NEXT_SLOT_SCRIPT = `
+local key = KEYS[1]
+local gap = tonumber(ARGV[1])
+local now = tonumber(ARGV[2])
+local last = tonumber(redis.call('GET', key) or '0')
+if last == 0 then
+  redis.call('SET', key, tostring(now))
+  return 0
+end
+local base = math.max(last, now)
+local scheduled = base + gap
+redis.call('SET', key, tostring(scheduled))
+return scheduled - now
+`;
+
 let redisClient: Redis | null = null;
 let redisFailed = false;
 
@@ -72,6 +88,32 @@ async function acquireInProcess(key: string, delayMs: number): Promise<number> {
  * Reserva um slot de envio com espaçamento mínimo. Retorna ms a aguardar (0 = pode enviar).
  * Com Redis: atômico entre jobs concorrentes. Sem Redis: fila in-process por canal/conta.
  */
+/** Reserva próximo slot na fila de pacing (enqueue). Retorna ms de delay a partir de agora. */
+export async function reserveNextSenderPacingDelayMs(
+  channel: Channel,
+  accountId: string,
+  gapMs: number,
+): Promise<number> {
+  if (gapMs <= 0) return 0;
+
+  const key = pacingKey(channel, accountId);
+  const now = Date.now();
+  const redis = getRedis();
+
+  if (redis) {
+    try {
+      if (redis.status !== 'ready') await redis.connect();
+      const waitMs = await redis.eval(RESERVE_NEXT_SLOT_SCRIPT, 1, key, String(gapMs), String(now));
+      const parsed = Number(waitMs);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    } catch {
+      redisFailed = true;
+    }
+  }
+
+  return acquireInProcess(key, gapMs);
+}
+
 export async function acquireSenderPacingSlot(
   channel: Channel,
   accountId: string,
@@ -95,6 +137,20 @@ export async function acquireSenderPacingSlot(
   }
 
   return acquireInProcess(key, delayMs);
+}
+
+export async function clearSenderPacingSlot(channel: Channel, accountId: string): Promise<void> {
+  const key = pacingKey(channel, accountId);
+  const redis = getRedis();
+  if (redis) {
+    try {
+      if (redis.status !== 'ready') await redis.connect();
+      await redis.del(key);
+    } catch {
+      redisFailed = true;
+    }
+  }
+  memoryLastByKey.delete(key);
 }
 
 export async function closeSenderPacingRedis(): Promise<void> {

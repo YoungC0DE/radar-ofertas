@@ -1,5 +1,6 @@
 import type { Offer as PrismaOffer, OfferDelivery as PrismaOfferDelivery } from '@prisma/client';
-import type { Channel } from '../channels/types.js';
+import { getEnabledAccountIdsForChannel } from '../accounts/channel-accounts.js';
+import { CHANNELS, type Channel } from '../channels/types.js';
 import { env } from '../config/env.js';
 import { prisma } from '../database/client.js';
 import { nowInTimezone } from '../utils/datetime.js';
@@ -43,16 +44,48 @@ export async function findOfferIdByMercadoLivreId(mercadoLivreId: string): Promi
   return offer?.id ?? null;
 }
 
-/** Canais que já têm registro de entrega (pendente ou enviada) para a oferta em uma conta. */
-export async function findExistingDeliveryChannels(
-  offerId: string,
-  accountId = 'default',
-): Promise<Channel[]> {
-  const rows = await prisma.offerDelivery.findMany({
-    where: { offerId, accountId },
-    select: { channel: true },
+/**
+ * Canais em que todas as contas habilitadas já concluíram o envio (sentAt preenchido).
+ * Entregas pendentes ou com falha não contam — permitem reenfileirar na próxima coleta.
+ */
+export async function findExistingDeliveryChannels(offerId: string): Promise<Channel[]> {
+  const deliveries = await prisma.offerDelivery.findMany({
+    where: { offerId },
+    select: { channel: true, accountId: true, sentAt: true },
   });
-  return rows.map((row) => row.channel as Channel);
+
+  const sentByChannel = new Map<string, Set<string>>();
+  for (const row of deliveries) {
+    if (!row.sentAt) continue;
+    const accounts = sentByChannel.get(row.channel) ?? new Set<string>();
+    accounts.add(row.accountId);
+    sentByChannel.set(row.channel, accounts);
+  }
+
+  const complete: Channel[] = [];
+  for (const channel of CHANNELS) {
+    const required = await getEnabledAccountIdsForChannel(channel);
+    const sent = sentByChannel.get(channel);
+    if (sent && required.every((accountId) => sent.has(accountId))) {
+      complete.push(channel);
+    }
+  }
+  return complete;
+}
+
+export async function findPendingDeliveries(): Promise<
+  Array<{ offerId: string; channel: Channel; accountId: string }>
+> {
+  const rows = await prisma.offerDelivery.findMany({
+    where: { sentAt: null },
+    select: { offerId: true, channel: true, accountId: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  return rows.map((row) => ({
+    offerId: row.offerId,
+    channel: row.channel as Channel,
+    accountId: row.accountId,
+  }));
 }
 
 export async function sentOfferExistsByTitleAndPrice(

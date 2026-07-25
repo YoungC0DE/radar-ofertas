@@ -27,13 +27,10 @@ export function isTelegramIntegrationEnabled(): boolean {
 export async function hydrateIntegrationState(): Promise<void> {
   const accounts = await loadAccounts();
 
-  const waAccount = accounts.find(
-    (account): account is WhatsAppAccount =>
-      account.platform === 'whatsapp' && account.id === DEFAULT_ACCOUNT_ID && account.enabled,
-  );
-  whatsappConfigured = waAccount
-    ? getEnabledWhatsAppDestinations(waAccount.config).length > 0
-    : false;
+  whatsappConfigured = accounts.some((account): account is WhatsAppAccount => {
+    if (account.platform !== 'whatsapp' || !account.enabled) return false;
+    return getEnabledWhatsAppDestinations(account.config).length > 0;
+  });
 
   const tgAccount = accounts.find(
     (account) => account.platform === 'telegram' && account.id === DEFAULT_ACCOUNT_ID,

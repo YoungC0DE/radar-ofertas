@@ -40,10 +40,11 @@ function getOperatingHours() {
 }
 
 async function enforceSenderPacing(
-  job: { moveToDelayed: (timestamp: number) => Promise<void> },
+  job: { moveToDelayed: (timestamp: number, token?: string) => Promise<void> },
   channel: Channel,
   accountId: string,
   force: boolean,
+  token?: string,
 ): Promise<void> {
   if (force) return;
 
@@ -52,7 +53,7 @@ async function enforceSenderPacing(
 
   const waitMs = await acquireSenderPacingSlot(channel, accountId, delayMs);
   if (waitMs > 0) {
-    await job.moveToDelayed(Date.now() + waitMs);
+    await job.moveToDelayed(Date.now() + waitMs, token);
     throw new DelayedError();
   }
 }
@@ -73,33 +74,35 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
 
   const worker = new Worker<SenderJobData>(
     getSenderQueueName(channel, workerAccountId),
-    async (job) => {
+    async (job, token) => {
       await hydrateQueueConfigCache();
       const operatingHours = getOperatingHours();
       const force = job.data.force === true;
       const accountId = resolveJobAccountId(job.data, workerAccountId);
+      const { offerId, autoMessageId, text } = job.data;
+      const isOfferSend = Boolean(offerId) && !autoMessageId && !text;
 
-      if (!force && !isWithinOperatingHours(env.APP_TIMEZONE, operatingHours)) {
+      if (!isOfferSend && !force && !isWithinOperatingHours(env.APP_TIMEZONE, operatingHours)) {
         const delayMs = msUntilOperatingWindow(env.APP_TIMEZONE, operatingHours);
         logger.info(
           {
             channel,
             accountId,
             jobId: job.id,
-            offerId: job.data.offerId,
+            autoMessageId,
             delayMs,
             timezone: env.APP_TIMEZONE,
             operatingHours,
           },
           'Outside operating hours — delaying send',
         );
-        await job.moveToDelayed(Date.now() + delayMs);
+        await job.moveToDelayed(Date.now() + delayMs, token);
         throw new DelayedError();
       }
 
-      const { offerId, autoMessageId, text } = job.data;
-
-      await enforceSenderPacing(job, channel, accountId, force);
+      if (!isOfferSend) {
+        await enforceSenderPacing(job, channel, accountId, force, token);
+      }
 
       if (text) {
         try {
@@ -232,6 +235,8 @@ export function startSenderWorker(publisher: ChannelPublisher): Worker<SenderJob
     {
       connection: getQueueConnection(),
       concurrency: env.QUEUE_CONFIG.senderConcurrency,
+      // Link afiliado + enriquecimento Amazon + publicação WhatsApp podem passar de 30s.
+      lockDuration: 120_000,
     },
   );
 

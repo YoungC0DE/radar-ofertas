@@ -1,8 +1,8 @@
 import { getEnabledChannels, isChannelEnabled } from '../channels/index.js';
 import type { Channel } from '../channels/types.js';
 import { findAccountsByPlatform } from '../accounts/repository.js';
-import { isMercadoLivreAffiliateTagConfigured } from '../accounts/ml-affiliate-tag.js';
 import { getEnabledAccountIdsForChannel } from '../accounts/channel-accounts.js';
+import { isMercadoLivreAffiliateTagConfigured } from '../accounts/ml-affiliate-tag.js';
 import {
   getActiveSourcesForChannel,
   getChannelsForSource,
@@ -13,11 +13,11 @@ import { isAmazonSourceUrl } from '../amazon/source-url.js';
 import { getSearchLimit } from '../config/queue-config-store.js';
 import { calculateOfferScore, getRuntimeScoreConfig } from '../config/score-config.js';
 import {
+  ensureOfferSendJob,
   enqueueOfferSend,
   enqueueCollectSourceJob,
   getSenderQueue,
   isRedisEnabled,
-  SENDER_JOB_OPTIONS,
   senderJobId,
 } from '../queue/index.js';
 import { runWithConcurrency } from '../utils/concurrency.js';
@@ -177,8 +177,7 @@ export async function dispatchOffer(
   const dispatched: Channel[] = [];
 
   for (const channel of targets) {
-    const accounts = await deps.findAccountsByPlatform(channel);
-    const accountIds = accounts.length > 0 ? accounts.map((a) => a.id) : ['default'];
+    const accountIds = await getEnabledAccountIdsForChannel(channel);
 
     for (const accountId of accountIds) {
       try {
@@ -501,20 +500,6 @@ export async function sendOfferNow(offerId: string, channel?: Channel): Promise<
 
   for (const { channel: target, accountId } of pending) {
     await openOfferDelivery(offerId, target, accountId);
-    const queue = getSenderQueue(target, accountId);
-    const jobId = senderJobId(target, offerId, accountId);
-
-    const existing = await queue.getJob(jobId);
-    if (existing) {
-      const state = await existing.getState();
-      if (state === 'active') continue;
-      await existing.remove();
-    }
-
-    await queue.add(
-      'send',
-      { offerId, accountId, force: true },
-      { jobId, priority: 1, ...SENDER_JOB_OPTIONS },
-    );
+    await ensureOfferSendJob(target, offerId, accountId, { force: true, priority: 1 });
   }
 }

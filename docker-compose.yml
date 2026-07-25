@@ -88,6 +88,9 @@ services:
     environment:
       <<: *app-environment
       SKIP_MIGRATIONS: "true"
+    volumes:
+      - ./data:/app/data
+      - ./src:/app/src
 
   scheduler:
     <<: *app-base
@@ -95,6 +98,9 @@ services:
     environment:
       <<: *app-environment
       SKIP_MIGRATIONS: "true"
+    volumes:
+      - ./data:/app/data
+      - ./src:/app/src
 
   worker:
     <<: *app-base

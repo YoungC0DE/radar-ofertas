@@ -3,10 +3,224 @@
 Quadro de tarefas do projeto **Radar Ofertas**. Atualizar conforme o desenvolvimento avança.
 
 > **Decisão arquitetural (atual):** scraping híbrido HTTP + Playwright. Sessão de afiliado persistida em `ML_AUTH_PATH` (estilo Baileys). Config runtime em tabela `settings` editável pelo manager. Um canal = um processo = uma fila. Contas em tabela Prisma `accounts`. Manager stateless em produção (Redis + `owner.lock`). API Oficial descartada.
+>
+> **Decisão arquitetural (planejada):** monorepo com `backend/` (domínio + workers + API REST), `frontend/` (React SPA) e Docker na raiz. Painel SSR (`manager/`) será substituído gradualmente; regras de negócio permanecem em `src/`.
 
 ---
 
 ## 🔴 Backlog
+
+### Separação backend / frontend (React + API REST)
+
+> Migração do painel `manager/` (MVC server-rendered) para **API REST no backend** + **SPA React no frontend**, mantendo collector, scheduler e worker inalterados. Estrutura alvo: `backend/`, `frontend/`, arquivos Docker na raiz.
+
+#### Fase 0 — Estrutura do monorepo
+
+- [ ] Criar pasta `backend/` e mover `src/`, `prisma/`, `manager/` (temporário), configs TS e scripts npm do domínio
+- [ ] Criar pasta `frontend/` com projeto React (Vite + TypeScript)
+- [ ] Criar pasta `docker/` na raiz e mover `Dockerfile` + `docker-compose.yml` (ajustar paths de build)
+- [ ] Configurar workspaces npm (ou equivalente) na raiz — scripts `dev`, `build`, `test` orquestrando backend + frontend
+- [ ] Criar `packages/shared/` (ou `backend/src/shared/`) com DTOs/tipos exportados para o frontend (OfferRecord, Account, settings, etc.)
+- [ ] Atualizar `tsconfig.check.json` e CI para incluir `backend/` e `frontend/`
+- [ ] Documentar estrutura alvo em `.cursor/docs/architecture.md` e `README.md`
+
+#### Fase 1 — Fundação da API REST (backend)
+
+- [ ] Escolher framework HTTP da API (Fastify ou Express) — entry dedicado (`backend/api/server.ts`), separado de collector/scheduler/worker
+- [ ] Definir prefixo e versionamento (`/api/v1/...`) — mapear rotas atuais de `manager/http/routes/index.ts`
+- [ ] Implementar middleware de erro padronizado (JSON `{ error, code, details? }`)
+- [ ] Implementar validação de entrada com Zod em todos os endpoints (body, query, params)
+- [ ] Implementar limite de tamanho de body (substitui débito de `readFormBody`)
+- [ ] Implementar autenticação: sessão httpOnly (cookie) ou JWT + refresh — substituir `MANAGER_TOKEN` via query/header
+- [ ] Implementar proteção CSRF para mutações (cookie + header/token)
+- [ ] Configurar CORS (dev: origin do Vite; prod: mesmo domínio ou allowlist)
+- [ ] Extrair controllers/models do `manager/` para `backend/api/` — models continuam delegando para domínio em `src/`
+- [ ] Publicar contrato OpenAPI (`/api/v1/openapi.json`) gerado a partir dos schemas Zod ou documentação manual
+- [ ] Health check: `GET /api/v1/health` (equivalente a `/manager/health`)
+
+#### Fase 2 — Endpoints REST por domínio (backend)
+
+**Dashboard e operações**
+
+- [ ] `GET /api/v1/dashboard` — status geral (coleta, filas, workers, integrações)
+- [ ] `POST /api/v1/offers/collect` — enfileirar coleta manual (equiv. `POST /manager/offers/collect`)
+- [ ] `GET /api/v1/metrics` — métricas de envio (equiv. `/manager/api/metrics`)
+
+**Ofertas**
+
+- [ ] `GET /api/v1/offers` — listagem com filtro por status e paginação
+- [ ] `GET /api/v1/offers/:id` — detalhe + preview da mensagem
+- [ ] `PATCH /api/v1/offers/settings/search-limit` — limite de busca
+- [ ] `PATCH /api/v1/offers/settings/affiliate-delay` — delay de links afiliado
+- [ ] `POST /api/v1/offers/:id/send-now` — envio imediato
+- [ ] `DELETE /api/v1/offers/:id` — remover oferta
+- [ ] `DELETE /api/v1/offers/pending` — remover todas pendentes
+
+**Settings**
+
+- [ ] `GET /api/v1/settings` — snapshot completo (score, brand, horários, intervalos, conexões)
+- [ ] `PATCH /api/v1/settings/score` — regras de pontuação
+- [ ] `PATCH /api/v1/settings/brand` — nome, subtítulo, logo
+- [ ] `PATCH /api/v1/settings/operating-hours` — janela operacional
+- [ ] `PATCH /api/v1/settings/send-interval` — intervalo de coleta
+- [ ] `PATCH /api/v1/settings/sender-delay` — delay entre envios
+- [ ] `PATCH /api/v1/settings/coupons-url` — URL da página de cupons ML
+- [ ] `PATCH /api/v1/settings/amazon-affiliate` — baseUrl, storeId, prefixo
+
+**Template e auto-messages**
+
+- [ ] `GET /api/v1/template` — template de ofertas, cupons e lista de auto-messages
+- [ ] `PATCH /api/v1/template/offer` — template de ofertas
+- [ ] `PATCH /api/v1/template/coupon` — template de cupons
+- [ ] `POST /api/v1/auto-messages` — criar auto-message
+- [ ] `PATCH /api/v1/auto-messages/:id` — editar auto-message
+- [ ] `DELETE /api/v1/auto-messages/:id` — remover auto-message
+- [ ] `POST /api/v1/auto-messages/:id/send` — envio manual
+
+**Cupons**
+
+- [ ] `GET /api/v1/coupons` — listagem (equiv. `/manager/api/coupons`)
+- [ ] `POST /api/v1/coupons/refresh` — refresh sob demanda
+- [ ] `POST /api/v1/coupons/:id/send` — enviar cupom
+- [ ] `PATCH /api/v1/coupons/:id/store-link` — link de loja
+
+**Fontes (ML + Amazon por canal)**
+
+- [ ] `GET /api/v1/sources/:channel` — fontes ML e Amazon do canal (`whatsapp` | `telegram`)
+- [ ] `PATCH /api/v1/sources/:channel` — flags ativar/desativar fontes do `.env`
+- [ ] `POST /api/v1/sources/:channel/ml` — adicionar fonte ML customizada
+- [ ] `DELETE /api/v1/sources/:channel/ml/:sourceId` — remover fonte ML
+- [ ] `POST /api/v1/sources/:channel/amazon` — adicionar fonte Amazon customizada
+- [ ] `DELETE /api/v1/sources/:channel/amazon/:sourceId` — remover fonte Amazon
+
+**Contas (multi-plataforma)**
+
+- [ ] `GET /api/v1/accounts` — listagem de contas
+- [ ] `POST /api/v1/accounts` — adicionar conta
+- [ ] `PATCH /api/v1/accounts/:accountId/:platform/toggle` — habilitar/desabilitar
+- [ ] `DELETE /api/v1/accounts/:accountId/:platform` — remover conta
+- [ ] `PATCH /api/v1/accounts/:accountId/whatsapp-channel` — canal WhatsApp
+- [ ] `POST /api/v1/accounts/:accountId/whatsapp-destinations` — adicionar destino
+- [ ] `DELETE /api/v1/accounts/:accountId/whatsapp-destinations` — remover destino
+- [ ] `PATCH /api/v1/accounts/:accountId/whatsapp-destinations/toggle` — toggle destino
+- [ ] `PATCH /api/v1/accounts/:accountId/telegram` — config Telegram
+- [ ] `PATCH /api/v1/accounts/:accountId/mercado-livre` — config ML
+
+**Conexões (WhatsApp, ML, Telegram)**
+
+- [ ] `POST /api/v1/accounts/:accountId/connect/whatsapp/start` — iniciar pareamento
+- [ ] `GET /api/v1/accounts/:accountId/connect/whatsapp/status` — status + QR (Redis)
+- [ ] `POST /api/v1/accounts/:accountId/connect/mercado-livre/start` — abrir fluxo ML (Playwright)
+- [ ] `POST /api/v1/accounts/:accountId/connect/mercado-livre/finish` — salvar sessão
+- [ ] `POST /api/v1/accounts/:accountId/connect/mercado-livre/cancel` — cancelar fluxo
+- [ ] `GET /api/v1/accounts/:accountId/connect/mercado-livre/status` — status do fluxo
+- [ ] `GET /api/v1/accounts/:accountId/connect/telegram/verify` — validar config Telegram
+
+**Workers e processos**
+
+- [ ] `GET /api/v1/worker/status` — status do worker unificado (Redis + `owner.lock`)
+- [ ] `POST /api/v1/worker/start` — spawn local (somente `MANAGER_CAN_SPAWN_WORKERS=true`)
+- [ ] `POST /api/v1/worker/stop` — encerrar worker local
+- [ ] `POST /api/v1/worker/restart` — reiniciar worker local
+- [ ] `GET /api/v1/prisma/status` — status do generate (dev)
+- [ ] `POST /api/v1/prisma/generate` — rodar prisma generate (dev)
+
+**Logs**
+
+- [ ] `GET /api/v1/logs` — logs paginados/filtrados (equiv. `/manager/api/logs`)
+- [ ] Implementar SSE ou WebSocket `GET /api/v1/logs/stream` — tail em tempo real (substitui polling pesado)
+
+#### Fase 3 — Fundação do frontend React
+
+- [ ] Configurar Vite + React + TypeScript + React Router
+- [ ] Configurar proxy de dev (`/api` → backend) e variável `VITE_API_BASE_URL`
+- [ ] Cliente HTTP tipado (fetch/axios) com interceptors de auth e tratamento de erro
+- [ ] Gerar ou importar tipos da API a partir de `packages/shared` ou OpenAPI codegen
+- [ ] Layout base — shell, navegação lateral/top (equiv. `manager/views/layout/shell.ts`)
+- [ ] Componentes compartilhados — cards, badges, toggles, tabs, modais, alerts (equiv. `manager/views/components/`)
+- [ ] Tema visual — portar `manager/public/css/base.css` para CSS modules ou Tailwind (manter identidade visual)
+- [ ] Fluxo de login/auth — tela de login ou bootstrap de sessão; guard de rotas privadas
+- [ ] Hooks utilitários — polling (QR WhatsApp, worker status), confirmação de ações destrutivas
+- [ ] Tratamento global de toasts/feedback (substitui query params `?sentNow=1`, `?collectError=`, etc.)
+
+#### Fase 4 — Páginas React (paridade com manager SSR)
+
+**Dashboard**
+
+- [ ] Página `/` — dashboard com cards de status, coleta manual e envio imediato (equiv. `views/dashboard.ts`)
+
+**Ofertas**
+
+- [ ] Página `/offers` — listagem com filtro por status (equiv. `views/offers.ts` + `public/js/offers.js`)
+- [ ] Página `/offers/:id` — detalhe, preview da mensagem, ações delete/send (equiv. `views/offer-detail.ts`)
+- [ ] Formulários inline — search limit e affiliate delay
+
+**Settings**
+
+- [ ] Página `/settings` — abas: Geral, Score, Brand, Horários, Afiliados, Conexões, Operações (equiv. `views/settings/`)
+- [ ] Seção Score — editor de tiers (equiv. `settings/sections/score-section.ts`)
+- [ ] Seção Brand — nome, subtítulo, upload logo base64 (equiv. `brand-section.ts`)
+- [ ] Seção Horários operacionais (equiv. `operating-hours-section.ts`)
+- [ ] Seção Afiliados — Amazon + delay de links (equiv. `affiliate-section.ts`)
+- [ ] Seção Conexões — cards WhatsApp/Telegram/ML (equiv. `connections-section.ts`)
+- [ ] Seção Operações — worker start/stop/restart, status Redis (equiv. modals + `settings.js`)
+- [ ] Modais de conexão WhatsApp (QR polling) e ML (start/finish/cancel) (equiv. `connect-modals.ts`)
+
+**Template**
+
+- [ ] Página `/template` — editor de template de ofertas e cupons + CRUD auto-messages (equiv. `views/template.ts` + `public/js/template.js`)
+
+**Cupons**
+
+- [ ] Página `/coupons` — listagem, refresh, envio, store link (equiv. `views/coupons.ts`)
+
+**Fontes**
+
+- [ ] Página `/sources/:channel` — ML + Amazon, add/remove, toggles (equiv. `views/sources.ts` + `public/js/sources.js`)
+
+**Contas**
+
+- [ ] Página `/accounts` — CRUD multi-plataforma, destinos WhatsApp, configs por conta (equiv. `views/accounts.ts` + `public/js/accounts.js`)
+
+**Logs**
+
+- [ ] Página `/logs` — viewer com filtros e auto-scroll (equiv. `views/logs/` + `public/js/logs.js`)
+
+#### Fase 5 — Docker, deploy e CI
+
+- [ ] Dockerfile multi-stage: `backend` (API + workers compartilham imagem base bookworm + Chromium)
+- [ ] Dockerfile `frontend` — build estático + nginx (ou servir via CDN)
+- [ ] Serviço `api` no docker-compose — substitui/complementa serviço `manager` atual
+- [ ] Serviço `frontend` no docker-compose — proxy reverso unificando `/` (SPA) e `/api` (backend)
+- [ ] Manter serviços `collector`, `scheduler`, `worker`, `postgres`, `redis`, `migrate` inalterados (ajustar apenas paths/volumes)
+- [ ] Preservar noVNC no container da API para login ML no Docker (`MANAGER_VNC_ENABLED`)
+- [ ] Variáveis de ambiente — separar `API_PORT`, `FRONTEND_PORT`, `VITE_*` vs secrets do backend
+- [ ] Atualizar `npm run up` / `scripts/up.ts` — subir API + frontend em dev (sem manager SSR)
+- [ ] Atualizar preflight — profile `api` substituindo `manager`
+- [ ] Atualizar CI — build backend + frontend, testes de ambos, `tsc` nos três pacotes
+- [ ] Atualizar `.cursor/docs/deployment.md` e `.cursor/docs/manager.md` (renomear para `frontend-api.md`)
+
+#### Fase 6 — Cutover e remoção do manager SSR
+
+- [ ] Rodar API + React em paralelo ao manager SSR (feature flag ou rotas separadas) durante transição
+- [ ] Checklist de paridade funcional — validar cada rota antiga vs nova (54 rotas)
+- [ ] Testes E2E da SPA — fluxos críticos: login, settings save, QR WhatsApp, coleta manual, envio oferta
+- [ ] Testes de integração da API — endpoints principais com DB/Redis mockados
+- [ ] Remover `manager/views/` e rotas HTML de `manager/http/routes/`
+- [ ] Remover `manager/public/` (CSS/JS estáticos do painel antigo)
+- [ ] Remover entry `npm run manager` e serviço Docker `manager`
+- [ ] Remover hot reload SSE do manager (`manager/dev/`) — substituído por Vite HMR
+- [ ] Arquivar ou remover pasta `manager/` após cutover completo
+
+#### Fase 7 — Qualidade pós-migração
+
+- [ ] Testes unitários dos handlers da API (auth, validação Zod, error middleware)
+- [ ] Testes de componentes React (forms de settings, modais de conexão)
+- [ ] Revisão de segurança — CSRF, XSS (React escapa por padrão), rate limit na API
+- [ ] Documentar fluxo de desenvolvimento local (`backend/` + `frontend/` + infra Docker)
+- [ ] Atualizar `.cursor/rules/architecture.mdc` e `.cursor/rules/manager.mdc` → `frontend.mdc` + `api.mdc`
+
+---
 
 ### Multi-conta (painel)
 
@@ -23,10 +237,12 @@ Quadro de tarefas do projeto **Radar Ofertas**. Atualizar conforme o desenvolvim
 
 ### Manager — segurança
 
-- [ ] CSRF token nos POSTs destrutivos (delete oferta, workers, contas)
-- [ ] `escapeHtml` escapar aspas simples (`'`) — XSS em `views/accounts.ts` L60 (`onsubmit`)
-- [ ] Propagar `MANAGER_TOKEN` em forms ou migrar para sessão/cookie
-- [ ] Limite de tamanho em `readFormBody`
+> _Itens abaixo serão resolvidos na migração React + API REST (Fase 1). Manter até cutover do manager SSR._
+
+- [ ] CSRF token nos POSTs destrutivos (delete oferta, workers, contas) → **supersedido por:** Fase 1 API REST
+- [ ] `escapeHtml` escapar aspas simples (`'`) — XSS em `views/accounts.ts` L60 (`onsubmit`) → **supersedido por:** React (Fase 4)
+- [ ] Propagar `MANAGER_TOKEN` em forms ou migrar para sessão/cookie → **supersedido por:** Fase 1 API REST
+- [ ] Limite de tamanho em `readFormBody` → **supersedido por:** Fase 1 API REST
 
 ### Qualidade e infra
 
@@ -233,7 +449,8 @@ _(nenhum item ativo)_
 - **Fila dedicada de links:** Separar geração de afiliado do collector para não bloquear coleta.
 - **Múltiplas tags de afiliado:** Selecionar tag por canal/categoria/conta.
 - **Webhook de alerta:** Notificar quando sessão ML expirar (similar a QR WhatsApp).
-- **Login ML no Redis:** Mover fluxo Playwright para serviço dedicado (hoje single-node no manager).
+- **Login ML no Redis:** Mover fluxo Playwright para serviço dedicado (hoje single-node no manager) — considerar junto com serviço `api` na Fase 5.
+- **React Query / TanStack Query:** Cache e revalidação no frontend após migração (Fase 3+).
 
 ---
 
@@ -247,6 +464,16 @@ _(nenhum item ativo)_
 4. Acessar `http://localhost:3000/manager` para configurar score, template e horários.
 5. **Prioridade alta (afiliado):** capturar request `createLink` real via DevTools.
 6. ~~**Prioridade média (multi-conta UI):** spawn de workers por conta no painel.~~ ✅
+7. **Prioridade estrutural:** iniciar **Fase 0** da seção *Separação backend / frontend* no backlog acima.
+
+### Ordem sugerida da migração React + API
+
+1. Fase 0 — estrutura monorepo (`backend/`, `frontend/`, `docker/`)
+2. Fase 1 — API REST (auth, middleware, health)
+3. Fase 3 — scaffold React (layout, auth, cliente HTTP) em paralelo à Fase 2
+4. Fase 2 + Fase 4 — endpoint + página por domínio (dashboard → settings → ofertas → contas → logs)
+5. Fase 5 — Docker/CI
+6. Fase 6 — cutover e remoção do manager SSR
 
 ### Arquivos-chave
 

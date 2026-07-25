@@ -117,7 +117,7 @@ describe('processOffer', () => {
     assert.equal(calls(deps.createOffer), 0);
   });
 
-  it('não duplica quando mercadoLivreId já existe com todos os canais cobertos', async () => {
+  it('não duplica quando mercadoLivreId já existe com todos os canais enviados', async () => {
     const deps = makeDeps({
       findOfferIdByMercadoLivreId: mock.fn(async () => 'existing-id'),
       findExistingDeliveryChannels: mock.fn(async (): Promise<('whatsapp' | 'telegram')[]> => [
@@ -130,6 +130,19 @@ describe('processOffer', () => {
 
     assert.equal(result, null);
     assert.equal(calls(deps.createOffer), 0);
+  });
+
+  it('reenfileira canal com entrega pendente quando mercadoLivreId já existe', async () => {
+    const deps = makeDeps({
+      findOfferIdByMercadoLivreId: mock.fn(async () => 'existing-id'),
+      findExistingDeliveryChannels: mock.fn(async (): Promise<('whatsapp' | 'telegram')[]> => []),
+    });
+
+    const result = await processOffer(makeRawOffer(), deps);
+
+    assert.equal(result, 'existing-id');
+    assert.equal(calls(deps.openOfferDelivery), 2);
+    assert.equal(calls(deps.enqueueOfferSend), 2);
   });
 
   it('faz dispatch para canal faltante quando mercadoLivreId já existe', async () => {

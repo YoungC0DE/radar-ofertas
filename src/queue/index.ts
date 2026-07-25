@@ -1,10 +1,13 @@
-import { Queue } from 'bullmq';
+import { Queue, type Job } from 'bullmq';
 import { getEnabledAccountIdsForChannel } from '../accounts/channel-accounts.js';
 import { getCollectorIntervalMinutes } from '../config/queue-config-store.js';
 import { categoryJobKey } from '../config/ml-sources-config.js';
 import { env } from '../config/env.js';
 import { CHANNELS, isChannelEnabled } from '../channels/index.js';
 import type { Channel } from '../channels/types.js';
+import { computeOfferSendDelayMs } from './sender-scheduling.js';
+import { clearSenderPacingSlot } from '../utils/sender-pacing.js';
+import { getSenderDelayMinutesCached, hydrateQueueConfigCache } from '../config/queue-config-store.js';
 
 export const QUEUE_NAMES = {
   OFFER_COLLECTOR: 'offer-collector',
@@ -186,17 +189,154 @@ export const SENDER_JOB_OPTIONS = {
   removeOnFail: 100,
 } as const;
 
+/**
+ * Garante um job de envio na fila. Reutiliza jobs ativos; substitui jobs falhos ou
+ * concluídos sem envio — evita ofertas presas após falha no boot do worker (Docker).
+ */
+function isOverdueDelayedJob(timestamp: number, delayMs: number): boolean {
+  if (delayMs <= 0) return false;
+  return Date.now() > timestamp + delayMs + 60_000;
+}
+
+async function removeSenderJobIfIdle(job: Job): Promise<boolean> {
+  try {
+    await job.remove();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function ensureOfferSendJob(
+  channel: Channel,
+  offerId: string,
+  accountId = 'default',
+  options: { force?: boolean; priority?: number; replaceStuck?: boolean; fixedDelayMs?: number } = {},
+): Promise<boolean> {
+  assertRedisEnabled('enfileiramento de envio');
+  const queue = getSenderQueue(channel, accountId);
+  const jobId = senderJobId(channel, offerId, accountId);
+  const force = options.force === true;
+  const replaceStuck = options.replaceStuck === true;
+
+  const existing = await queue.getJob(jobId);
+  if (existing) {
+    const state = await existing.getState();
+    if (state === 'active') return false;
+    if (state === 'failed' || state === 'completed') {
+      if (!(await removeSenderJobIfIdle(existing))) return false;
+    } else if (state === 'waiting' || state === 'delayed') {
+      const stuck =
+        replaceStuck ||
+        (state === 'delayed' && isOverdueDelayedJob(existing.timestamp, existing.opts.delay ?? 0));
+      if (!force && !stuck) return false;
+      if (!(await removeSenderJobIfIdle(existing))) return false;
+    } else if (force) {
+      if (!(await removeSenderJobIfIdle(existing))) return false;
+    }
+  }
+
+  const delayMs =
+    options.fixedDelayMs != null
+      ? options.fixedDelayMs
+      : await computeOfferSendDelayMs(channel, accountId, { force });
+
+  await queue.add(
+    'send',
+    { offerId, accountId, force },
+    {
+      jobId,
+      delay: delayMs,
+      ...(options.priority != null ? { priority: options.priority } : {}),
+      ...SENDER_JOB_OPTIONS,
+    },
+  );
+  return true;
+}
+
 export async function enqueueOfferSend(
   channel: Channel,
   offerId: string,
   accountId = 'default',
 ): Promise<void> {
-  assertRedisEnabled('enfileiramento de envio');
-  await getSenderQueue(channel, accountId).add(
-    'send',
-    { offerId, accountId },
-    { jobId: senderJobId(channel, offerId, accountId), ...SENDER_JOB_OPTIONS },
-  );
+  await ensureOfferSendJob(channel, offerId, accountId);
+}
+
+/** Reenfileira entregas pendentes sem job ativo. */
+export async function reconcilePendingOfferSendJobs(): Promise<number> {
+  if (!env.REDIS_ENABLED) return 0;
+
+  const { findPendingDeliveries } = await import('../offers/repository.js');
+  const pending = await findPendingDeliveries();
+  let requeued = 0;
+
+  for (const { offerId, channel, accountId } of pending) {
+    const added = await ensureOfferSendJob(channel, offerId, accountId);
+    if (added) requeued++;
+  }
+
+  return requeued;
+}
+
+/** Remove jobs delayed/waiting das filas de envio (ex.: backlog preso por moveToDelayed). */
+export async function purgeOfferSendQueueBacklog(): Promise<{ delayed: number; waiting: number }> {
+  if (!env.REDIS_ENABLED) return { delayed: 0, waiting: 0 };
+
+  let delayed = 0;
+  let waiting = 0;
+
+  for (const channel of CHANNELS) {
+    if (!isChannelEnabled(channel)) continue;
+    const accountIds = await getEnabledAccountIdsForChannel(channel);
+    for (const accountId of accountIds) {
+      const queue = getSenderQueue(channel, accountId);
+      await queue.pause();
+      const removedDelayed = await queue.clean(0, 10_000, 'delayed');
+      const removedWaiting = await queue.clean(0, 10_000, 'wait');
+      delayed += Array.isArray(removedDelayed) ? removedDelayed.length : 0;
+      waiting += Array.isArray(removedWaiting) ? removedWaiting.length : 0;
+      await queue.resume();
+    }
+  }
+
+  return { delayed, waiting };
+}
+
+/** Remove jobs presos (delayed/waiting) e reenfileira com delay calculado no enqueue. */
+export async function resetAndRequeuePendingSenderJobs(): Promise<number> {
+  if (!env.REDIS_ENABLED) return 0;
+
+  await purgeOfferSendQueueBacklog();
+  await hydrateQueueConfigCache();
+
+  const { findPendingDeliveries } = await import('../offers/repository.js');
+  const pending = await findPendingDeliveries();
+  const pacingMs = getSenderDelayMinutesCached() * 60 * 1000;
+  let requeued = 0;
+
+  const byAccount = new Map<string, typeof pending>();
+  for (const row of pending) {
+    const key = `${row.channel}:${row.accountId}`;
+    const group = byAccount.get(key) ?? [];
+    group.push(row);
+    byAccount.set(key, group);
+  }
+
+  for (const [key, rows] of byAccount) {
+    const [channel, accountId] = key.split(':') as [Channel, string];
+    await clearSenderPacingSlot(channel, accountId);
+
+    for (let index = 0; index < rows.length; index++) {
+      const { offerId } = rows[index];
+      const added = await ensureOfferSendJob(channel, offerId, accountId, {
+        replaceStuck: true,
+        fixedDelayMs: index * pacingMs,
+      });
+      if (added) requeued++;
+    }
+  }
+
+  return requeued;
 }
 
 export async function enqueueAutoMessageSend(
