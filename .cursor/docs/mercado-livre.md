@@ -63,16 +63,22 @@ ml_auth/
 
 ### Login
 
-Via painel (Settings → Conectar ML) ou CLI:
+Via painel (Contas → Logar) **somente com navegador visível** — no Docker use o host ou CDP (abaixo). CLI:
 
 ```bash
 npm run ml:login
 ```
 
-1. Abre navegador visível (`headless: false`).
+1. Abre navegador visível no host (`cli` ignora `ML_BROWSER_HEADLESS`).
 2. Usuário faz login no portal de afiliados manualmente.
 3. Salva sessão quando o portal estiver pronto.
-4. Sessão salva em `storage-state.json`.
+4. Sessão salva em `storage-state.json` (volume `./data/ml_auth` no Docker).
+
+**Docker + painel:** com `ML_BROWSER_HEADLESS=true` (padrão), o manager não abre Chromium sem display. Opções:
+
+- `npm run ml:login` no host (recomendado)
+- **noVNC:** `MANAGER_VNC_ENABLED=true` → Xvfb + x11vnc + websockify no container manager → `http://localhost:6080/vnc_lite.html`
+- **CDP:** `ML_LOGIN_CDP_URL=http://host.docker.internal:9222` + Chrome com `--remote-debugging-port=9222`
 
 Repetir quando links deixarem de funcionar (sessão expirada).
 
@@ -100,7 +106,8 @@ Rate limit configurável via `affiliateLinkDelayMs` e backoff quando há backlog
 | `ML_SEARCH_LIMIT` | `50` | Máximo de produtos por categoria |
 | `ML_SCRAPER_USER_AGENT` | Chrome 131 | User-Agent das requisições |
 | `ML_USE_BROWSER_FALLBACK` | `true` | Ativa Playwright em falhas |
-| `ML_BROWSER_HEADLESS` | `true` | Browser invisível no fallback |
+| `ML_BROWSER_HEADLESS` | `true` | Browser invisível no fallback de coleta |
+| `ML_LOGIN_CDP_URL` | `` | Chrome do host via CDP — login ML pelo painel no Docker |
 | `ML_HTTP_TIMEOUT_MS` | `30000` | Timeout HTTP/browser |
 | `AFFILIATE_CONFIG` | `{}` | JSON: `tag`, `baseUrl` |
 
@@ -158,4 +165,4 @@ Fluxo no manager (`/manager/coupons`):
 
 ## Para o próximo agente
 
-Prioridades no board: validar endpoint `createLink` real via DevTools, ajustar seletores do link-builder, completar multi-conta no sender.
+Prioridades no board: validar endpoint `createLink` real via DevTools, ajustar seletores do link-builder.

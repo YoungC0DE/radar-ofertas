@@ -1,4 +1,4 @@
-import { renderLayout } from './layout.js';
+import { renderLayoutShell as renderLayout } from './layout/shell.js';
 import { escapeHtml } from './helpers.js';
 import { pageScripts, pageStyles } from './page-assets.js';
 import type { SourcesPageData } from '../models/sources-model.js';

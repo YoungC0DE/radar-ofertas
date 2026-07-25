@@ -1,17 +1,14 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { hostname } from 'node:os';
-import { getEnabledAccountIdsForChannel } from '../../src/accounts/channel-accounts.js';
-import { resolveAccountAuthPath } from '../../src/accounts/paths.js';
-import { findAccount, loadAccounts } from '../../src/accounts/repository.js';
-import { DEFAULT_ACCOUNT_ID } from '../../src/accounts/types.js';
-import type { Channel } from '../../src/channels/types.js';
+
+import { CHANNELS } from '../../src/channels/types.js';
 import { env } from '../../src/config/env.js';
 import { getWorkerHeartbeat, isWorkerHeartbeatFresh } from '../../src/utils/redis-state.js';
-import { getWhatsAppOwnerStatusAtPath } from '../../src/whatsapp/index.js';
 import { logger } from '../../src/utils/logger.js';
 
 const SPAWN_DISABLED_DETAIL =
-  'Workers gerenciados externamente — use Docker ou npm run worker no terminal.';
+  'Worker gerenciado externamente — use Docker ou npm run worker no terminal.';
+const WORKER_SCRIPT = 'src/worker.ts';
 
 export function canManagerSpawnWorkers(): boolean {
   return env.MANAGER_CAN_SPAWN_WORKERS;
@@ -36,18 +33,6 @@ function killProcessTree(proc: ChildProcess): void {
   }
 }
 
-function killPidTree(pid: number): void {
-  if (isWindows) {
-    spawn('taskkill', ['/pid', String(pid), '/T', '/F']);
-    return;
-  }
-  try {
-    process.kill(pid, 'SIGTERM');
-  } catch {
-    /* already gone */
-  }
-}
-
 export type WorkerStatus = 'stopped' | 'starting' | 'running' | 'error';
 
 export interface WorkerState {
@@ -56,6 +41,7 @@ export interface WorkerState {
   detail: string | null;
 }
 
+/** @deprecated Mantido para compatibilidade com views — use WorkerState. */
 export interface AccountWorkerState {
   accountId: string;
   label: string;
@@ -63,318 +49,162 @@ export interface AccountWorkerState {
   state: WorkerState;
 }
 
-const WORKER_SCRIPTS: Record<Channel, string> = {
-  whatsapp: 'src/worker.ts',
-  telegram: 'src/worker-telegram.ts',
-};
-
 interface WorkerSlot {
   proc?: ChildProcess;
   status: WorkerStatus;
   startedAt: string | null;
   detail: string | null;
-  externalOwner?: boolean;
 }
 
-const workers = new Map<string, WorkerSlot>();
+let workerSlot: WorkerSlot = { status: 'stopped', startedAt: null, detail: null };
 
-function resolveAccountId(accountId?: string): string {
-  return accountId?.trim() || DEFAULT_ACCOUNT_ID;
+export function workerDomPrefix(): string {
+  return 'worker';
 }
 
-function workerSlotKey(channel: Channel, accountId: string): string {
-  return `${channel}:${accountId}`;
-}
-
-export function workerDomPrefix(channel: Channel, accountId: string): string {
-  if (channel === 'whatsapp' && accountId === DEFAULT_ACCOUNT_ID) return 'worker';
-  if (channel === 'telegram' && accountId === DEFAULT_ACCOUNT_ID) return 'worker-tg';
-  return `worker-${channel}-${accountId.replace(/[^a-zA-Z0-9_-]+/g, '-')}`;
-}
-
-function slot(channel: Channel, accountId: string): WorkerSlot {
-  const key = workerSlotKey(channel, accountId);
-  let current = workers.get(key);
-  if (!current) {
-    current = { status: 'stopped', startedAt: null, detail: null };
-    workers.set(key, current);
-  }
-  return current;
-}
-
-function externalOwnerDetail(pid: number, host: string | null): string {
-  const hostLabel = host && host !== hostname() ? host : 'local';
-  return `Ativo em outro processo (PID ${pid}, ${hostLabel})`;
-}
-
-function hasLocalWorker(current: WorkerSlot): boolean {
-  return !!current.proc && (current.status === 'running' || current.status === 'starting');
-}
-
-function spawnEnvForAccount(accountId: string): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    WORKER_ACCOUNT_ID: accountId === DEFAULT_ACCOUNT_ID ? '' : accountId,
-  };
-}
-
-async function whatsappAuthPath(accountId: string): Promise<string> {
-  return resolveAccountAuthPath(accountId, 'whatsapp');
-}
-
-async function syncWhatsAppFromExternalOwner(
-  current: WorkerSlot,
-  accountId: string,
-): Promise<boolean> {
-  if (hasLocalWorker(current)) return false;
-
-  const owner = await getWhatsAppOwnerStatusAtPath(await whatsappAuthPath(accountId));
-  if (!owner.active || owner.isCurrentProcess) {
-    if (current.externalOwner && !owner.active) {
-      current.status = 'stopped';
-      current.startedAt = null;
-      current.detail = null;
-      current.externalOwner = false;
-    }
-    return false;
-  }
-
-  current.status = 'running';
-  current.proc = undefined;
-  current.externalOwner = true;
-  current.detail = externalOwnerDetail(owner.pid!, owner.host);
-  current.startedAt = current.startedAt ?? new Date().toISOString();
-  return true;
-}
-
-async function stopWhatsAppExternalOwner(accountId: string): Promise<void> {
-  const owner = await getWhatsAppOwnerStatusAtPath(await whatsappAuthPath(accountId));
-  if (!owner.active || owner.isCurrentProcess || !owner.pid) return;
-  if (owner.host !== hostname()) return;
-  killPidTree(owner.pid);
-}
-
-async function deriveExternalWorkerState(
-  channel: Channel,
-  accountId: string,
-): Promise<WorkerState> {
-  if (channel === 'whatsapp') {
-    const owner = await getWhatsAppOwnerStatusAtPath(await whatsappAuthPath(accountId));
-    if (owner.active) {
+async function findExternalWorkerState(): Promise<WorkerState | null> {
+  for (const channel of CHANNELS) {
+    const heartbeat = await getWorkerHeartbeat(channel);
+    if (heartbeat && isWorkerHeartbeatFresh(heartbeat)) {
+      const hostLabel = heartbeat.host !== hostname() ? heartbeat.host : 'local';
       return {
         status: 'running',
-        startedAt: null,
-        detail: externalOwnerDetail(owner.pid!, owner.host),
+        startedAt: heartbeat.startedAt || null,
+        detail: `Ativo (PID ${heartbeat.pid}, ${hostLabel})`,
       };
     }
   }
 
-  const heartbeat = await getWorkerHeartbeat(channel, accountId);
-  if (heartbeat && isWorkerHeartbeatFresh(heartbeat)) {
-    const hostLabel = heartbeat.host !== hostname() ? heartbeat.host : 'local';
+  return null;
+}
+
+export async function getSenderWorkerState(): Promise<WorkerState> {
+  if (workerSlot.proc && (workerSlot.status === 'running' || workerSlot.status === 'starting')) {
     return {
-      status: 'running',
-      startedAt: heartbeat.startedAt || null,
-      detail: `Ativo (PID ${heartbeat.pid}, ${hostLabel})`,
+      status: workerSlot.status,
+      startedAt: workerSlot.startedAt,
+      detail: workerSlot.detail,
     };
   }
 
+  const external = await findExternalWorkerState();
+  if (external) return external;
+
   if (!canManagerSpawnWorkers()) {
-    return {
+    return { status: 'stopped', startedAt: null, detail: SPAWN_DISABLED_DETAIL };
+  }
+
+  return {
+    status: workerSlot.status,
+    startedAt: workerSlot.startedAt,
+    detail: workerSlot.detail,
+  };
+}
+
+/** Compat: rotas antigas passam canal/conta — status é do worker unificado. */
+export async function getWorkerState(
+  _channel?: import('../../src/channels/types.js').Channel,
+  _accountId?: string,
+): Promise<WorkerState> {
+  return getSenderWorkerState();
+}
+
+export async function listWorkerStates(
+  _channel?: import('../../src/channels/types.js').Channel,
+): Promise<AccountWorkerState[]> {
+  const state = await getSenderWorkerState();
+  return [
+    {
+      accountId: 'default',
+      label: 'Envio (WhatsApp + Telegram)',
+      prefix: workerDomPrefix(),
+      state,
+    },
+  ];
+}
+
+export async function isWorkerRunning(): Promise<boolean> {
+  const { status } = await getSenderWorkerState();
+  return status === 'running' || status === 'starting';
+}
+
+export async function startSenderWorker(): Promise<WorkerState> {
+  if (!canManagerSpawnWorkers()) {
+    return (await findExternalWorkerState()) ?? {
       status: 'stopped',
       startedAt: null,
       detail: SPAWN_DISABLED_DETAIL,
     };
   }
 
-  return { status: 'stopped', startedAt: null, detail: null };
-}
-
-export async function getWorkerState(channel: Channel, accountId?: string): Promise<WorkerState> {
-  const resolvedAccountId = resolveAccountId(accountId);
-  const current = slot(channel, resolvedAccountId);
-
-  if (channel === 'whatsapp') {
-    await syncWhatsAppFromExternalOwner(current, resolvedAccountId);
+  if (workerSlot.proc && (workerSlot.status === 'running' || workerSlot.status === 'starting')) {
+    return getSenderWorkerState();
   }
 
-  if (hasLocalWorker(current)) {
-    return { status: current.status, startedAt: current.startedAt, detail: current.detail };
-  }
-
-  if (current.externalOwner && current.status === 'running') {
-    return { status: current.status, startedAt: current.startedAt, detail: current.detail };
-  }
-
-  const external = await deriveExternalWorkerState(channel, resolvedAccountId);
-  if (external.status !== 'stopped' || !canManagerSpawnWorkers()) {
+  const external = await findExternalWorkerState();
+  if (external?.status === 'running') {
     return external;
   }
 
-  return { status: current.status, startedAt: current.startedAt, detail: current.detail };
-}
+  workerSlot.status = 'starting';
+  workerSlot.detail = null;
+  workerSlot.startedAt = new Date().toISOString();
 
-export async function listWorkerStates(channel: Channel): Promise<AccountWorkerState[]> {
-  const accountIds = await getEnabledAccountIdsForChannel(channel);
-  const accounts = await loadAccounts();
-
-  return Promise.all(
-    accountIds.map(async (accountId) => {
-      const account = accounts.find((row) => row.id === accountId && row.platform === channel);
-      const label = account?.label ?? accountId;
-      return {
-        accountId,
-        label,
-        prefix: workerDomPrefix(channel, accountId),
-        state: await getWorkerState(channel, accountId),
-      };
-    }),
-  );
-}
-
-export async function isWorkerRunning(channel: Channel, accountId?: string): Promise<boolean> {
-  const { status } = await getWorkerState(channel, accountId);
-  return status === 'running' || status === 'starting';
-}
-
-export async function startWorker(channel: Channel, accountId?: string): Promise<WorkerState> {
-  const resolvedAccountId = resolveAccountId(accountId);
-
-  if (!canManagerSpawnWorkers()) {
-    return deriveExternalWorkerState(channel, resolvedAccountId);
-  }
-
-  const account = await findAccount(resolvedAccountId, channel);
-  if (!account) {
-    return {
-      status: 'error',
-      startedAt: null,
-      detail: `Conta "${resolvedAccountId}" não encontrada`,
-    };
-  }
-  if (account.platform !== channel) {
-    return {
-      status: 'error',
-      startedAt: null,
-      detail: `Conta "${resolvedAccountId}" é ${account.platform}, não ${channel}`,
-    };
-  }
-  if (!account.enabled) {
-    return {
-      status: 'error',
-      startedAt: null,
-      detail: `Conta "${resolvedAccountId}" está desabilitada`,
-    };
-  }
-
-  const current = slot(channel, resolvedAccountId);
-
-  if (channel === 'whatsapp') {
-    await syncWhatsAppFromExternalOwner(current, resolvedAccountId);
-    if (current.externalOwner && current.status === 'running') {
-      return getWorkerState(channel, resolvedAccountId);
-    }
-  }
-
-  if (hasLocalWorker(current)) return getWorkerState(channel, resolvedAccountId);
-
-  if (channel === 'whatsapp') {
-    const owner = await getWhatsAppOwnerStatusAtPath(await whatsappAuthPath(resolvedAccountId));
-    if (owner.active && !owner.isCurrentProcess) {
-      current.status = 'running';
-      current.proc = undefined;
-      current.externalOwner = true;
-      current.detail = externalOwnerDetail(owner.pid!, owner.host);
-      current.startedAt = new Date().toISOString();
-      logger.info(
-        { channel, accountId: resolvedAccountId, pid: owner.pid },
-        'Worker WhatsApp já ativo em outro processo',
-      );
-      return getWorkerState(channel, resolvedAccountId);
-    }
-  }
-
-  current.status = 'starting';
-  current.detail = null;
-  current.externalOwner = false;
-  current.startedAt = new Date().toISOString();
-
-  const proc = spawn('npx', ['tsx', '--env-file=.env', WORKER_SCRIPTS[channel]], {
+  const proc = spawn('npx', ['tsx', '--env-file=.env', WORKER_SCRIPT], {
     cwd: process.cwd(),
-    env: spawnEnvForAccount(resolvedAccountId),
+    env: process.env,
     shell: isWindows,
     detached: !isWindows,
     stdio: 'inherit',
   });
-  current.proc = proc;
+  workerSlot.proc = proc;
 
   proc.on('spawn', () => {
-    if (current.proc === proc) {
-      current.status = 'running';
-      current.externalOwner = false;
-    }
-    logger.info(
-      { channel, accountId: resolvedAccountId, pid: proc.pid },
-      'Worker iniciado pelo painel',
-    );
+    if (workerSlot.proc === proc) workerSlot.status = 'running';
+    logger.info({ pid: proc.pid }, 'Worker unificado iniciado pelo painel');
   });
 
   proc.on('error', (error) => {
-    if (current.proc !== proc) return;
-    current.status = 'error';
-    current.detail = error.message;
-    current.proc = undefined;
-    current.externalOwner = false;
-    logger.error(
-      { channel, accountId: resolvedAccountId, error },
-      'Falha ao iniciar worker pelo painel',
-    );
+    if (workerSlot.proc !== proc) return;
+    workerSlot.status = 'error';
+    workerSlot.detail = error.message;
+    workerSlot.proc = undefined;
+    logger.error({ error }, 'Falha ao iniciar worker pelo painel');
   });
 
   proc.on('exit', (code, signal) => {
-    void (async () => {
-      if (current.proc === proc) current.proc = undefined;
-
-      if (channel === 'whatsapp' && code === 0) {
-        const synced = await syncWhatsAppFromExternalOwner(current, resolvedAccountId);
-        if (synced) {
-          logger.info(
-            { channel, accountId: resolvedAccountId },
-            'Worker duplicado encerrado — sessão mantida em outro processo',
-          );
-          return;
-        }
-      }
-
-      if (current.externalOwner) return;
-
-      current.status = 'stopped';
-      current.detail = `Encerrado (code=${code ?? '—'}, signal=${signal ?? '—'})`;
-      current.externalOwner = false;
-      logger.info({ channel, accountId: resolvedAccountId, code, signal }, 'Worker encerrado');
-    })();
+    if (workerSlot.proc === proc) workerSlot.proc = undefined;
+    workerSlot.status = 'stopped';
+    workerSlot.detail = `Encerrado (code=${code ?? '—'}, signal=${signal ?? '—'})`;
+    logger.info({ code, signal }, 'Worker unificado encerrado');
   });
 
-  return getWorkerState(channel, resolvedAccountId);
+  return getSenderWorkerState();
 }
 
-export async function stopWorker(channel: Channel, accountId?: string): Promise<WorkerState> {
-  const resolvedAccountId = resolveAccountId(accountId);
+/** Compat com rotas antigas. */
+export async function startWorker(
+  _channel?: import('../../src/channels/types.js').Channel,
+  _accountId?: string,
+): Promise<WorkerState> {
+  return startSenderWorker();
+}
 
+export async function stopSenderWorker(): Promise<WorkerState> {
   if (!canManagerSpawnWorkers()) {
-    return deriveExternalWorkerState(channel, resolvedAccountId);
+    return (await findExternalWorkerState()) ?? {
+      status: 'stopped',
+      startedAt: null,
+      detail: SPAWN_DISABLED_DETAIL,
+    };
   }
 
-  const current = slot(channel, resolvedAccountId);
-  const proc = current.proc;
-
+  const proc = workerSlot.proc;
   if (!proc) {
-    if (channel === 'whatsapp') await stopWhatsAppExternalOwner(resolvedAccountId);
-    current.status = 'stopped';
-    current.startedAt = null;
-    current.detail = null;
-    current.externalOwner = false;
-    return getWorkerState(channel, resolvedAccountId);
+    workerSlot.status = 'stopped';
+    workerSlot.startedAt = null;
+    workerSlot.detail = null;
+    return getSenderWorkerState();
   }
 
   return new Promise((resolve) => {
@@ -382,13 +212,10 @@ export async function stopWorker(channel: Channel, accountId?: string): Promise<
     const finish = (): void => {
       if (settled) return;
       settled = true;
-      void (async () => {
-        current.status = 'stopped';
-        current.startedAt = null;
-        current.detail = null;
-        current.externalOwner = false;
-        resolve(await getWorkerState(channel, resolvedAccountId));
-      })();
+      workerSlot.status = 'stopped';
+      workerSlot.startedAt = null;
+      workerSlot.detail = null;
+      void getSenderWorkerState().then(resolve);
     };
 
     proc.once('exit', finish);
@@ -397,14 +224,32 @@ export async function stopWorker(channel: Channel, accountId?: string): Promise<
   });
 }
 
-export async function restartWorker(channel: Channel, accountId?: string): Promise<WorkerState> {
+export async function stopWorker(
+  _channel?: import('../../src/channels/types.js').Channel,
+  _accountId?: string,
+): Promise<WorkerState> {
+  return stopSenderWorker();
+}
+
+export async function restartSenderWorker(): Promise<WorkerState> {
   if (!canManagerSpawnWorkers()) {
-    return deriveExternalWorkerState(channel, resolveAccountId(accountId));
+    return (await findExternalWorkerState()) ?? {
+      status: 'stopped',
+      startedAt: null,
+      detail: SPAWN_DISABLED_DETAIL,
+    };
   }
 
-  await stopWorker(channel, accountId);
+  await stopSenderWorker();
   await new Promise((resolve) => setTimeout(resolve, 500));
-  return startWorker(channel, accountId);
+  return startSenderWorker();
+}
+
+export async function restartWorker(
+  _channel?: import('../../src/channels/types.js').Channel,
+  _accountId?: string,
+): Promise<WorkerState> {
+  return restartSenderWorker();
 }
 
 // --- Prisma generate (run and finish) ----------------------------------------

@@ -14,6 +14,14 @@ describe('parseAccountConfig', () => {
   it('rejeita config Telegram incompleta', () => {
     assert.throws(() => parseAccountConfig('telegram', { botToken: 'x' }));
   });
+
+  it('valida config Mercado Livre com tag de afiliado', () => {
+    const config = parseAccountConfig('mercado_livre', {
+      authPath: './data/ml_auth',
+      affiliateTag: 'minha-tag',
+    });
+    assert.equal((config as { affiliateTag: string }).affiliateTag, 'minha-tag');
+  });
 });
 
 describe('parseAccountRecord', () => {

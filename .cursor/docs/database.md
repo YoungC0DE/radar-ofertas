@@ -98,8 +98,11 @@ Configuração runtime editável pelo manager. Chave primária: `key` (string).
 | `affiliateLinkDelayMs` | Int — delay entre gerações de link afiliado |
 | `affiliateLinkBacklogDelayMinutes` | Int — backoff quando há backlog |
 | `affiliateLinkBacklogThreshold` | Int — quantidade de pendentes para ativar backoff |
-| `mlCustomSources` | JSON — URLs customizadas de coleta por canal |
+| `mlCustomSources` | JSON — URLs customizadas de coleta ML por canal |
 | `mlEnvSourceFlags` | JSON — ativar/desativar categorias do `.env` por canal |
+| `amazonCustomSources` | JSON — URLs customizadas de coleta Amazon por canal |
+| `amazonEnvSourceFlags` | JSON — ativar/desativar fontes `AMAZON_SOURCES` por canal |
+| `amazonAffiliateConfig` | JSON — baseUrl, storeId, affiliateLinkPrefix (Amazon) |
 | `couponsUrl` | String — URL da página de cupons ML |
 
 > **Legado:** contas viviam em `settings.accounts` (JSON). Migradas para a tabela `accounts` na migration `20260723140000`.
@@ -133,6 +136,8 @@ npx prisma studio        # UI visual (não há script npm dedicado)
 | Contas | `accounts/repository.ts` |
 | Estado Redis (heartbeat, QR) | `utils/redis-state.ts` |
 | Fontes ML | `config/ml-sources-config.ts` |
+| Fontes Amazon | `config/amazon-sources-config.ts` |
+| Afiliado Amazon | `config/amazon-config-store.ts` |
 | Cupons (URL) | `config/coupons-config-store.ts` |
 
 Nunca chamar `prisma` diretamente de jobs ou módulos de scraping.

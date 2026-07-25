@@ -40,6 +40,7 @@ public/                    → CSS/JS estáticos servidos em /manager/assets/*
 
 - CSS compartilhado em `public/css/base.css`; CSS de página via `pageStyles('nome.css')`.
 - JS de página via `pageScripts(...)` com `defer`; dados dinâmicos em `<script type="application/json" id="*-page-data">`.
+- **Hot reload:** `manager/dev/mode.ts` (`MANAGER_HOT_RELOAD` ou `NODE_ENV` ≠ `production`); SSE em `/manager/__dev/live` + polling em `manager/dev/file-watcher.ts` (todo `manager/`). Docker: `tsx watch` no serviço `manager`.
 - Classificação de logs só no servidor (`models/logs/log-classifier.ts`); o cliente consome campos já classificados da API.
 
 ## Auth e segurança
@@ -57,9 +58,9 @@ public/                    → CSS/JS estáticos servidos em /manager/assets/*
 - Componentes reutilizáveis em `views/components/` — não duplicar markup de cards/ícones.
 - Novas rotas: adicionar em `http/routes/index.ts` no grupo do domínio correto.
 - Evitar controllers importando `src/` direto — preferir models (exceções atuais: offers, dashboard).
-- Workers: status via Redis + `owner.lock` (WhatsApp). Spawn pelo painel só com `MANAGER_CAN_SPAWN_WORKERS=true`.
+- Workers: status via Redis + `owner.lock` (WhatsApp). Spawn pelo painel só com `MANAGER_CAN_SPAWN_WORKERS=true` — um worker unificado (WhatsApp + Telegram).
 - QR WhatsApp: worker publica em Redis; painel lê (`redis-state.ts`). Login ML permanece local ao manager (single-node).
 
 ## Multi-conta
 
-Página `/manager/accounts` implementada (add, toggle, delete). Runtime de envio por conta completo via `WORKER_ACCOUNT_ID`. Pendente: spawn de workers por conta no painel — ver `.cursor/docs/accounts.md`.
+Página `/manager/accounts` implementada (add, toggle, delete). Runtime de envio por conta completo via filas e publishers; worker unificado carrega todas as contas habilitadas — ver `.cursor/docs/accounts.md`.

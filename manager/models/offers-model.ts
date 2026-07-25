@@ -5,16 +5,22 @@ import {
   getSearchLimit,
   hydrateQueueConfigCache,
 } from '../../src/config/queue-config-store.js';
+import { fetchAmazonProductPage } from '../../src/amazon/http-scraper.js';
+import { buildOfferAffiliateLink, shouldRefreshAmazonAffiliateLink } from '../../src/offers/affiliate-link.js';
+import { detectOfferPlatform } from '../../src/offers/platform.js';
 import {
   countOffers,
   findDeliveriesByOfferIds,
   findOfferById,
   findOffers,
   getOfferStats,
+  updateOfferAffiliateLink,
+  updateOfferMarketInsights,
   type OfferSentFilter,
 } from '../../src/offers/repository.js';
 import type { DeliveryRecord, OfferRecord } from '../../src/offers/types.js';
 import { estimatePendingSendTimes } from '../../src/queue/sender-schedule.js';
+import { logger } from '../../src/utils/logger.js';
 import { type DatabaseSnapshot, withDatabase } from './db-model.js';
 
 const PAGE_SIZE = 50;
@@ -109,4 +115,75 @@ export async function loadOfferDetail(
 ): Promise<{ offer: OfferRecord | null; database: DatabaseSnapshot }> {
   const result = await withDatabase(async () => findOfferById(id), null);
   return { offer: result.data, database: result.database };
+}
+
+export interface AmazonOfferHydrationResult {
+  offer: OfferRecord;
+  coupon: string | null;
+}
+
+function amazonProductUrl(offer: OfferRecord): string {
+  return offer.permalink ?? `https://www.amazon.com.br/dp/${offer.mercadoLivreId}`;
+}
+
+/** Enriquece oferta Amazon no painel (link afiliado + dados do PDP). */
+export async function hydrateAmazonOfferRecord(
+  offer: OfferRecord,
+): Promise<AmazonOfferHydrationResult> {
+  if (detectOfferPlatform(offer) !== 'amazon') {
+    return { offer, coupon: null };
+  }
+
+  const permalink = amazonProductUrl(offer);
+  let hydrated: OfferRecord = { ...offer };
+  let coupon: string | null = null;
+
+  const needsAffiliateLink =
+    !offer.affiliateLink ||
+    shouldRefreshAmazonAffiliateLink(permalink, offer.mercadoLivreId, offer.affiliateLink);
+
+  if (needsAffiliateLink) {
+    try {
+      const affiliateLink = await buildOfferAffiliateLink(permalink, offer.mercadoLivreId);
+      await updateOfferAffiliateLink(offer.id, affiliateLink);
+      hydrated = { ...hydrated, affiliateLink };
+    } catch (error) {
+      logger.warn({ offerId: offer.id, error }, 'Falha ao gerar link afiliado Amazon no painel');
+    }
+  }
+
+  const needsProductPage =
+    !offer.seller ||
+    offer.rating === null ||
+    offer.soldQuantity === null ||
+    !offer.salesRank;
+
+  try {
+    const product = await fetchAmazonProductPage(permalink);
+    if (!product) return { offer: hydrated, coupon };
+
+    coupon = product.coupon;
+
+    if (needsProductPage) {
+      const salesRank =
+        product.reviewsCount !== null ? String(product.reviewsCount) : offer.salesRank;
+      await updateOfferMarketInsights(offer.id, {
+        rating: product.rating ?? offer.rating,
+        soldQuantity: product.soldQuantity ?? offer.soldQuantity,
+        salesRank,
+        seller: product.seller ?? offer.seller,
+      });
+      hydrated = {
+        ...hydrated,
+        rating: product.rating ?? offer.rating,
+        soldQuantity: product.soldQuantity ?? offer.soldQuantity,
+        salesRank,
+        seller: product.seller ?? offer.seller,
+      };
+    }
+  } catch (error) {
+    logger.warn({ offerId: offer.id, error }, 'Falha ao enriquecer oferta Amazon no painel');
+  }
+
+  return { offer: hydrated, coupon };
 }

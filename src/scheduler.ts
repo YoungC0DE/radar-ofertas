@@ -1,5 +1,6 @@
 import { processScheduledAutoMessages } from './auto-messages/service.js';
 import { hydrateBrandCache } from './config/brand-config.js';
+import { hydrateIntegrationState } from './channels/integration-state.js';
 import { bootstrapCacheCoherence } from './utils/config-cache-sync.js';
 import { logger } from './utils/logger.js';
 
@@ -10,6 +11,7 @@ async function main(): Promise<void> {
 
   await hydrateBrandCache();
   await bootstrapCacheCoherence();
+  await hydrateIntegrationState();
 
   const tick = async (): Promise<void> => {
     await processScheduledAutoMessages().catch((error) => {

@@ -1,6 +1,7 @@
 import { getEnabledChannels, isChannelEnabled } from '../channels/index.js';
 import type { Channel } from '../channels/types.js';
 import { findAccountsByPlatform } from '../accounts/repository.js';
+import { isMercadoLivreAffiliateTagConfigured } from '../accounts/ml-affiliate-tag.js';
 import { getEnabledAccountIdsForChannel } from '../accounts/channel-accounts.js';
 import {
   getActiveSourcesForChannel,
@@ -8,6 +9,7 @@ import {
   hydrateAllSourcesCaches,
   iterateSourcePages,
 } from '../sources/routing.js';
+import { isAmazonSourceUrl } from '../amazon/source-url.js';
 import { getSearchLimit } from '../config/queue-config-store.js';
 import { calculateOfferScore, getRuntimeScoreConfig } from '../config/score-config.js';
 import {
@@ -315,6 +317,7 @@ export async function orchestrateOfferCollection(triggeredAt: string): Promise<{
   await hydrateAllSourcesCaches();
   const target = getSearchLimit();
   const channels = getEnabledChannels();
+  const mlTagConfigured = await isMercadoLivreAffiliateTagConfigured();
   let jobs = 0;
 
   for (const channel of channels) {
@@ -324,6 +327,14 @@ export async function orchestrateOfferCollection(triggeredAt: string): Promise<{
     const quota = Math.max(1, Math.floor(target / categories.length));
 
     for (const category of categories) {
+      if (!isAmazonSourceUrl(category) && !mlTagConfigured) {
+        logger.warn(
+          { channel, category, triggeredAt },
+          'Job de coleta ML não enfileirado — tag de afiliado não configurada',
+        );
+        continue;
+      }
+
       await enqueueCollectSourceJob({
         kind: 'source',
         triggeredAt,
@@ -335,7 +346,7 @@ export async function orchestrateOfferCollection(triggeredAt: string): Promise<{
     }
   }
 
-  logger.info({ triggeredAt, jobs, target }, 'Offer collection orchestrated per source');
+  logger.info({ triggeredAt, jobs, target, mlTagConfigured }, 'Offer collection orchestrated per source');
   return { jobs };
 }
 
@@ -345,6 +356,14 @@ export async function collectFromSource(
   category: string,
   quota: number,
 ): Promise<{ total: number; enqueued: number }> {
+  if (!isAmazonSourceUrl(category) && !(await isMercadoLivreAffiliateTagConfigured())) {
+    logger.warn(
+      { channel, category },
+      'Coleta ML ignorada — configure a tag de afiliado em Contas → Mercado Livre → Configurar',
+    );
+    return { total: 0, enqueued: 0 };
+  }
+
   let total = 0;
   let enqueued = 0;
 
@@ -362,6 +381,39 @@ export async function collectFromSource(
   }
 
   return { total, enqueued };
+}
+
+/** Valida se há algo coletável antes de enfileirar busca manual no painel. */
+export async function validateOfferCollectionReady(): Promise<string | null> {
+  if (!isRedisEnabled()) {
+    return 'Redis desabilitado — não é possível enfileirar a busca.';
+  }
+
+  await hydrateAllSourcesCaches();
+  const channels = getEnabledChannels();
+  if (channels.length === 0) {
+    return 'Nenhum canal de envio habilitado — ligue WhatsApp ou Telegram nas configurações.';
+  }
+
+  const mlTagConfigured = await isMercadoLivreAffiliateTagConfigured();
+  let collectibleSources = 0;
+
+  for (const channel of channels) {
+    for (const category of getActiveSourcesForChannel(channel)) {
+      if (isAmazonSourceUrl(category) || mlTagConfigured) {
+        collectibleSources++;
+      }
+    }
+  }
+
+  if (collectibleSources === 0) {
+    if (!mlTagConfigured) {
+      return 'Tag de afiliado ML não configurada — Contas → Mercado Livre → Configurar (ou ative fontes Amazon).';
+    }
+    return 'Nenhuma fonte de coleta ativa — configure categorias/URLs em Fontes ou Configurações.';
+  }
+
+  return null;
 }
 
 /** Remove os jobs de envio de uma oferta em todos os canais ligados. */

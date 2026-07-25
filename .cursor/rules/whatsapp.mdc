@@ -11,9 +11,10 @@ alwaysApply: false
 - Formatação de mensagem em `offers/message-template.ts` (template editável via manager).
 - Cache de canal em `whatsapp/channel-cache.ts` (nome, invite link).
 - Sessão em `WHATSAPP_AUTH_PATH` (ou path da conta em `data/accounts/{id}/whatsapp/`); canal em `WHATSAPP_CHANNEL_ID` ou `config.channelId`.
-- Apenas `worker.ts` instancia conexão Baileys para envio.
+- Apenas `worker.ts` (unificado) instancia conexão Baileys para envio.
 - **Lock de dono:** `owner.lock` em `WHATSAPP_AUTH_PATH` — apenas um processo por sessão. Dois sockets causam `connectionReplaced`.
 - **QR/status:** worker publica em Redis (`radar:connect:wa:{accountId}`) no `connection.update`; painel lê via `connection-model.ts`.
+- **Configurar canal/destino:** com worker ativo, o painel resolve links via fila Redis (`invite-resolve-rpc.ts`) — não abre segunda sessão Baileys.
 
 ## Setup
 
@@ -26,4 +27,4 @@ Ou via painel: Settings → Conectar WhatsApp. O worker publica o QR no Redis; o
 
 ## Multi-conta
 
-`setWhatsAppAuthPath()` define auth path por conta. `WORKER_ACCOUNT_ID` no worker seleciona a conta.
+Auth path por conta via `resolveAccountAuthPath()`. Publisher carregado pelo worker unificado em `loadAllWorkerPublishers()`.

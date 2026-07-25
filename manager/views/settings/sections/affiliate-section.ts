@@ -1,5 +1,7 @@
-import { AFFILIATE_PLATFORM_DEFINITIONS } from '../../../../src/affiliates/registry.js';
-import type { AffiliatePlatformDefinition } from '../../../../src/affiliates/types.js';
+import {
+  AFFILIATE_PLATFORM_DEFINITIONS,
+  type AffiliatePlatformDefinition,
+} from '../../../../src/affiliates/index.js';
 import {
   buildAmazonAffiliateLink,
   EXAMPLE_AMAZON_ASIN,
@@ -7,17 +9,12 @@ import {
 import type { SettingsData } from '../../../models/settings-model.js';
 import { escapeHtml } from '../../helpers.js';
 import {
-  ML_ICON,
-  renderSimpleConnectCard,
   EDIT_ICON,
   configRow,
-} from '../../components/index.js';
-import {
-  renderAccordionGroup,
-  renderAccordionItem,
+  renderTabs,
   renderAccordionStatusBadge,
-  renderAccordionTitle,
-} from '../../components/accordion.js';
+} from '../../components/index.js';
+import type { AffiliateSubTabId } from '../tab-state.js';
 
 function renderMercadoLivrePanel(data: SettingsData): string {
   const couponsValue = `
@@ -36,14 +33,7 @@ function renderMercadoLivrePanel(data: SettingsData): string {
   ].join(' · ');
 
   return `
-    <div class="affiliate-panel-grid">
-      ${renderSimpleConnectCard({
-        service: 'ml',
-        name: 'Sessão de afiliado',
-        icon: ML_ICON,
-        status: data.mlSession,
-        connectButtonId: 'connect-ml',
-      })}
+    <div class="affiliate-panel-grid affiliate-panel-config-only">
       <div class="affiliate-panel-config">
         ${configRow('URL de cupons', couponsValue, 'Hub de cupons do portal de afiliados')}
         ${configRow(
@@ -123,28 +113,45 @@ function renderComingSoonPanel(label: string): string {
     </div>`;
 }
 
-export function renderAffiliateProgramsSection(data: SettingsData): string {
-  const items = AFFILIATE_PLATFORM_DEFINITIONS.map((platform: AffiliatePlatformDefinition, index: number) => {
-    const badge = renderAccordionStatusBadge(platform.status);
-    const title = renderAccordionTitle(platform.label, badge);
-    const content =
-      platform.id === 'mercado_livre'
-        ? renderMercadoLivrePanel(data)
-        : platform.id === 'amazon'
-          ? renderAmazonPanel(data)
-          : renderComingSoonPanel(platform.label);
+function renderAffiliatePanelContent(
+  platform: AffiliatePlatformDefinition,
+  data: SettingsData,
+): string {
+  const intro = platform.description
+    ? `<p class="meta affiliate-platform-intro">${escapeHtml(platform.description)}</p>`
+    : '';
 
-    return renderAccordionItem(title, platform.description, content, index === 0);
-  });
+  const body =
+    platform.id === 'mercado_livre'
+      ? renderMercadoLivrePanel(data)
+      : platform.id === 'amazon'
+        ? renderAmazonPanel(data)
+        : renderComingSoonPanel(platform.label);
+
+  return `${intro}${body}`;
+}
+
+export function renderAffiliateProgramsSection(
+  data: SettingsData,
+  activeSubTab: AffiliateSubTabId = 'mercado_livre',
+): string {
+  const subTabs = renderTabs(
+    AFFILIATE_PLATFORM_DEFINITIONS.map((platform) => ({
+      id: platform.id,
+      label: platform.label,
+      badgeHtml: ` ${renderAccordionStatusBadge(platform.status)}`,
+      content: renderAffiliatePanelContent(platform, data),
+    })),
+    {
+      activeId: activeSubTab,
+      variant: 'sub',
+      ariaLabel: 'Programas de afiliados',
+    },
+  );
 
   return `
-    <section class="affiliate-programs-section">
-      <div class="config-categories-head">
-        <div>
-          <h2 class="subsection-title">Programas de afiliados</h2>
-          <p class="meta">Cada marketplace tem sessão, fontes de coleta e cupons próprios. Expanda para configurar.</p>
-        </div>
-      </div>
-      ${renderAccordionGroup(items)}
+    <section class="settings-panel-section affiliate-programs-section">
+      <p class="meta">Cada marketplace tem sessão, fontes de coleta e cupons próprios.</p>
+      ${subTabs}
     </section>`;
 }

@@ -9,7 +9,7 @@ alwaysApply: false
 - Processos assíncronos em `jobs/` (collector, sender).
 - Configuração de filas em `queue/`; agendamento em `queue/sender-schedule.ts`.
 - Pool de filas reutilizáveis via `getQueue(name)` — `closeAllQueues()` no shutdown.
-- Collector consulta Mercado Livre via scraping híbrido (`mercado-livre/`, browser pooled); auto-messages due em `scheduler.ts`; sender publica — nunca enviar direto após coleta.
+- Collector consulta fontes ML e Amazon via `sources/routing.ts` (scraping híbrido, browser pooled no ML); auto-messages due em `scheduler.ts`; sender publica — nunca enviar direto após coleta.
 - Jobs idempotentes: verificar estado antes de agir.
 - Intervalos e janela operacional: `queue-config-store.ts` (DB → cache → fallback ENV).
 - `jobs/sender.ts` é genérico por canal (recebe um `ChannelPublisher`) — ver `.cursor/rules/channels.mdc`.
@@ -17,11 +17,11 @@ alwaysApply: false
 ## Filas
 
 - `offer-collector` — repeatable, processo `app.ts` (`concurrency: 1`).
-- `offer-sender` — standard, processo `worker.ts` (WhatsApp).
-- `offer-sender-telegram` — standard, processo `worker-telegram.ts`.
+- `offer-sender` — standard, fila WhatsApp (conta default).
+- `offer-sender-telegram` — standard, fila Telegram (conta default).
 - `offer-sender-{accountId}` / `offer-sender-telegram-{accountId}` — filas por conta não-default.
 
-Uma fila por canal e conta. Job id determinístico via `senderJobId(channel, offerId, accountId)`. Estado do envio em `OfferDelivery`, não em `Offer.sentAt`.
+Todas as filas de sender são consumidas pelo worker unificado (`worker.ts` → `runUnifiedWorker`). Job id determinístico via `senderJobId(channel, offerId, accountId)`. Estado do envio em `OfferDelivery`, não em `Offer.sentAt`.
 
 ## Tipos de job no sender
 
@@ -37,7 +37,7 @@ Sender respeita `operatingHoursStart`/`operatingHoursEnd` (timezone `APP_TIMEZON
 
 ## Multi-conta
 
-`dispatchOffer` enfileira com `accountId` via `getSenderQueue(channel, accountId)`. `jobs/sender.ts` lê `accountId` do job e usa em `findDelivery` / `markOfferDelivered`. Worker consome conta via `WORKER_ACCOUNT_ID`.
+`dispatchOffer` enfileira com `accountId` via `getSenderQueue(channel, accountId)`. `jobs/sender.ts` lê `accountId` do job e usa em `findDelivery` / `markOfferDelivered`. Worker unificado carrega publishers via `loadAllWorkerPublishers()`.
 
 ## Retry
 

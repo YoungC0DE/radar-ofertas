@@ -1,4 +1,3 @@
-import { env } from '../config/env.js';
 import type { OfferRecord } from '../offers/types.js';
 import {
   getBotIdentity,
@@ -6,25 +5,27 @@ import {
   sendOffer,
   validateTelegramChat,
 } from '../telegram/index.js';
+import { getTelegramIntegration, isTelegramIntegrationEnabled } from './integration-state.js';
 import type { ChannelPublisher } from './types.js';
 
 export const telegramPublisher: ChannelPublisher = {
   channel: 'telegram',
   accountId: 'default',
 
-  isEnabled: () => env.TELEGRAM_ENABLED,
+  isEnabled: () => isTelegramIntegrationEnabled(),
 
   async verify() {
-    if (!hasTelegramCredentials()) {
+    const { botToken, chatId } = getTelegramIntegration();
+    if (!hasTelegramCredentials(botToken, chatId)) {
       return {
         ok: false,
-        detail: 'TELEGRAM_BOT_TOKEN ou TELEGRAM_CHAT_ID vazios — configure no .env',
+        detail: 'Telegram não configurado — preencha token e canal em Configuração › Integrador',
       };
     }
 
     try {
-      const bot = await getBotIdentity();
-      const chat = await validateTelegramChat(env.TELEGRAM_CHAT_ID);
+      const bot = await getBotIdentity(botToken);
+      const chat = await validateTelegramChat(chatId, botToken);
 
       if (!chat.valid) {
         return { ok: false, detail: `Chat inválido: ${chat.reason}` };
@@ -32,7 +33,7 @@ export const telegramPublisher: ChannelPublisher = {
 
       return {
         ok: true,
-        detail: `Bot @${bot.username ?? bot.id} publicando em "${chat.name ?? env.TELEGRAM_CHAT_ID}"`,
+        detail: `Bot @${bot.username ?? bot.id} publicando em "${chat.name ?? chatId}"`,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -41,14 +42,14 @@ export const telegramPublisher: ChannelPublisher = {
   },
 
   async publish(offer: OfferRecord, caption: string) {
-    // Diferente do WhatsApp, a Bot API é stateless: não há sessão para manter viva,
-    // cada envio é uma chamada HTTP autenticada pelo token.
-    const result = await sendOffer(env.TELEGRAM_CHAT_ID, offer.image, caption);
+    const { botToken, chatId } = getTelegramIntegration();
+    const result = await sendOffer(chatId, offer.image, caption, botToken);
     return { messageId: String(result.message_id) };
   },
 
   async publishText(text: string) {
-    const result = await sendOffer(env.TELEGRAM_CHAT_ID, null, text);
+    const { botToken, chatId } = getTelegramIntegration();
+    const result = await sendOffer(chatId, null, text, botToken);
     return { messageId: String(result.message_id) };
   },
 };

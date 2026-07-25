@@ -1,10 +1,94 @@
+import path from 'node:path';
 import type { Prisma } from '@prisma/client';
+import { env } from '../config/env.js';
 import { prisma } from '../database/client.js';
+import { isPlaceholderChannelId } from '../whatsapp/index.js';
 import { parseAccountRecord, parseAccountRow } from './account-config.js';
-import { buildDefaultAccountsFromEnv } from './default-accounts.js';
-import { DEFAULT_ACCOUNT_ID, type Account, type AccountPlatform } from './types.js';
+import {
+  DEFAULT_ACCOUNT_ID,
+  type Account,
+  type AccountPlatform,
+  type MercadoLivreAccount,
+  type TelegramAccount,
+  type WhatsAppAccount,
+} from './types.js';
+
+const DATA_ROOT = './data';
 
 let accountsCache: Account[] | null = null;
+
+/**
+ * Caminho de auth isolado por conta. A conta default reutiliza os paths do .env
+ * para não quebrar instalações existentes; contas adicionais ficam em
+ * data/accounts/{accountId}/{platform}/.
+ */
+export function resolveAccountAuthPath(accountId: string, platform: AccountPlatform): string {
+  if (accountId === DEFAULT_ACCOUNT_ID) {
+    if (platform === 'whatsapp') return env.WHATSAPP_AUTH_PATH;
+    if (platform === 'mercado_livre') return env.ML_AUTH_PATH;
+    return path.join(DATA_ROOT, 'accounts', accountId, platform);
+  }
+
+  return path.join(DATA_ROOT, 'accounts', accountId, platform);
+}
+
+export function resolveAccountsDataRoot(): string {
+  return path.join(DATA_ROOT, 'accounts');
+}
+
+function isWhatsAppChannelConfigured(channelId: string): boolean {
+  return (
+    Boolean(channelId.trim()) &&
+    !isPlaceholderChannelId(channelId) &&
+    channelId.endsWith('@newsletter')
+  );
+}
+
+/** Contas derivadas do .env — compatibilidade com instalação single-account. */
+function buildDefaultAccountsFromEnv(): Account[] {
+  const accounts: Account[] = [];
+
+  const whatsapp: WhatsAppAccount = {
+    id: DEFAULT_ACCOUNT_ID,
+    platform: 'whatsapp',
+    label: 'WhatsApp principal',
+    enabled: isWhatsAppChannelConfigured(env.WHATSAPP_CHANNEL_ID),
+    config: {
+      channelId: env.WHATSAPP_CHANNEL_ID,
+      authPath: resolveAccountAuthPath(DEFAULT_ACCOUNT_ID, 'whatsapp'),
+    },
+  };
+  accounts.push(whatsapp);
+
+  const telegram: TelegramAccount = {
+    id: DEFAULT_ACCOUNT_ID,
+    platform: 'telegram',
+    label: 'Telegram principal',
+    enabled: false,
+    config: {
+      botToken: env.TELEGRAM_BOT_TOKEN.trim(),
+      chatId: env.TELEGRAM_CHAT_ID.trim(),
+    },
+  };
+  if (telegram.config.botToken && telegram.config.chatId) {
+    telegram.enabled = env.TELEGRAM_ENABLED;
+  }
+  accounts.push(telegram);
+
+  const mercadoLivre: MercadoLivreAccount = {
+    id: DEFAULT_ACCOUNT_ID,
+    platform: 'mercado_livre',
+    label: 'Afiliado ML principal',
+    enabled: true,
+    config: {
+      authPath: resolveAccountAuthPath(DEFAULT_ACCOUNT_ID, 'mercado_livre'),
+      affiliateTag: env.AFFILIATE_CONFIG.tag,
+    },
+  };
+  accounts.push(mercadoLivre);
+
+  return accounts;
+}
 
 function accountKey(account: Pick<Account, 'id' | 'platform'>): string {
   return `${account.id}:${account.platform}`;

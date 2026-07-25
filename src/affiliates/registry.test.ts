@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   AFFILIATE_PLATFORM_DEFINITIONS,
+  affiliatePlatformLabel,
   getAffiliatePlatformDefinition,
-} from './registry.js';
-import { affiliatePlatformLabel } from './types.js';
+} from './index.js';
 
 describe('affiliate registry', () => {
   it('lista ML, Shopee e Amazon', () => {

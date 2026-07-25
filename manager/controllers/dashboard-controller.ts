@@ -1,4 +1,5 @@
 import { loadDashboardData } from '../models/dashboard-model.js';
+import { validateOfferCollectionReady } from '../../src/offers/service.js';
 import { enqueueOfferCollection } from '../../src/queue/index.js';
 import { renderDashboard } from '../views/dashboard.js';
 
@@ -16,7 +17,12 @@ export async function showDashboard(
 
 export async function handleCollectOffers(): Promise<{ ok: true } | { error: string }> {
   try {
-    await enqueueOfferCollection();
+    const blocker = await validateOfferCollectionReady();
+    if (blocker) {
+      return { error: blocker };
+    }
+
+    await enqueueOfferCollection({ force: true });
     return { ok: true };
   } catch (error) {
     const message =

@@ -10,16 +10,69 @@
   }
   const { openModal, closeModal } = radarModal;
 
-  const channelModal = document.getElementById('channel-link-modal');
-      const couponsUrlModal = document.getElementById('coupons-url-modal');
+  function activateTabGroup(group, tabId) {
+    group.querySelectorAll('[role="tab"]').forEach((button) => {
+      const active = button.dataset.tab === tabId;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    group.querySelectorAll('[role="tabpanel"]').forEach((panel) => {
+      const active = panel.id === `tab-panel-${tabId}`;
+      panel.classList.toggle('active', active);
+      panel.hidden = !active;
+    });
+  }
+
+  function setupTabGroup(group) {
+    const isSub = group.classList.contains('settings-tabs-sub');
+    group.querySelectorAll('[role="tab"]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const tabId = button.dataset.tab;
+        if (!tabId) return;
+        activateTabGroup(group, tabId);
+        if (!isSub) {
+          history.replaceState(null, '', `#${tabId}`);
+        }
+      });
+    });
+  }
+
+  document.querySelectorAll('.settings-tabs').forEach(setupTabGroup);
+
+  const hashTab = location.hash.replace(/^#/, '');
+  const mainGroup = document.querySelector('.settings-tabs:not(.settings-tabs-sub)');
+  if (hashTab && mainGroup) {
+    const hashButton = mainGroup.querySelector(`[role="tab"][data-tab="${hashTab}"]`);
+    if (hashButton) {
+      activateTabGroup(mainGroup, hashTab);
+    }
+  } else if (pageData.activeTab && mainGroup) {
+    activateTabGroup(mainGroup, pageData.activeTab);
+    history.replaceState(null, '', `#${pageData.activeTab}`);
+  }
+
+  const affiliateGroup = document.querySelector('.settings-tabs-sub');
+  if (pageData.affiliateSubTab && affiliateGroup) {
+    activateTabGroup(affiliateGroup, pageData.affiliateSubTab);
+  }
+
+  window.addEventListener('hashchange', () => {
+    const tabId = location.hash.replace(/^#/, '');
+    if (!tabId) return;
+    const mainGroup = document.querySelector('.settings-tabs:not(.settings-tabs-sub)');
+    const hashButton = mainGroup?.querySelector(`[role="tab"][data-tab="${tabId}"]`);
+    if (hashButton) {
+      activateTabGroup(mainGroup, tabId);
+    }
+  });
+
+  const couponsUrlModal = document.getElementById('coupons-url-modal');
       const amazonAffiliateModal = document.getElementById('amazon-affiliate-modal');
       const operatingHoursModal = document.getElementById('operating-hours-modal');
       const intervalModal = document.getElementById('send-interval-modal');
       const senderDelayModal = document.getElementById('sender-delay-modal');
       const scoreModal = document.getElementById('score-modal');
       const brandModal = document.getElementById('brand-modal');
-      const modalInviteInput = document.getElementById('modal-invite-link');
-      const modalIntervalInput = document.getElementById('modal-interval-minutes');
       const modalBrandName = document.getElementById('modal-brand-name');
       const modalBrandSubtitle = document.getElementById('modal-brand-subtitle');
       const modalBrandMark = document.getElementById('modal-brand-mark');
@@ -38,53 +91,6 @@
       document.getElementById('edit-amazon-affiliate')?.addEventListener('click', () => {
         openModal(amazonAffiliateModal);
       });
-
-  document.getElementById('add-whatsapp-destination')?.addEventListener('click', () => {
-    if (!channelModal) {
-      console.error('[settings] Modal #channel-link-modal não encontrado no DOM');
-      return;
-    }
-    if (modalInviteInput) modalInviteInput.value = '';
-    openModal(channelModal);
-  });
-
-  function postDestinationAction(action, fields) {
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = action;
-    Object.entries(fields).forEach(([name, value]) => {
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = name;
-      input.value = value;
-      form.appendChild(input);
-    });
-    document.body.appendChild(form);
-    form.submit();
-  }
-
-  document.addEventListener('click', (event) => {
-    const removeBtn = event.target.closest('.destination-remove');
-    if (removeBtn) {
-      const destinationId = removeBtn.getAttribute('data-destination-id');
-      if (!destinationId || !window.confirm('Remover este destino?')) return;
-      postDestinationAction('/manager/settings/whatsapp-destinations/remove', {
-        destinationId,
-      });
-      return;
-    }
-
-    const toggleBtn = event.target.closest('.destination-toggle');
-    if (toggleBtn) {
-      const destinationId = toggleBtn.getAttribute('data-destination-id');
-      const enabled = toggleBtn.getAttribute('data-enabled');
-      if (!destinationId || enabled == null) return;
-      postDestinationAction('/manager/settings/whatsapp-destinations/toggle', {
-        destinationId,
-        enabled,
-      });
-    }
-  });
 
   document.getElementById('edit-operating-hours')?.addEventListener('click', () => {
         openModal(operatingHoursModal);
@@ -157,7 +163,7 @@
         });
       });
 
-      [channelModal, couponsUrlModal, amazonAffiliateModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, brandModal].forEach((modal) => {
+      [couponsUrlModal, amazonAffiliateModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, brandModal].forEach((modal) => {
         modal?.addEventListener('click', (e) => {
           if (e.target === modal) closeModal(modal);
         });
@@ -165,190 +171,9 @@
 
       document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
-        [channelModal, couponsUrlModal, amazonAffiliateModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, brandModal].forEach((modal) => {
+        [couponsUrlModal, amazonAffiliateModal, operatingHoursModal, intervalModal, senderDelayModal, scoreModal, brandModal].forEach((modal) => {
           if (!modal.classList.contains('hidden')) closeModal(modal);
         });
-      });
-
-      // --- Conectar com: Mercado Livre ---
-      const mlConnectBtn = document.getElementById('connect-ml');
-      const mlModal = document.getElementById('ml-connect-modal');
-      const mlStatusEl = document.getElementById('ml-connect-status');
-      const mlErrorEl = document.getElementById('ml-connect-error');
-      const mlFinishBtn = document.getElementById('ml-connect-finish');
-      const mlCancelBtn = document.getElementById('ml-connect-cancel');
-      let mlPollTimer = null;
-
-      function stopMlPoll() {
-        if (mlPollTimer) { clearInterval(mlPollTimer); mlPollTimer = null; }
-      }
-
-      function renderMlState(state) {
-        mlErrorEl.classList.add('hidden');
-        if (state.error) {
-          mlErrorEl.textContent = state.error;
-          mlErrorEl.classList.remove('hidden');
-        }
-        switch (state.status) {
-          case 'opening':
-            mlStatusEl.textContent = 'Abrindo o navegador…';
-            mlFinishBtn.disabled = true;
-            break;
-          case 'awaiting-login':
-            mlStatusEl.textContent = 'Navegador aberto. Faça login e clique em Concluir.';
-            mlFinishBtn.disabled = false;
-            break;
-          case 'saving':
-            mlStatusEl.textContent = 'Salvando sessão…';
-            mlFinishBtn.disabled = true;
-            break;
-          case 'connected':
-            mlStatusEl.textContent = 'Sessão do Mercado Livre salva com sucesso! ✅';
-            mlFinishBtn.disabled = true;
-            stopMlPoll();
-            setTimeout(() => location.reload(), 1200);
-            break;
-          case 'error':
-            mlStatusEl.textContent = 'Não foi possível conectar.';
-            mlFinishBtn.disabled = true;
-            stopMlPoll();
-            break;
-        }
-      }
-
-      async function pollMl() {
-        try {
-          const res = await fetch('/manager/settings/connect/ml/status');
-          if (res.ok) renderMlState(await res.json());
-        } catch (_) {}
-      }
-
-      async function cancelMl() {
-        stopMlPoll();
-        closeModal(mlModal);
-        try { await fetch('/manager/settings/connect/ml/cancel', { method: 'POST' }); } catch (_) {}
-      }
-
-      mlConnectBtn?.addEventListener('click', async () => {
-        openModal(mlModal);
-        mlStatusEl.textContent = 'Abrindo o navegador…';
-        mlErrorEl.classList.add('hidden');
-        mlFinishBtn.disabled = true;
-        try {
-          const res = await fetch('/manager/settings/connect/ml/start', { method: 'POST' });
-          if (res.ok) renderMlState(await res.json());
-        } catch (_) {}
-        stopMlPoll();
-        mlPollTimer = setInterval(pollMl, 1500);
-      });
-
-      mlFinishBtn?.addEventListener('click', async () => {
-        mlStatusEl.textContent = 'Salvando sessão…';
-        mlFinishBtn.disabled = true;
-        try {
-          const res = await fetch('/manager/settings/connect/ml/finish', { method: 'POST' });
-          if (res.ok) renderMlState(await res.json());
-        } catch (_) {}
-      });
-
-      mlCancelBtn?.addEventListener('click', cancelMl);
-      mlModal?.addEventListener('click', (e) => { if (e.target === mlModal) cancelMl(); });
-
-      // --- Conectar com: WhatsApp ---
-      const waConnectBtn = document.getElementById('connect-wa');
-      const waModal = document.getElementById('wa-connect-modal');
-      const waStatusEl = document.getElementById('wa-connect-status');
-      const waErrorEl = document.getElementById('wa-connect-error');
-      const waQrWrap = document.getElementById('wa-qr-wrap');
-      const waQrImg = document.getElementById('wa-qr-img');
-      const waCloseBtn = document.getElementById('wa-connect-close');
-      let waPollTimer = null;
-      let waLastQr = '';
-
-      function stopWaPoll() {
-        if (waPollTimer) { clearInterval(waPollTimer); waPollTimer = null; }
-      }
-
-      function renderWaState(state) {
-        waErrorEl.classList.add('hidden');
-        switch (state.status) {
-          case 'connecting':
-            waStatusEl.textContent = 'Iniciando conexão…';
-            waQrWrap.classList.add('hidden');
-            break;
-          case 'qr':
-            waStatusEl.textContent = 'Escaneie o QR code com o WhatsApp:';
-            if (state.qr && state.qr !== waLastQr) {
-              waLastQr = state.qr;
-              waQrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encodeURIComponent(state.qr);
-            }
-            waQrWrap.classList.remove('hidden');
-            break;
-          case 'connected':
-            waStatusEl.textContent = 'WhatsApp conectado com sucesso! ✅';
-            waQrWrap.classList.add('hidden');
-            stopWaPoll();
-            setTimeout(() => location.reload(), 1200);
-            break;
-          case 'error':
-            waStatusEl.textContent = 'Não foi possível conectar.';
-            waQrWrap.classList.add('hidden');
-            if (state.error) {
-              waErrorEl.textContent = state.error;
-              waErrorEl.classList.remove('hidden');
-            }
-            stopWaPoll();
-            break;
-        }
-      }
-
-      async function pollWa() {
-        try {
-          const res = await fetch('/manager/settings/connect/wa/status');
-          if (res.ok) renderWaState(await res.json());
-        } catch (_) {}
-      }
-
-      waConnectBtn?.addEventListener('click', async () => {
-        openModal(waModal);
-        waStatusEl.textContent = 'Iniciando conexão…';
-        waErrorEl.classList.add('hidden');
-        waQrWrap.classList.add('hidden');
-        waLastQr = '';
-        try {
-          const res = await fetch('/manager/settings/connect/wa/start', { method: 'POST' });
-          if (res.ok) renderWaState(await res.json());
-        } catch (_) {}
-        stopWaPoll();
-        waPollTimer = setInterval(pollWa, 1500);
-      });
-
-      waCloseBtn?.addEventListener('click', () => { stopWaPoll(); closeModal(waModal); });
-      waModal?.addEventListener('click', (e) => { if (e.target === waModal) { stopWaPoll(); closeModal(waModal); } });
-
-      // --- Conectar com: Telegram (só reverifica; config é do .env) ---
-      const tgConnectBtn = document.getElementById('connect-telegram');
-      const tgConnectBadge = document.getElementById('telegram-connect-badge');
-      const tgConnectDetail = document.getElementById('telegram-connect-detail');
-
-      tgConnectBtn?.addEventListener('click', async () => {
-        tgConnectBtn.disabled = true;
-        tgConnectDetail.textContent = 'Verificando conexão com o Telegram…';
-        try {
-          const res = await fetch('/manager/settings/connect/telegram/status');
-          if (res.ok) {
-            const state = await res.json();
-            tgConnectBadge.innerHTML = state.ok
-              ? '<span class="badge ok">Conectado</span>'
-              : '<span class="badge warn">Desconectado</span>';
-            tgConnectDetail.textContent = state.detail;
-          } else {
-            tgConnectDetail.textContent = 'Não foi possível verificar agora.';
-          }
-        } catch (_) {
-          tgConnectDetail.textContent = 'Não foi possível verificar agora.';
-        }
-        tgConnectBtn.disabled = false;
       });
 
       // --- Operações: Workers de envio (um card por conta habilitada) ---

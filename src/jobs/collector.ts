@@ -55,8 +55,9 @@ export function startCollectorWorker(): Worker<CollectorJobData> {
       }
 
       const operatingHours = getOperatingHours();
+      const force = job.data.kind === 'orchestrate' && job.data.force === true;
 
-      if (!isWithinOperatingHours(env.APP_TIMEZONE, operatingHours)) {
+      if (!force && !isWithinOperatingHours(env.APP_TIMEZONE, operatingHours)) {
         logger.info(
           {
             jobId: job.id,
@@ -69,7 +70,7 @@ export function startCollectorWorker(): Worker<CollectorJobData> {
       }
 
       const triggeredAt = resolveTriggeredAt(job);
-      logger.info({ jobId: job.id, triggeredAt }, 'Orchestrating offer collection');
+      logger.info({ jobId: job.id, triggeredAt, force }, 'Orchestrating offer collection');
 
       const { jobs } = await orchestrateOfferCollection(triggeredAt);
       return { jobs, triggeredAt };

@@ -6,13 +6,13 @@ Configuração em `src/queue/index.ts`. Agendamento de envio em `src/queue/sende
 
 | Nome | Tipo | Processo | Descrição |
 |------|------|----------|-----------|
-| `offer-collector` | Repeatable | `app.ts` | Coleta periódica via scraping ML |
+| `offer-collector` | Repeatable | `app.ts` | Coleta periódica via scraping ML + Amazon |
 | `offer-sender` | Standard | `worker.ts` | Envio WhatsApp (conta `default`) |
-| `offer-sender-telegram` | Standard | `worker-telegram.ts` | Envio Telegram (conta `default`) |
+| `offer-sender-telegram` | Standard | `worker.ts` | Envio Telegram (conta `default`) |
 | `offer-sender-{accountId}` | Standard | `worker.ts` | Fila por conta WhatsApp não-default |
-| `offer-sender-telegram-{accountId}` | Standard | `worker-telegram.ts` | Fila por conta Telegram não-default |
+| `offer-sender-telegram-{accountId}` | Standard | `worker.ts` | Fila por conta Telegram não-default |
 
-Uma fila por canal e por conta. Cada worker tem seu ritmo e suas falhas isoladas. Ver [Canais](./channels.md).
+Uma fila por canal e por conta. O **worker unificado** (`runUnifiedWorker`) consome todas as filas de sender habilitadas no mesmo processo — um BullMQ Worker por publisher ativo. Ver [Canais](./channels.md).
 
 ## Pool de filas
 
@@ -38,19 +38,19 @@ Intervalos e horários lidos de `queue-config-store.ts` (tabela `settings` → c
 ## Fluxo
 
 ```
-Fontes ML por canal (.env + settings)
+Fontes ML + Amazon por canal (.env + settings) — sources/routing.ts
     ↓
 jobs/collector
     ↓
-mercado-livre/          → HTTP scrape → (Playwright pooled fallback)
+mercado-livre/ ou amazon/   → HTTP scrape → (Playwright fallback)
     ↓
 score-config + offers/service → score, dedup, dispatchOffer
     ↓
 PostgreSQL + fan-out (canal × conta)
     ↓                              ↓
-offer-sender               offer-sender-telegram
+offer-sender*              offer-sender-telegram*
     ↓                              ↓
-jobs/sender (whatsapp)     jobs/sender (telegram)   → janela operacional
+worker.ts — runUnifiedWorker (jobs/sender por publisher) → janela operacional
     ↓                              ↓
 canal WhatsApp                canal Telegram
 ```
@@ -63,7 +63,7 @@ canal WhatsApp                canal Telegram
 4. `collectFromSource` — scrape + `processOffer` por shard.
 5. Reagendamento via `rescheduleCollectorJob()` quando intervalo muda no manager.
 
-## Sender (um por canal)
+## Sender (worker unificado)
 
 O mesmo código (`jobs/sender.ts`) roda para todos os canais — muda só o `ChannelPublisher`. Tipos de job no payload:
 
@@ -102,7 +102,7 @@ SENDER_JOB_OPTIONS = { attempts: 5, backoff: { type: 'exponential', delay: 30_00
 
 ## Multi-conta
 
-`dispatchOffer` enfileira com `accountId` via `getSenderQueue(channel, accountId)`. O sender lê `accountId` do job e usa em `findDelivery` / `markOfferDelivered`. Worker consome conta via `WORKER_ACCOUNT_ID`. Ver [Contas](./accounts.md).
+`dispatchOffer` enfileira com `accountId` via `getSenderQueue(channel, accountId)`. O sender lê `accountId` do job e usa em `findDelivery` / `markOfferDelivered`. O worker unificado instancia publishers para todas as contas habilitadas via `loadAllWorkerPublishers()`. Ver [Contas](./accounts.md).
 
 ## Estado compartilhado no Redis
 

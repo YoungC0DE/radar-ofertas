@@ -1,5 +1,5 @@
 import { loadLogsApi, loadLogsPage } from '../models/logs-model.js';
-import { renderLogsPage } from '../views/logs.js';
+import { renderLogsPage } from '../views/logs/index.js';
 
 export async function showLogsPage(searchParams: URLSearchParams): Promise<string> {
   const data = await loadLogsPage(searchParams);

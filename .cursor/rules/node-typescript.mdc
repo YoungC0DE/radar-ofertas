@@ -1,0 +1,523 @@
+---
+name: node-typescript-best-practices
+description: Convenções TypeScript e boas práticas Node.js — use ao criar, revisar ou refatorar código em **/*.ts
+alwaysApply: true
+---
+
+# Skill - Boas Práticas Node.js + TypeScript
+
+## Objetivo
+
+Sua responsabilidade é desenvolver código seguindo as melhores práticas de engenharia de software.
+
+Antes de implementar qualquer funcionalidade:
+
+- Analise o contexto existente.
+- Entenda o padrão utilizado pelo projeto.
+- Mantenha consistência com a arquitetura.
+- Nunca gere código apenas para "funcionar"; gere código preparado para produção.
+
+---
+
+# Princípios Fundamentais
+
+Sempre siga:
+
+- SOLID
+- Clean Code
+- Clean Architecture
+- DRY (Don't Repeat Yourself)
+- KISS (Keep It Simple)
+- YAGNI (You Aren't Gonna Need It)
+- Separation of Concerns
+- Composition over Inheritance
+
+Evite soluções excessivamente complexas.
+
+Sempre prefira simplicidade.
+
+---
+
+# Arquitetura
+
+Nunca misture responsabilidades.
+
+Sempre respeite a separação entre:
+
+- Controllers
+- Services
+- Repositories
+- Entities
+- DTOs
+- Validators
+- Middlewares
+- Utils
+
+Controllers:
+
+- recebem requisições
+- validam entrada
+- chamam serviços
+- retornam respostas
+
+Nunca coloque regras de negócio em Controllers.
+
+Services:
+
+Devem conter toda a regra de negócio.
+
+Repositories:
+
+Responsáveis exclusivamente pelo acesso ao banco de dados.
+
+Nunca acesse o banco diretamente dentro de Controllers ou Services.
+
+---
+
+# Organização do Projeto
+
+Prefira organização por funcionalidades.
+
+Exemplo:
+
+src/
+
+modules/
+
+users/
+
+controllers/
+
+services/
+
+repositories/
+
+entities/
+
+dto/
+
+validators/
+
+tests/
+
+orders/
+
+products/
+
+shared/
+
+config/
+
+database/
+
+middlewares/
+
+utils/
+
+---
+
+# TypeScript
+
+Sempre utilize:
+
+- `strict: true`
+- tipagem explícita quando necessário
+- `readonly` sempre que possível
+- `unknown` ao invés de `any`
+- `async/await` sempre
+- `import type` para tipos (`verbatimModuleSyntax`)
+- inferência do TypeScript quando o tipo já está claro
+
+Evite completamente:
+
+- `any`
+- `@ts-ignore` / `@ts-expect-error`
+- non-null assertion (`!`)
+- enums (prefira objetos `const`)
+
+Prefira `type` a `interface`, exceto quando houver necessidade clara (ex.: declaration merging).
+
+Preferir funções exportadas a classes quando não há estado.
+
+ENV validado com Zod em `config/env.ts` — nunca confiar em variáveis de ambiente sem schema.
+
+## Convenções deste projeto
+
+| Domínio | Onde ficam os tipos |
+|---------|---------------------|
+| Ofertas | `offers/types.ts` (`RawOffer`, `OfferRecord`, …) |
+| Contas | `accounts/types.ts` (`Account`, `AccountPlatform`, …) |
+| Config | `config/score-config.ts`, `config/brand-config.ts`, … |
+
+Checagem de tipos:
+
+```bash
+npx tsc -p tsconfig.check.json --noEmit
+```
+
+Inclui `src/` e `manager/`.
+
+---
+
+# Nomeação
+
+Use nomes claros.
+
+Bom exemplo:
+
+calculateOrderTotal()
+
+Bad:
+
+calc()
+
+tmp()
+
+valor2()
+
+abc()
+
+Classes:
+
+PascalCase
+
+Funções:
+
+camelCase
+
+Constantes:
+
+UPPER_SNAKE_CASE
+
+Arquivos:
+
+kebab-case
+
+---
+
+# Funções
+
+Cada função deve possuir apenas uma responsabilidade.
+
+Idealmente:
+
+- até 40 linhas
+
+Se estiver ficando grande:
+
+Extraia métodos privados.
+
+Nunca crie funções gigantes.
+
+---
+
+# Classes
+
+Cada classe deve possuir apenas uma responsabilidade.
+
+Evite classes acima de 300 linhas.
+
+---
+
+# Tratamento de Erros
+
+Nunca faça:
+
+throw new Error("Erro")
+
+Crie erros específicos.
+
+Exemplo:
+
+ValidationError
+
+UnauthorizedError
+
+NotFoundError
+
+ConflictError
+
+InternalServerError
+
+Os Controllers são responsáveis por converter erros em respostas HTTP.
+
+---
+
+# Validação
+
+Nunca confie na entrada do usuário.
+
+Sempre valide:
+
+- body
+- query
+- params
+- headers
+
+Prefira:
+
+Zod
+
+Nunca faça validações manuais repetidas.
+
+---
+
+# Banco de Dados
+
+Utilize Repository Pattern.
+
+Evite consultas duplicadas.
+
+Sempre considere:
+
+- índices
+- paginação
+- transações
+- performance
+
+Evite:
+
+SELECT *
+
+Sempre selecione apenas as colunas necessárias.
+
+Evite N+1 Queries.
+
+---
+
+# Código Assíncrono
+
+Sempre utilize:
+
+async/await
+
+Quando possível:
+
+Promise.all()
+
+Evite:
+
+await dentro de loops
+
+Promises aninhadas
+
+Callbacks
+
+---
+
+# Performance
+
+Antes de implementar qualquer código pergunte:
+
+Existe alguma consulta repetida?
+
+Existe algum processamento desnecessário?
+
+Posso utilizar cache?
+
+Existe risco de O(n²)?
+
+Posso reduzir chamadas ao banco?
+
+Prefira processamento em lote quando possível.
+
+---
+
+# Cache
+
+Quando apropriado:
+
+Utilize Redis.
+
+Defina estratégia de invalidação.
+
+Nunca deixe cache eterno sem necessidade.
+
+---
+
+# Logs
+
+Nunca utilize:
+
+console.log()
+
+Prefira bibliotecas como:
+
+Pino
+
+Os logs devem conter:
+
+- request id
+- usuário
+- tempo de execução
+- contexto
+
+Nunca registrar:
+
+- senhas
+- tokens
+- JWT
+- API Keys
+- dados sensíveis
+
+---
+
+# Segurança
+
+Sempre considere:
+
+Validação de entrada
+
+Sanitização
+
+Rate Limiting
+
+Helmet
+
+CORS
+
+Variáveis de ambiente
+
+SQL parametrizado
+
+Hash de senhas
+
+Princípio do menor privilégio
+
+Nunca:
+
+Montar SQL concatenando strings.
+
+---
+
+# Testes
+
+Sempre que criar regra de negócio, criar testes.
+
+**Neste projeto:** `node:test` + `assert` via `npm test` (preload em `src/test/preload.ts`).
+
+Tipos:
+
+- Unitários
+- Integração
+- E2E (`npm run e2e:test` — manual)
+
+Objetivo: cobertura significativa de comportamento real — não testes que apenas repetem a implementação.
+
+---
+
+# Refatoração
+
+Sempre procure:
+
+Eliminar duplicações.
+
+Melhorar legibilidade.
+
+Reduzir complexidade.
+
+Remover código morto.
+
+Remover comentários desnecessários.
+
+Código deve ser autoexplicativo.
+
+---
+
+# Documentação
+
+Documente funções públicas.
+
+Explique:
+
+- objetivo
+- parâmetros
+- retorno
+- exceções
+
+Quando necessário inclua exemplos.
+
+---
+
+# Revisão de Código
+
+Antes de finalizar qualquer implementação valide:
+
+☐ O projeto continua compilando.
+
+☐ Não existem erros de TypeScript.
+
+☐ Não existem warnings relevantes.
+
+☐ O lint passou.
+
+☐ Os testes passaram.
+
+☐ Não existe código duplicado.
+
+☐ Não existe any.
+
+☐ Não existe console.log.
+
+☐ Não existe código comentado.
+
+☐ Não existem TODO esquecidos.
+
+☐ As responsabilidades estão separadas.
+
+☐ O código está legível.
+
+☐ Os nomes fazem sentido.
+
+☐ Existe tratamento de erro.
+
+☐ Existe validação de entrada.
+
+☐ A performance foi considerada.
+
+☐ A segurança foi considerada.
+
+---
+
+# Durante a geração de código
+
+Sempre explique rapidamente:
+
+- Qual solução foi escolhida.
+- Por que ela foi escolhida.
+- Quais alternativas existiam.
+- Quais vantagens essa implementação possui.
+
+---
+
+# Em caso de dúvida
+
+Nunca assuma.
+
+Analise primeiro o projeto existente.
+
+Mantenha o padrão já utilizado.
+
+Quando houver duas ou mais soluções possíveis:
+
+1. Explique as opções.
+2. Recomende a melhor.
+3. Implemente apenas a solução recomendada.
+
+---
+
+# Objetivo Final
+
+Todo código produzido deve ser:
+
+- Simples
+- Legível
+- Testável
+- Escalável
+- Seguro
+- Performático
+- Consistente
+- Fácil de manter
+- Preparado para produção
+
+A prioridade é qualidade e manutenção a longo prazo, e não apenas fazer o código funcionar.

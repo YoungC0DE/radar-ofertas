@@ -51,23 +51,28 @@ export class TelegramApiError extends Error {
   }
 }
 
-function botToken(): string {
-  const token = env.TELEGRAM_BOT_TOKEN;
+function resolveBotToken(override?: string): string {
+  const token = override?.trim() || env.TELEGRAM_BOT_TOKEN;
   if (!token) {
     throw new Error(
-      'TELEGRAM_BOT_TOKEN não configurado — defina no .env com o token do @BotFather',
+      'Token do bot não configurado — preencha em Configuração › Integrador no painel',
     );
   }
   return token;
 }
 
-async function callApi<T>(method: string, body: FormData | Record<string, unknown>): Promise<T> {
+async function callApi<T>(
+  method: string,
+  body: FormData | Record<string, unknown>,
+  botTokenOverride?: string,
+): Promise<T> {
   const isForm = body instanceof FormData;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), env.TELEGRAM_API_TIMEOUT_MS);
+  const token = resolveBotToken(botTokenOverride);
 
   try {
-    const response = await fetch(`${API_BASE}/bot${botToken()}/${method}`, {
+    const response = await fetch(`${API_BASE}/bot${token}/${method}`, {
       method: 'POST',
       headers: isForm ? undefined : { 'Content-Type': 'application/json' },
       body: isForm ? body : JSON.stringify(body),
@@ -98,12 +103,17 @@ async function callApi<T>(method: string, body: FormData | Record<string, unknow
 }
 
 /** O token é válido? Usado no boot do worker e no preflight. */
-export async function getBotIdentity(): Promise<TelegramUser> {
-  return callApi<TelegramUser>('getMe', {});
+export async function getBotIdentity(botTokenOverride?: string): Promise<TelegramUser> {
+  return callApi<TelegramUser>('getMe', {}, botTokenOverride);
 }
 
-export function hasTelegramCredentials(): boolean {
-  return Boolean(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID);
+export function hasTelegramCredentials(
+  botTokenOverride?: string,
+  chatIdOverride?: string,
+): boolean {
+  const token = botTokenOverride?.trim() || env.TELEGRAM_BOT_TOKEN;
+  const chatId = chatIdOverride?.trim() || env.TELEGRAM_CHAT_ID;
+  return Boolean(token && chatId);
 }
 
 /**
@@ -113,20 +123,22 @@ export function hasTelegramCredentials(): boolean {
  */
 export async function validateTelegramChat(
   chatId: string,
+  botTokenOverride?: string,
 ): Promise<{ valid: boolean; name?: string; reason?: string }> {
-  if (!chatId) {
-    return { valid: false, reason: 'TELEGRAM_CHAT_ID vazio — use @seucanal ou o id numérico' };
+  if (!chatId.trim()) {
+    return { valid: false, reason: 'Canal vazio — use @seucanal ou o id numérico (-100…)' };
   }
 
   try {
-    const chat = await callApi<TelegramChat>('getChat', { chat_id: chatId });
+    const chat = await callApi<TelegramChat>('getChat', { chat_id: chatId }, botTokenOverride);
     const name = chat.title ?? chat.username ?? String(chat.id);
 
     if (chat.type === 'channel' || chat.type === 'supergroup') {
-      const me = await getBotIdentity();
+      const me = await getBotIdentity(botTokenOverride);
       const member = await callApi<{ status: string; can_post_messages?: boolean }>(
         'getChatMember',
         { chat_id: chatId, user_id: me.id },
+        botTokenOverride,
       );
 
       if (member.status !== 'administrator' && member.status !== 'creator') {
@@ -170,14 +182,19 @@ export async function sendOffer(
   chatId: string,
   imageUrl: string | null,
   caption: string,
+  botTokenOverride?: string,
 ): Promise<TelegramMessage> {
   if (imageUrl) {
     try {
-      const result = await callApi<TelegramMessage>('sendPhoto', {
-        chat_id: chatId,
-        photo: imageUrl,
-        caption: truncate(caption, CAPTION_LIMIT),
-      });
+      const result = await callApi<TelegramMessage>(
+        'sendPhoto',
+        {
+          chat_id: chatId,
+          photo: imageUrl,
+          caption: truncate(caption, CAPTION_LIMIT),
+        },
+        botTokenOverride,
+      );
 
       logger.info(
         { chatId, messageId: result.message_id, mode: 'image' },
@@ -192,11 +209,15 @@ export async function sendOffer(
     }
   }
 
-  const result = await callApi<TelegramMessage>('sendMessage', {
-    chat_id: chatId,
-    text: truncate(caption, TEXT_LIMIT),
-    link_preview_options: { is_disabled: false },
-  });
+  const result = await callApi<TelegramMessage>(
+    'sendMessage',
+    {
+      chat_id: chatId,
+      text: truncate(caption, TEXT_LIMIT),
+      link_preview_options: { is_disabled: false },
+    },
+    botTokenOverride,
+  );
 
   logger.info(
     { chatId, messageId: result.message_id, mode: 'text' },

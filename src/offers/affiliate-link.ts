@@ -1,5 +1,5 @@
 import { buildAmazonAffiliateLink } from '../amazon/affiliate-link.js';
-import { isAmazonProductUrl } from '../amazon/url.js';
+import { isAmazonAsin, isAmazonProductUrl } from '../amazon/url.js';
 import { getAmazonConfigFromDb } from '../config/amazon-config-store.js';
 import { buildAffiliateLink as buildMlAffiliateLink } from '../mercado-livre/index.js';
 
@@ -8,17 +8,13 @@ export interface OfferAffiliateLinkOptions {
   timeoutMs?: number;
 }
 
-function looksLikeAmazonAsin(productId: string): boolean {
-  return /^[A-Z0-9]{10}$/i.test(productId.trim());
-}
-
 export async function buildOfferAffiliateLink(
   permalink: string,
   productId: string,
   minDelayMs?: number,
   options?: OfferAffiliateLinkOptions,
 ): Promise<string> {
-  if (isAmazonProductUrl(permalink) || looksLikeAmazonAsin(productId)) {
+  if (isAmazonProductUrl(permalink) || isAmazonAsin(productId)) {
     const config = await getAmazonConfigFromDb();
     return buildAmazonAffiliateLink(permalink || productId, config).url;
   }
@@ -33,7 +29,7 @@ export function shouldRefreshAmazonAffiliateLink(
   affiliateLink: string | null,
 ): boolean {
   if (!affiliateLink) return false;
-  if (!isAmazonProductUrl(permalink) && !looksLikeAmazonAsin(productId)) return false;
+  if (!isAmazonProductUrl(permalink) && !isAmazonAsin(productId)) return false;
   if (/^https?:\/\/link\.amazon\//i.test(affiliateLink)) return true;
   if (/amazon\./i.test(affiliateLink) && !/[?&]tag=/i.test(affiliateLink)) return true;
   return false;

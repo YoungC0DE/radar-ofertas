@@ -1,5 +1,6 @@
 import { env } from '../config/env.js';
 import { prisma } from '../database/client.js';
+import { normalizeWhatsAppInviteLink } from './invite.js';
 
 export interface WhatsAppChannelCache {
   channelId: string;
@@ -10,18 +11,6 @@ export interface WhatsAppChannelCache {
 
 const SETTING_KEY = 'whatsappChannelCache';
 let channelCache: WhatsAppChannelCache | null = null;
-
-export function normalizeInviteLink(input: string): string {
-  const trimmed = input.trim();
-  if (!trimmed) return '';
-
-  const fromUrl = trimmed.match(/channel\/([A-Za-z0-9]+)/)?.[1];
-  if (fromUrl) {
-    return trimmed.startsWith('http') ? trimmed : `https://whatsapp.com/channel/${fromUrl}`;
-  }
-
-  return `https://whatsapp.com/channel/${trimmed}`;
-}
 
 async function writeCache(payload: WhatsAppChannelCache): Promise<void> {
   const json = JSON.stringify(payload);
@@ -52,7 +41,7 @@ export async function saveWhatsAppChannelCache(
 }
 
 export async function saveWhatsAppChannelInviteLink(inviteLink: string): Promise<void> {
-  const normalized = normalizeInviteLink(inviteLink);
+  const normalized = normalizeWhatsAppInviteLink(inviteLink, 'newsletter');
   if (!normalized) {
     throw new Error('Informe um link de compartilhamento válido');
   }
@@ -65,7 +54,7 @@ export async function saveWhatsAppChannelInviteLink(inviteLink: string): Promise
 
   const channelId = env.WHATSAPP_CHANNEL_ID.trim();
   if (!channelId) {
-    throw new Error('Canal ainda não configurado — defina WHATSAPP_CHANNEL_ID no .env');
+    throw new Error('Canal ainda não configurado — defina o ID em Configuração › Integrador no painel');
   }
 
   await saveWhatsAppChannelCache(channelId, 'Canal WhatsApp', normalized);

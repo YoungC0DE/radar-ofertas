@@ -1,9 +1,10 @@
 import { escapeHtml } from '../helpers.js';
-import { getBrandInitial, getBrandLogoHref, getBrandSettings } from '../../models/brand-model.js';
+import { getBrandInitial, getBrandLogoHref, getBrandSettings } from '../../../src/config/brand-config.js';
 import { getEnabledChannels } from '../../../src/channels/index.js';
 import { CHANNEL_LABELS } from '../../../src/channels/types.js';
 import { NAV_ICONS } from './nav-icons.js';
-import { LAYOUT_SCRIPTS } from '../page-assets.js';
+import { isManagerHotReloadEnabled } from '../../dev/mode.js';
+import { assetHref, LAYOUT_SCRIPTS, pageScripts } from '../page-assets.js';
 
 export function renderLayoutShell(
   title: string,
@@ -32,7 +33,7 @@ export function renderLayoutShell(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(title)} — ${escapeHtml(brand.name)}</title>
-  <link rel="stylesheet" href="/manager/assets/css/base.css">
+  <link rel="stylesheet" href="${assetHref('css/base.css')}">
   ${headExtras}
 </head>
 <body>
@@ -97,6 +98,7 @@ export function renderLayoutShell(
     </div>
   </div>
 
+  ${isManagerHotReloadEnabled() ? pageScripts('dev/live-reload.js') : ''}
   ${LAYOUT_SCRIPTS}
 </body>
 </html>`;

@@ -9,8 +9,7 @@
 | migrate | build local | — | Aplica migrations (one-shot) |
 | collector | build local (bookworm + Chromium) | — | Coleta de ofertas (singleton, browser pooled) |
 | scheduler | build local | — | Mensagens automáticas (sem Playwright) |
-| worker | build local | — | WhatsApp — envio (`WORKER_ACCOUNT_ID` opcional) |
-| worker-telegram | build local | — | Telegram — envio (`restart: on-failure`) |
+| worker | build local | — | Envio unificado — WhatsApp + Telegram (todas as contas habilitadas) |
 | manager | build local | `MANAGER_PORT` (3000) | Painel admin (stateless) |
 
 O serviço `manager` define `MANAGER_CAN_SPAWN_WORKERS=false` — não inicia workers pelo painel.
@@ -24,17 +23,19 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Migrations rodam automaticamente no serviço `migrate` antes de `collector`, `scheduler`, `worker`, `worker-telegram` e `manager` subirem.
+Migrations rodam automaticamente no serviço `migrate` antes de `collector`, `scheduler`, `worker` e `manager` subirem.
 
 Painel: `http://localhost:3000/manager`
 
-> No Docker, os **workers** já sobem como serviços separados. Não inicie outro worker pelo painel — use `docker compose restart worker` ou `docker compose restart worker-telegram` se precisar reiniciar.
+Volumes `./manager` e `./src` montados no serviço `manager`; `tsx watch` + `MANAGER_HOT_RELOAD=true` recarregam o processo e o browser ao salvar — **sem rebuild** do container.
+
+> No Docker, o **worker** já sobe como serviço separado. Não inicie outro worker pelo painel — use `docker compose restart worker` se precisar reiniciar.
 
 ## Autenticação WhatsApp
 
 O worker é dono da sessão. O QR é publicado no Redis e exibido pelo painel.
 
-1. `docker compose up -d` (workers sobem automaticamente)
+1. `docker compose up -d` (worker sobe automaticamente)
 2. Settings → Conectar WhatsApp → escanear QR exibido no modal
 3. Status do worker visível em Settings → Operações (via `owner.lock` + heartbeat Redis)
 
@@ -62,6 +63,47 @@ npm run ml:login
 
 Sessão salva em `./data/ml_auth/` (montado no container via volume `./data`). Repetir quando links de afiliado falharem (cookie expirado).
 
+> **Painel no Docker:** o container não tem tela por padrão. Opções:
+> - `npm run ml:login` no host (recomendado)
+> - **noVNC:** `MANAGER_VNC_ENABLED=true`, rebuild do manager, `http://localhost:6080/vnc_lite.html`
+> - **CDP:** `ML_LOGIN_CDP_URL` + Chrome com `--remote-debugging-port=9222`
+
+### noVNC no manager (login ML visual no Docker)
+
+Desktop virtual **Xvfb + x11vnc + noVNC** dentro do container manager — você vê o Chromium no navegador, sem cliente VNC e sem `npm run ml:login` no host.
+
+1. No `.env`:
+
+```bash
+MANAGER_VNC_ENABLED=true
+# MANAGER_NOVNC_PORT=6080
+# MANAGER_VNC_PASSWORD=opcional
+```
+
+2. Rebuild e suba o manager:
+
+```bash
+docker compose up -d --build manager
+```
+
+3. Abra no navegador:
+
+```
+http://localhost:6080/vnc_lite.html?scale=true&path=websockify
+```
+
+4. No painel (`/manager/accounts`), clique **Logar** no Mercado Livre — o Chromium abre no desktop visível pelo noVNC.
+
+5. Faça login no ML, volte ao painel e clique **Concluir**.
+
+**Se noVNC mostrar "connection is closed" ou o painel falhar com "Missing X server":**
+
+- Confirme `MANAGER_VNC_ENABLED=true` no `.env` e recrie o container: `docker compose up -d --build --force-recreate manager`
+- Nos logs do manager deve aparecer `[manager-vnc] Xvfb pronto em :99` antes do servidor HTTP subir
+- Se não aparecer, a imagem está desatualizada — rebuild obrigatório após mudanças no `Dockerfile`/`manager-entrypoint.sh`
+
+> O botão **Logar** também abre o noVNC automaticamente em nova aba quando `MANAGER_VNC_ENABLED=true`. Sem senha VNC por padrão — use só em localhost ou defina `MANAGER_VNC_PASSWORD`.
+
 ## Telegram
 
 Configure no `.env`:
@@ -72,19 +114,15 @@ TELEGRAM_BOT_TOKEN=...
 TELEGRAM_CHAT_ID=@meucanal
 ```
 
-O serviço `worker-telegram` encerra com exit 0 se `TELEGRAM_ENABLED` não estiver ligado.
+O worker unificado consome a fila `offer-sender-telegram` junto com WhatsApp. Se nenhum canal estiver habilitado, o worker encerra com exit 0.
 
 ## Multi-conta
 
-Cada conta WhatsApp precisa de um worker dedicado (1 sessão Baileys = 1 processo).
+O worker unificado carrega **todas** as contas habilitadas (WhatsApp e Telegram) via `loadAllWorkerPublishers()`. Não é necessário um serviço Docker por conta — um único processo `worker` consome todas as filas de sender.
 
-Para teste pontual:
+Auth paths por conta ficam em `./data/accounts/{accountId}/whatsapp/` (e configs Telegram na tabela `accounts`).
 
-```bash
-WORKER_ACCOUNT_ID=minha-conta-wa docker compose run --rm worker
-```
-
-Para produção com várias contas, copie `docker-compose.accounts.example.yml` para `docker-compose.override.yml` e ajuste um serviço por `WORKER_ACCOUNT_ID`. Auth paths ficam em `./data/accounts/{accountId}/whatsapp/`.
+> **Importante:** não escale o serviço `worker` com múltiplas réplicas — sessões Baileys exigem um processo único por auth path (`owner.lock`).
 
 ## Variáveis obrigatórias
 
@@ -96,7 +134,7 @@ Para produção com várias contas, copie `docker-compose.accounts.example.yml` 
 | `ML_CATEGORIES` | Categorias ou URLs de listagem |
 | `AFFILIATE_CONFIG` | Tag de afiliado (`{"tag":"sua-tag"}`) |
 
-Opcionais: `APP_TIMEZONE`, `ML_AUTH_PATH`, `ML_USE_BROWSER_FALLBACK`, `ML_BROWSER_HEADLESS`, `ML_SEARCH_LIMIT`, `ML_HTTP_TIMEOUT_MS`, `QUEUE_CONFIG`, `MANAGER_PORT`, `MANAGER_TOKEN`, `MANAGER_CAN_SPAWN_WORKERS`, `WORKER_ACCOUNT_ID`, `REDIS_ENABLED`, `TELEGRAM_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+Opcionais: `APP_TIMEZONE`, `ML_AUTH_PATH`, `ML_USE_BROWSER_FALLBACK`, `ML_BROWSER_HEADLESS`, `ML_SEARCH_LIMIT`, `ML_HTTP_TIMEOUT_MS`, `AMAZON_SOURCES`, `AMAZON_AFFILIATE_STORE_ID`, `AMAZON_BASE_URL`, `AMAZON_USE_BROWSER_FALLBACK`, `QUEUE_CONFIG`, `MANAGER_PORT`, `MANAGER_TOKEN`, `MANAGER_CAN_SPAWN_WORKERS`, `REDIS_ENABLED`, `TELEGRAM_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
 
 ## Docker + Playwright
 
@@ -116,30 +154,27 @@ docker compose up -d postgres redis
 npm run check
 npm run migrate
 
-# Collector + manager (workers: painel em dev ou terminal)
+# Collector + manager (worker: painel em dev ou terminal)
 npm run up
 
 # Ou separado:
 npm run dev              # collector
-npm run worker           # sender WhatsApp
-WORKER_ACCOUNT_ID=x npm run worker   # conta específica
-npm run worker:telegram  # sender Telegram
+npm run worker           # sender unificado (WhatsApp + Telegram)
 npm run manager          # painel
 ```
 
-Em dev local, `MANAGER_CAN_SPAWN_WORKERS=true` (default) permite iniciar workers pelo painel.
+Em dev local, `MANAGER_CAN_SPAWN_WORKERS=true` (default) permite iniciar o worker unificado pelo painel.
 
 ## Scripts npm
 
 | Script | Descrição |
 |--------|-----------|
-| `up` | Sobe collector + manager (com preflight) |
+| `up` | Sobe collector + scheduler + manager (com preflight) |
 | `check` | Preflight — valida ambiente |
 | `setup` | Preflight + guia de setup |
-| `dev` | Collector + fila de coleta |
+| `dev` | Processo collector (coleta + fila) |
 | `scheduler` | Agendador de mensagens automáticas |
-| `worker` | Worker de envio WhatsApp |
-| `worker:telegram` | Worker de envio Telegram |
+| `worker` | Worker de envio unificado (WhatsApp + Telegram) |
 | `manager` | Painel web admin |
 | `ml:login` | Login afiliado ML (salva sessão) |
 | `wa:login` | Login WhatsApp (QR) |
@@ -159,4 +194,4 @@ Em dev local, `MANAGER_CAN_SPAWN_WORKERS=true` (default) permite iniciar workers
 
 ## Preflight
 
-Todos os processos principais rodam preflight antes de iniciar (`predev`, `preworker`, `preworker:telegram`, `premanager`). Use `npm run check` para validar manualmente.
+Todos os processos principais rodam preflight antes de iniciar (`predev`, `preworker`, `premanager`). Use `npm run check` para validar manualmente.

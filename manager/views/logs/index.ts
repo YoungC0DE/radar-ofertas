@@ -4,7 +4,7 @@ import type {
 } from '../../models/logs/log-classifier.js';
 import type { LogsPageData } from '../../models/logs-model.js';
 import { escapeHtml } from '../helpers.js';
-import { renderLayout } from '../layout.js';
+import { renderLayoutShell as renderLayout } from '../layout/shell.js';
 import { pageData, pageScripts, pageStyles } from '../page-assets.js';
 
 function formatLogTime(timestamp: string): string {

@@ -5,6 +5,7 @@ import { hydrateScoreConfigCache } from './config/score-config.js';
 import { closeBrowserPool } from './mercado-livre/browser-pool.js';
 import { closeSenderPacingRedis } from './utils/sender-pacing.js';
 import { bootstrapCacheCoherence } from './utils/config-cache-sync.js';
+import { hydrateIntegrationState } from './channels/integration-state.js';
 import { stopCacheInvalidationSubscriber } from './utils/cache-coherence.js';
 import { closeMetricsRedis } from './utils/metrics.js';
 import { scheduleCollectorJob, closeAllQueues } from './queue/index.js';
@@ -19,6 +20,7 @@ async function main(): Promise<void> {
     hydrateScoreConfigCache(),
     hydrateBrandCache(),
     hydrateAllSourcesCaches(),
+    hydrateIntegrationState(),
   ]);
   await scheduleCollectorJob();
   await bootstrapCacheCoherence();

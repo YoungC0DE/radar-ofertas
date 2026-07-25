@@ -23,50 +23,6 @@ export function renderSettingsModals(data: SettingsData): string {
       </div>
     </div>
 
-    <div id="ml-connect-modal" class="modal-overlay hidden" aria-hidden="true">
-      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="ml-connect-modal-title">
-        <div class="modal-header">
-          <h3 id="ml-connect-modal-title">Conectar ao Mercado Livre</h3>
-        </div>
-        <div class="modal-body">
-          <div class="connect-flow" id="ml-connect-flow">
-            <p class="connect-status" id="ml-connect-status">Abrindo o navegador…</p>
-            <ol class="connect-steps" id="ml-connect-steps">
-              <li>Uma janela do navegador vai abrir no portal de afiliados do Mercado Livre.</li>
-              <li>Faça login normalmente e acesse o <strong>Gerador de Links</strong>.</li>
-              <li>Volte aqui e clique em <strong>Concluir</strong> para salvar a sessão.</li>
-            </ol>
-            <p class="connect-error hidden" id="ml-connect-error"></p>
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn" id="ml-connect-cancel">Cancelar</button>
-          <button type="button" class="btn primary" id="ml-connect-finish" disabled>Concluir</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="wa-connect-modal" class="modal-overlay hidden" aria-hidden="true">
-      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="wa-connect-modal-title">
-        <div class="modal-header">
-          <h3 id="wa-connect-modal-title">Conectar ao WhatsApp</h3>
-        </div>
-        <div class="modal-body">
-          <div class="connect-flow" id="wa-connect-flow">
-            <p class="connect-status" id="wa-connect-status">Iniciando conexão…</p>
-            <div class="wa-qr-wrap hidden" id="wa-qr-wrap">
-              <img id="wa-qr-img" alt="QR code do WhatsApp" width="280" height="280">
-              <p class="modal-help">No celular, abra o WhatsApp › <strong>Aparelhos conectados</strong> › <strong>Conectar um aparelho</strong> e aponte a câmera para o QR acima.</p>
-            </div>
-            <p class="connect-error hidden" id="wa-connect-error"></p>
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn" id="wa-connect-close">Fechar</button>
-        </div>
-      </div>
-    </div>
-
     <div id="coupons-url-modal" class="modal-overlay hidden" aria-hidden="true">
       <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="coupons-url-modal-title">
         <div class="modal-header">
@@ -134,34 +90,6 @@ export function renderSettingsModals(data: SettingsData): string {
           <div class="modal-actions">
             <button type="button" class="btn modal-cancel" data-modal="amazon-affiliate-modal">Cancelar</button>
             <button type="submit" class="btn primary">Salvar</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <div id="channel-link-modal" class="modal-overlay hidden" aria-hidden="true">
-      <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="channel-link-modal-title">
-        <div class="modal-header">
-          <h3 id="channel-link-modal-title">Adicionar destino WhatsApp</h3>
-        </div>
-        <form method="post" action="/manager/settings/whatsapp-destinations/add">
-          <div class="modal-body">
-            <label for="modal-invite-link" class="modal-label">Link de convite ou JID</label>
-            <input
-              type="text"
-              id="modal-invite-link"
-              name="inviteInput"
-              value=""
-              placeholder="https://chat.whatsapp.com/... ou https://whatsapp.com/channel/..."
-              spellcheck="false"
-              class="modal-input"
-              required
-            >
-            <p class="modal-help">Cole o link do grupo ou canal. O número conectado precisa estar no grupo/canal.</p>
-          </div>
-          <div class="modal-actions">
-            <button type="button" class="btn modal-cancel" data-modal="channel-link-modal">Cancelar</button>
-            <button type="submit" class="btn primary">Adicionar</button>
           </div>
         </form>
       </div>

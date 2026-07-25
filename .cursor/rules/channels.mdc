@@ -1,18 +1,19 @@
 ---
 description: Regras dos canais de envio (WhatsApp, Telegram)
-globs: src/channels/**,src/telegram/**,src/worker.ts,src/worker-telegram.ts,src/accounts/worker-publisher.ts
+globs: src/channels/**,src/telegram/**,src/worker.ts,src/channels/worker-runner.ts
 alwaysApply: false
 ---
 
 # Canais de envio
 
-- Um canal = um processo = uma fila. Falha de um canal nunca derruba o outro.
+- Worker unificado (`worker.ts` → `runUnifiedWorker`) consome todas as filas de sender no mesmo processo.
+- Filas BullMQ separadas por canal e conta — isolam retry e ritmo; falha de um publisher não impede os demais no boot.
 - `channels/types.ts` define o contrato `ChannelPublisher`; `channels/index.ts` registra os publishers.
 - `jobs/sender.ts` é genérico — recebe um publisher. Nunca colocar `if (channel === ...)` nele.
 - Publisher não tem regra de negócio: só conecta, valida e publica (`publish` para ofertas, `publishText` para texto livre).
-- Boot dos workers em `channels/worker-runner.ts` — entries (`worker*.ts`) usam `accounts/worker-publisher.ts`.
-- `worker-runner.ts` publica heartbeat Redis a cada 10s (`redis-state.ts`).
-- Canal desligado (`isEnabled() === false`): não enfileira e o worker encerra com exit 0.
+- Boot em `channels/worker-runner.ts` — `loadAllWorkerPublishers()` carrega todos os publishers habilitados.
+- `worker-runner.ts` publica heartbeat Redis a cada 10s (`redis-state.ts`) por `(channel, accountId)`.
+- Canal desligado (`isEnabled() === false`): não enfileira e o publisher é ignorado no boot.
 
 ## Estado de envio
 
@@ -24,12 +25,13 @@ alwaysApply: false
 
 ## Multi-conta
 
-`dispatchOffer` itera contas habilitadas por plataforma. Fila, sender e publishers propagam `accountId`. Worker consome conta via `WORKER_ACCOUNT_ID`. Spawn por conta no painel ainda pendente — ver `.cursor/docs/accounts.md`.
+`dispatchOffer` itera contas habilitadas por plataforma. Fila, sender e publishers propagam `accountId`. Worker unificado instancia um publisher por `(canal, accountId)`. Spawn único pelo painel em dev (`MANAGER_CAN_SPAWN_WORKERS=true`) — ver `.cursor/docs/accounts.md`.
 
 ## Adicionar canal
 
 1. `ChannelPublisher` em `channels/<canal>-publisher.ts`
 2. Registrar em `CHANNELS` + `PUBLISHERS`
 3. Fila em `SENDER_QUEUE_NAMES` (`queue/index.ts`)
-4. Entry `worker-<canal>.ts` com `loadWorkerPublisher('<canal>')` + `runChannelWorker`
-5. Serviço no `docker-compose.yml` + script no `package.json`
+4. Estender `createPublisher()` se necessário
+
+Não criar entry `worker-<canal>.ts` — o worker unificado consome a nova fila via `loadAllWorkerPublishers()`.

@@ -22,7 +22,7 @@ Auth opcional: `MANAGER_TOKEN` exige `?token=...` ou header `Authorization: Bear
 | `/manager/offers/:id` | Detalhe da oferta + preview da mensagem |
 | `/manager/coupons` | Cupons ML — refresh, envio, link de loja |
 | `/manager/accounts` | Contas multi-plataforma (WhatsApp, Telegram, ML) |
-| `/manager/sources/:channel` | Fontes de coleta por canal (`whatsapp` \| `telegram`) |
+| `/manager/sources/:channel` | Fontes de coleta por canal (`whatsapp` \| `telegram`) — ML e Amazon |
 | `/manager/settings` | Score, brand, horários, intervalos, conexões, workers |
 | `/manager/template` | Template de ofertas + cupons + mensagens automáticas |
 | `/manager/logs` | Logs da aplicação (collector, worker, manager) |
@@ -69,7 +69,9 @@ Tudo persiste na tabela `settings` e é lido pelos processos via cache:
 - **Horários** — janela operacional de envio
 - **Intervalos** — coleta e delay entre envios
 - **Fontes ML** — categorias do `.env` (ativar/desativar) + URLs customizadas **por canal**
-- **Canal** — invite link do WhatsApp
+- **Fontes Amazon** — `AMAZON_SOURCES` do `.env` + links customizados **por canal** (browse node, busca, produto)
+- **Afiliado Amazon** — baseUrl, ID da loja (`?tag=`), prefixo opcional (Settings › Afiliados)
+- **Canal** — invite link do WhatsApp; múltiplos destinos por conta (`whatsappDestinations`)
 - **Template** — mensagem de ofertas e cupons com placeholders
 - **Auto-messages** — mensagens programadas (manual / once / daily)
 - **Cupons** — URL da página de cupons ML
@@ -99,23 +101,27 @@ APIs JSON de conexão:
 
 ## Workers de envio
 
-O `npm run up` sobe collector + manager, **não** os workers — evita dois processos disputando a sessão WhatsApp.
+O `npm run up` sobe collector + scheduler + manager, **não** o worker — evita dois processos disputando a sessão WhatsApp.
 
 | Modo | Comportamento |
 |------|---------------|
-| Dev (`MANAGER_CAN_SPAWN_WORKERS=true`) | Painel pode iniciar/parar workers via spawn |
-| Produção/Docker (`MANAGER_CAN_SPAWN_WORKERS=false`) | Workers são serviços separados; painel só exibe status |
+| Dev (`MANAGER_CAN_SPAWN_WORKERS=true`) | Painel pode iniciar/parar/reiniciar o **worker unificado** via spawn |
+| Produção/Docker (`MANAGER_CAN_SPAWN_WORKERS=false`) | Worker é serviço Docker separado; painel só exibe status |
+
+Um único processo publica em WhatsApp e Telegram. Settings → Operações exibe um card **Worker de envio**.
 
 Status derivado de:
 - **WhatsApp:** `owner.lock` na pasta de auth + heartbeat Redis (`radar:worker:{channel}:{accountId}`)
-- **Telegram:** heartbeat Redis
+- **Telegram:** heartbeat Redis (mesmo processo worker)
 
 | Endpoint | Método | Função |
 |----------|--------|--------|
-| `/manager/settings/worker/start` | POST | Inicia worker (`?channel=whatsapp\|telegram`) — só com spawn habilitado |
+| `/manager/settings/worker/start` | POST | Inicia worker unificado — só com spawn habilitado |
 | `/manager/settings/worker/stop` | POST | Encerra worker — só com spawn habilitado |
 | `/manager/settings/worker/restart` | POST | Reinicia worker — só com spawn habilitado |
 | `/manager/settings/worker/status` | GET | Status do processo (externo ou local) |
+
+Parâmetros `?channel=` e `?accountId=` nas rotas de worker são **legados** — o status é sempre do worker unificado.
 
 Login ML (`connection-model.ts`) permanece stateful no processo do manager — operação single-node/dev.
 
@@ -135,6 +141,17 @@ Login ML (`connection-model.ts`) permanece stateful no processo do manager — o
 - `src/` nunca importa de `manager/`.
 - Models do manager importam funções de `src/config/`, `src/offers/`, `src/accounts/`, etc.
 - Controllers devem ser finos; evitar import direto de `src/` (exceções atuais: `offers-controller`, `dashboard-controller`).
+
+## Hot reload (dev)
+
+Com `MANAGER_HOT_RELOAD=true` (automático quando `NODE_ENV` ≠ `production`; no Docker o compose define `true` no serviço `manager`):
+
+| Camada | Mecanismo |
+|--------|-----------|
+| CSS/JS/views/controllers/models | Polling em `manager/dev/file-watcher.ts` → SSE → browser recarrega |
+| TypeScript do servidor (`manager/` + `src/`) | `tsx watch` reinicia o processo |
+
+No Docker, volumes `./manager` e `./src` + `tsx watch` evitam rebuild do container a cada alteração.
 
 ## Preflight e CI
 

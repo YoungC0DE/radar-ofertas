@@ -25,11 +25,11 @@ export interface ChannelVerifyResult {
 }
 
 /**
- * Contrato de um canal de publicação. Cada canal roda no seu próprio processo,
- * com sua fila e seu ritmo — o worker é genérico e só conhece esta interface.
+ * Contrato de um canal de publicação. O worker unificado consome todas as filas
+ * habilitadas — cada publisher implementa o protocolo do seu canal.
  *
- * Para adicionar um canal: implemente isto, registre em channels/index.ts e suba
- * um processo com runChannelWorker(publisher).
+ * Para adicionar um canal: implemente isto, registre em channels/index.ts e inclua
+ * no worker unificado (`src/worker.ts`).
  */
 export interface ChannelPublisher {
   readonly channel: Channel;

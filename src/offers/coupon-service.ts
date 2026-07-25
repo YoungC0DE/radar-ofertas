@@ -16,7 +16,7 @@ import {
 } from '../queue/index.js';
 import { logger } from '../utils/logger.js';
 import { getWhatsAppSocket, requireWhatsAppSocket, sendOffer } from '../whatsapp/index.js';
-import { formatCouponMessage } from './coupon-message.js';
+import { formatCouponMessage } from './coupon-template.js';
 
 const IMMEDIATE_SEND_TIMEOUT_MS = 90_000;
 

@@ -1,64 +1,46 @@
 import type { SettingsData } from '../../models/settings-model.js';
-import { escapeHtml } from '../helpers.js';
 import { operatingStatusBadge } from '../components/index.js';
-import { configRow, EDIT_ICON, renderEditableValue } from '../components/index.js';
-import { renderLayout } from '../layout.js';
+import { renderLayoutShell as renderLayout } from '../layout/shell.js';
 import { renderSettingsAlert } from './alerts.js';
-import {
-  renderConnectionsSection,
-  renderOperationsSection,
-} from './sections/connections-section.js';
+import { renderOperationsSection } from './sections/connections-section.js';
 import { renderAffiliateProgramsSection } from './sections/affiliate-section.js';
-import { renderBrandSection } from './sections/brand-section.js';
-import { renderChannelSection } from './sections/channel-section.js';
-import { renderOperatingHoursSection } from './sections/operating-hours-section.js';
-import { renderScoreSection } from './sections/score-section.js';
+import { renderGeneralSection } from './sections/general-section.js';
 import { renderSettingsModals } from './modals.js';
+import { renderTabs } from '../components/tabs.js';
+import {
+  resolveAffiliateSubTab,
+  resolveSettingsActiveTab,
+} from './tab-state.js';
 import { pageData, pageScripts, pageStyles } from '../page-assets.js';
 
 export function renderSettingsPage(data: SettingsData): string {
   const statusBadge = operatingStatusBadge(data.withinOperatingHours);
   const alert = renderSettingsAlert(data.saved, data.error);
+  const activeTab = resolveSettingsActiveTab(data.saved);
+  const affiliateSubTab = resolveAffiliateSubTab(data.saved);
 
-  const main = `
-    ${alert}
-    <section>
-      <h2>Configuração</h2>
+  const tabs = renderTabs(
+    [
+      {
+        id: 'geral',
+        label: 'Geral',
+        content: renderGeneralSection(data, statusBadge),
+      },
+      {
+        id: 'afiliados',
+        label: 'Afiliados',
+        content: renderAffiliateProgramsSection(data, affiliateSubTab),
+      },
+      {
+        id: 'operacoes',
+        label: 'Operações',
+        content: renderOperationsSection(data),
+      },
+    ],
+    { activeId: activeTab, ariaLabel: 'Configurações' },
+  );
 
-      <div class="config-grid">
-        ${renderBrandSection(data)}
-        ${configRow('Fuso', `<code>${escapeHtml(data.timezone)}</code>`, 'APP_TIMEZONE')}
-        ${renderOperatingHoursSection(data, statusBadge)}
-        ${renderScoreSection(data)}
-        ${configRow(
-          'Intervalo de coleta',
-          renderEditableValue(
-            'intervalo de coleta',
-            `${data.collectorIntervalMinutes} min`,
-            'edit-send-interval',
-            EDIT_ICON,
-          ),
-          'Frequência de busca de novas ofertas',
-        )}
-        ${configRow(
-          'Tempo entre envios',
-          renderEditableValue(
-            'tempo entre envios',
-            `${data.senderDelayMinutes} min`,
-            'edit-sender-delay',
-            EDIT_ICON,
-          ),
-          'Intervalo entre cada mensagem enviada no WhatsApp',
-        )}
-        ${renderChannelSection(data)}
-      </div>
-    </section>
-
-    ${renderAffiliateProgramsSection(data)}
-
-    ${renderConnectionsSection(data)}
-
-    ${renderOperationsSection(data)}`;
+  const main = `${alert}${tabs}`;
 
   const afterMain = `
     ${renderSettingsModals(data)}
@@ -67,6 +49,8 @@ export function renderSettingsPage(data: SettingsData): string {
       brandInitial: data.brandInitial,
       brandLogoHref: data.brandLogoHref,
       canSpawnWorkers: data.canSpawnWorkers,
+      activeTab,
+      affiliateSubTab,
     })}
     ${pageScripts('shared/modal.js', 'shared/polling.js', 'settings.js')}`;
 

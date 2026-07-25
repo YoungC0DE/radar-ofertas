@@ -30,6 +30,8 @@ export function getSenderQueueName(channel: Channel, accountId = 'default'): str
 export interface CollectorOrchestrateJobData {
   kind: 'orchestrate';
   triggeredAt: string;
+  /** Ignora janela operacional — usado pelo botão "Buscar novos anúncios" no painel. */
+  force?: boolean;
 }
 
 export interface CollectorSourceJobData {
@@ -142,12 +144,12 @@ export async function enqueueCollectSourceJob(data: CollectorSourceJobData): Pro
   });
 }
 
-export async function enqueueOfferCollection(): Promise<void> {
+export async function enqueueOfferCollection(options: { force?: boolean } = {}): Promise<void> {
   assertRedisEnabled('enfileiramento de coleta');
   const triggeredAt = new Date().toISOString();
   await getCollectorQueue().add(
     'collect-orchestrate',
-    { kind: 'orchestrate', triggeredAt },
+    { kind: 'orchestrate', triggeredAt, force: options.force === true },
     {
       removeOnComplete: true,
       removeOnFail: 50,

@@ -26,8 +26,8 @@ const AFFILIATE_LINK_DELAY_MS = 500;
 const linkCache = new Map<string, string>();
 let lastLinkGeneratedAt = 0;
 
-function fallbackAffiliateLink(permalink: string): AffiliateLinkResult {
-  const { tag, baseUrl } = env.AFFILIATE_CONFIG;
+function fallbackAffiliateLink(permalink: string, tag: string): AffiliateLinkResult {
+  const { baseUrl } = env.AFFILIATE_CONFIG;
 
   try {
     const url = new URL(permalink);
@@ -98,7 +98,7 @@ async function enforceLinkRateLimit(minDelayMs = AFFILIATE_LINK_DELAY_MS): Promi
   lastLinkGeneratedAt = Date.now();
 }
 
-async function createLinkViaHttp(permalink: string): Promise<AffiliateLinkResult | null> {
+async function createLinkViaHttp(permalink: string, tag: string): Promise<AffiliateLinkResult | null> {
   const state = await loadStorageState();
 
   if (isSessionExpired(state)) {
@@ -109,7 +109,6 @@ async function createLinkViaHttp(permalink: string): Promise<AffiliateLinkResult
     return null;
   }
 
-  const tag = env.AFFILIATE_CONFIG.tag;
   const bodies = buildCreateLinkBodies(permalink, tag);
 
   async function attempt(cookieHeader: string): Promise<AffiliateLinkResult | null> {
@@ -246,6 +245,8 @@ export interface AffiliateLinkOptions {
    * exceda este tempo em ms — evita travar a fila de envio numa sessão ML lenta.
    */
   timeoutMs?: number;
+  /** Tag de afiliado ML; default: conta default ou AFFILIATE_CONFIG. */
+  tag?: string;
 }
 
 async function resolveAffiliateLink(
@@ -253,6 +254,7 @@ async function resolveAffiliateLink(
   mercadoLivreId: string | undefined,
   minDelayMs: number | undefined,
   allowBrowser: boolean,
+  tag: string,
 ): Promise<string> {
   if (mercadoLivreId) {
     const cached = linkCache.get(mercadoLivreId);
@@ -264,7 +266,7 @@ async function resolveAffiliateLink(
 
   await enforceLinkRateLimit(minDelayMs);
 
-  const httpResult = await createLinkViaHttp(permalink);
+  const httpResult = await createLinkViaHttp(permalink, tag);
   if (httpResult) {
     const link = httpResult.shortUrl ?? httpResult.url;
     if (mercadoLivreId) linkCache.set(mercadoLivreId, link);
@@ -284,7 +286,7 @@ async function resolveAffiliateLink(
     { permalink, affiliate_source: 'fallback' },
     'Using fallback affiliate link — run npm run ml:login',
   );
-  const fallback = fallbackAffiliateLink(permalink).url;
+  const fallback = fallbackAffiliateLink(permalink, tag).url;
   if (mercadoLivreId) linkCache.set(mercadoLivreId, fallback);
   return fallback;
 }
@@ -295,10 +297,12 @@ export async function generateAffiliateLink(
   minDelayMs?: number,
   options: AffiliateLinkOptions = {},
 ): Promise<string> {
-  const { allowBrowser = true, timeoutMs } = options;
+  const { allowBrowser = true, timeoutMs, tag: tagOverride } = options;
+  const { resolveMercadoLivreAffiliateTag } = await import('../accounts/ml-affiliate-tag.js');
+  const tag = tagOverride?.trim() || (await resolveMercadoLivreAffiliateTag());
 
   if (!timeoutMs) {
-    return resolveAffiliateLink(permalink, mercadoLivreId, minDelayMs, allowBrowser);
+    return resolveAffiliateLink(permalink, mercadoLivreId, minDelayMs, allowBrowser, tag);
   }
 
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -308,13 +312,13 @@ export async function generateAffiliateLink(
         { permalink, timeoutMs, affiliate_source: 'fallback-timeout' },
         'Geração de link excedeu o tempo limite — usando fallback para não travar o envio',
       );
-      resolve(fallbackAffiliateLink(permalink).url);
+      resolve(fallbackAffiliateLink(permalink, tag).url);
     }, timeoutMs);
   });
 
   try {
     return await Promise.race([
-      resolveAffiliateLink(permalink, mercadoLivreId, minDelayMs, allowBrowser),
+      resolveAffiliateLink(permalink, mercadoLivreId, minDelayMs, allowBrowser, tag),
       timeoutFallback,
     ]);
   } finally {

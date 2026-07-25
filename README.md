@@ -1,6 +1,6 @@
 # Radar Ofertas
 
-Bot automatizado que coleta ofertas do Mercado Livre via scraping híbrido (HTTP + Playwright), pontua oportunidades, gera links de afiliado e publica em canal **WhatsApp** (Baileys) e **Telegram** (Bot API). Cada canal roda no seu próprio processo, com fila própria. Inclui painel web **manager** para configurar score, template, horários, conexões e workers.
+Bot automatizado que coleta ofertas do **Mercado Livre** e da **Amazon** via scraping híbrido (HTTP + Playwright), pontua oportunidades, gera links de afiliado e publica em **WhatsApp** (Baileys) e **Telegram** (Bot API). Um **worker unificado** consome todas as filas de envio (todas as contas habilitadas). Inclui painel web **manager** para configurar score, template, horários, conexões, fontes e workers.
 
 ## Stack
 
@@ -11,21 +11,26 @@ Node.js, TypeScript, Cheerio, Playwright, Baileys, PostgreSQL, Redis, BullMQ, Do
 ```
 src/
 ├── app.ts              → collector (coleta + enfileira)
-├── worker.ts           → envio WhatsApp
-├── worker-telegram.ts  → envio Telegram
+├── scheduler.ts        → agendador de mensagens automáticas
+├── worker.ts           → envio unificado (WhatsApp + Telegram)
 ├── ml-login.ts         → login afiliado ML (CLI)
 ├── wa-login.ts         → login WhatsApp (CLI)
 ├── config/             → ENV (Zod) + settings DB
+├── accounts/           → multi-conta (WhatsApp, Telegram, ML)
+├── affiliates/         → registro de plataformas de afiliado
+├── sources/            → roteamento ML + Amazon no collector
 ├── channels/           → contrato de canal + publishers
 ├── whatsapp/           → Baileys + channel-cache
 ├── telegram/           → Bot API (fetch)
-├── mercado-livre/      → scraping + sessão afiliado
-├── offers/             → domínio de ofertas + template
+├── mercado-livre/      → scraping + sessão afiliado + cupons
+├── amazon/             → scraping + links de afiliado (?tag=)
+├── offers/             → domínio de ofertas + template + afiliado
+├── auto-messages/      → mensagens automáticas agendadas
 ├── jobs/               → workers BullMQ (sender genérico por canal)
 ├── queue/              → filas Redis + agendamento
 ├── database/           → Prisma
 ├── scripts/            → preflight, up
-└── utils/              → logger, log-store
+└── utils/              → logger, log-store, redis-state
 
 manager/                → painel web (MVC server-rendered)
 ```
@@ -42,7 +47,7 @@ npm run migrate:deploy
 # Valida ambiente e mostra o que falta
 npm run check
 
-# Sobe collector + manager (worker é iniciado pelo painel)
+# Sobe collector + scheduler + manager (worker é iniciado pelo painel)
 npm run up
 ```
 
@@ -58,8 +63,7 @@ Alternativa via CLI (sem painel):
 npm run ml:login         # sessão afiliado ML
 npm run wa:login         # sessão WhatsApp
 npm run dev              # collector
-npm run worker           # envio WhatsApp
-npm run worker:telegram  # envio Telegram (se TELEGRAM_ENABLED=true)
+npm run worker           # envio unificado (WhatsApp + Telegram)
 ```
 
 ### Telegram (opcional)
@@ -78,6 +82,23 @@ TELEGRAM_CHAT_ID=@meucanal      # ou o id -100... de canal privado
 
 `npm run check` valida token, canal e permissão de admin. Com `TELEGRAM_ENABLED=false`, nada é enfileirado para o Telegram e o worker encerra no boot.
 
+### Amazon (opcional)
+
+Coleta de browse nodes, buscas e produtos; links de afiliado com `?tag=` (sem login de sessão).
+
+1. Obtenha o **ID da loja** no painel Amazon › Compartilhar links de afiliados
+2. No `.env`:
+
+```bash
+AMAZON_AFFILIATE_STORE_ID=sua-loja-20
+AMAZON_SOURCES=https://www.amazon.com.br/b/node/122326793011
+```
+
+3. Ative/desative fontes por canal em `/manager/sources/whatsapp` (ou `telegram`)
+4. Ajuste base URL e tag em Settings › Afiliados › Amazon
+
+`npm run check` valida fontes Amazon ativas e `AMAZON_AFFILIATE_STORE_ID` quando há coleta configurada.
+
 ## Docker (produção)
 
 ```bash
@@ -93,19 +114,15 @@ docker compose up -d --build
 | `migrate` | Aplica migrations automaticamente |
 | `collector` | Coleta de ofertas (singleton; Playwright pooled) |
 | `scheduler` | Mensagens automáticas programadas (leve, sem browser) |
-| `worker` | Envio WhatsApp (`WORKER_ACCOUNT_ID` opcional; 1 réplica por sessão) |
-| `worker-telegram` | Envio Telegram (encerra com exit 0 se `TELEGRAM_ENABLED=false`) |
+| `worker` | Envio unificado — WhatsApp + Telegram (todas as contas habilitadas) |
 | `manager` | Painel em `http://localhost:3000/manager` (stateless, `MANAGER_CAN_SPAWN_WORKERS=false`) |
 
 ```bash
-docker compose logs -f worker            # QR na primeira execução (se sessão não existir)
-docker compose restart worker            # reiniciar envio WhatsApp
-docker compose logs -f worker-telegram   # envios no Telegram
+docker compose logs -f worker            # envios WhatsApp + Telegram
+docker compose restart worker            # reiniciar envio
 ```
 
-Não escale o `worker` além de uma réplica por número WhatsApp — a sessão Baileys só admite um dono. Para contas adicionais, use `docker-compose.accounts.example.yml` como base de `docker-compose.override.yml`.
-
-Sessões persistidas em `./data` (volume montado nos containers), incluindo `data/accounts/{id}/` para multi-conta.
+Não escale o `worker` — um único processo gerencia todas as sessões e filas. Sessões persistidas em `./data` (volume montado nos containers), incluindo `data/accounts/{id}/` para multi-conta.
 
 ## Scripts
 
@@ -116,8 +133,7 @@ Sessões persistidas em `./data` (volume montado nos containers), incluindo `dat
 | `npm run setup` | Preflight + guia de setup |
 | `npm run dev` | Processo collector (coleta + fila) |
 | `npm run scheduler` | Agendador de mensagens automáticas |
-| `npm run worker` | Processo worker (WhatsApp + envio) |
-| `npm run worker:telegram` | Processo worker (Telegram + envio) |
+| `npm run worker` | Processo worker unificado (WhatsApp + Telegram) |
 | `npm run manager` | Painel web admin em `/manager` |
 | `npm run ml:login` | Login afiliado ML (salva sessão) |
 | `npm run wa:login` | Autentica WhatsApp (QR code) |
@@ -139,5 +155,9 @@ Consulte `.cursor/docs/` para arquitetura, canais de envio, filas, banco, WhatsA
 | [database.md](.cursor/docs/database.md) | Schema e settings |
 | [queues.md](.cursor/docs/queues.md) | BullMQ e agendamento |
 | [whatsapp.md](.cursor/docs/whatsapp.md) | Baileys e template |
-| [mercado-livre.md](.cursor/docs/mercado-livre.md) | Scraping e afiliado |
+| [telegram.md](.cursor/docs/telegram.md) | Bot API |
+| [mercado-livre.md](.cursor/docs/mercado-livre.md) | Scraping ML e afiliado |
+| [amazon.md](.cursor/docs/amazon.md) | Scraping Amazon e afiliado |
 | [deployment.md](.cursor/docs/deployment.md) | Docker e produção |
+| [accounts.md](.cursor/docs/accounts.md) | Multi-conta |
+| [channels.md](.cursor/docs/channels.md) | Canais de envio |

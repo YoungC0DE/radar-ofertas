@@ -1,14 +1,21 @@
 import readline from 'node:readline';
 import { stdin, stdout } from 'node:process';
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import { type Browser, type BrowserContext, type Page } from 'playwright';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
-import { ensureAuthDir, saveStorageState, updateSessionMeta } from './session.js';
+import {
+  closeMercadoLivreLoginBrowser,
+  launchMercadoLivreLoginBrowser,
+} from './browser-login.js';
+import { ensureAuthDir, getMlAuthPath, saveStorageState, updateSessionMeta } from './session.js';
+
+export { MercadoLivrePanelLoginUnavailableError, getMercadoLivrePanelLoginHelp } from './browser-login.js';
 
 export interface AffiliateLoginSession {
   browser: Browser;
   context: BrowserContext;
   page: Page;
+  usesCdp: boolean;
 }
 
 const AFFILIATE_LOGIN_URL = 'https://www.mercadolivre.com.br/afiliados/linkbuilder#hub';
@@ -39,14 +46,24 @@ export async function isAffiliatePortalReady(page: Page): Promise<boolean> {
   return hasLinkBuilder || /afiliados\/link-builder|afiliados-home|affiliate-program/i.test(url);
 }
 
-export async function openAffiliateLoginSession(): Promise<AffiliateLoginSession> {
+export async function openAffiliateLoginSession(
+  mode: 'panel' | 'cli' = 'panel',
+): Promise<AffiliateLoginSession> {
   await ensureAuthDir();
 
-  const browser = await chromium.launch({ headless: false });
-  const context = await browser.newContext({
-    userAgent: env.ML_SCRAPER_USER_AGENT,
-    locale: 'pt-BR',
-  });
+  const { browser, usesCdp } = await launchMercadoLivreLoginBrowser(mode);
+
+  const context = usesCdp
+    ? (browser.contexts()[0] ??
+      (await browser.newContext({
+        userAgent: env.ML_SCRAPER_USER_AGENT,
+        locale: 'pt-BR',
+      })))
+    : await browser.newContext({
+        userAgent: env.ML_SCRAPER_USER_AGENT,
+        locale: 'pt-BR',
+      });
+
   const page = await context.newPage();
 
   logger.info('Abrindo portal de afiliados — faça login manualmente no navegador');
@@ -55,12 +72,18 @@ export async function openAffiliateLoginSession(): Promise<AffiliateLoginSession
     timeout: env.ML_HTTP_TIMEOUT_MS,
   });
 
-  logger.info(
-    'O navegador permanecerá aberto até você confirmar. ' +
-      'Conclua o login e acesse o Gerador de Links antes de continuar.',
-  );
+  if (usesCdp) {
+    logger.info(
+      'Chrome conectado via CDP — faça login na janela aberta e volte ao painel para concluir.',
+    );
+  } else {
+    logger.info(
+      'O navegador permanecerá aberto até você confirmar. ' +
+        'Conclua o login e acesse o Gerador de Links antes de continuar.',
+    );
+  }
 
-  return { browser, context, page };
+  return { browser, context, page, usesCdp };
 }
 
 export async function persistAffiliateSession(context: BrowserContext): Promise<void> {
@@ -71,11 +94,11 @@ export async function persistAffiliateSession(context: BrowserContext): Promise<
     lastError: null,
   });
 
-  logger.info({ path: env.ML_AUTH_PATH }, 'Sessão de afiliado salva com sucesso');
+  logger.info({ path: getMlAuthPath() }, 'Sessão de afiliado salva com sucesso');
 }
 
 export async function loginAffiliateSession(): Promise<void> {
-  const { browser, context, page } = await openAffiliateLoginSession();
+  const { browser, context, page, usesCdp } = await openAffiliateLoginSession('cli');
 
   try {
     while (true) {
@@ -93,6 +116,10 @@ export async function loginAffiliateSession(): Promise<void> {
 
     await persistAffiliateSession(context);
   } finally {
-    await browser.close();
+    await closeMercadoLivreLoginBrowser(browser, usesCdp);
   }
+}
+
+export async function closeAffiliateLoginSession(session: AffiliateLoginSession): Promise<void> {
+  await closeMercadoLivreLoginBrowser(session.browser, session.usesCdp);
 }

@@ -1,6 +1,4 @@
 import { env } from '../config/env.js';
-import { hydrateAmazonSourcesCache } from '../config/amazon-sources-config.js';
-import { getActiveAmazonSources } from '../config/amazon-sources-config.js';
 import type { RawOffer } from '../offers/types.js';
 import { runWithConcurrency } from '../utils/concurrency.js';
 import { logger } from '../utils/logger.js';
@@ -9,7 +7,6 @@ import { fetchAmazonListingPage, fetchAmazonProductPage, fetchAmazonSourceViaHtt
 import { validateAmazonSourceConfig } from './source-url.js';
 import type { AmazonScrapedItem } from './types.js';
 
-const SOURCE_CONCURRENCY = 2;
 const MAX_SCRAPE_PAGES = 3;
 const PDP_ENRICH_CONCURRENCY = 2;
 function isBlockError(error: unknown): boolean {
@@ -168,34 +165,6 @@ export async function* iterateAmazonScrapedPages(
   }
 }
 
-export async function searchConfiguredAmazonSources(): Promise<RawOffer[]> {
-  await hydrateAmazonSourcesCache();
-  const sources = getActiveAmazonSources()
-    .map((source) => validateAmazonSourceConfig(source))
-    .filter((validation) => validation.valid);
-
-  if (sources.length === 0) {
-    logger.error('No valid Amazon sources configured');
-    return [];
-  }
-
-  const results = await runWithConcurrency(sources, SOURCE_CONCURRENCY, async (validation) => {
-    try {
-      const items = await scrapeAmazonSource(validation.url);
-      logger.info(
-        { source: validation.url, kind: validation.kind, count: items.length },
-        'Amazon source search completed',
-      );
-      return items.map(mapToRawOffer);
-    } catch (error) {
-      logger.error({ source: validation.url, error }, 'Failed to search Amazon source');
-      return [] as RawOffer[];
-    }
-  });
-
-  return results.flat();
-}
-
 export { mapToRawOffer };
 
 export async function fetchAmazonOfferInsights(
@@ -213,8 +182,6 @@ export async function fetchAmazonOfferInsights(
     coupon: item.coupon,
   };
 }
-
-export * from './offer-hydration.js';
 
 export * from './types.js';
 export * from './url.js';

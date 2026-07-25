@@ -1,6 +1,6 @@
 import type { CouponsPageData } from '../models/coupons-model.js';
 import { escapeHtml, formatDateTimeString } from './helpers.js';
-import { renderLayout } from './layout.js';
+import { renderLayoutShell as renderLayout } from './layout/shell.js';
 import { pageStyles } from './page-assets.js';
 import { env } from '../../src/config/env.js';
 

@@ -1,14 +1,17 @@
+import { findAccount, resolveAccountAuthPath } from '../../src/accounts/repository.js';
 import {
-  openAffiliateLoginSession,
+  closeAffiliateLoginSession,
   isAffiliatePortalReady,
+  MercadoLivrePanelLoginUnavailableError,
+  openAffiliateLoginSession,
   persistAffiliateSession,
   type AffiliateLoginSession,
 } from '../../src/mercado-livre/auth.js';
+import { setMlAuthPath } from '../../src/mercado-livre/session.js';
 import { DEFAULT_ACCOUNT_ID } from '../../src/accounts/types.js';
-import { env } from '../../src/config/env.js';
 import { getWhatsAppConnectFromRedis } from '../../src/utils/redis-state.js';
 import { logger } from '../../src/utils/logger.js';
-import { canManagerSpawnWorkers, getWorkerState, startWorker } from './process-model.js';
+import { canManagerSpawnWorkers, getSenderWorkerState, startWorker } from './process-model.js';
 
 // --- WhatsApp connection flow -------------------------------------------------
 // Em produção o worker é dono da sessão e publica QR/status no Redis.
@@ -22,12 +25,16 @@ export interface WhatsAppConnectState {
   error: string | null;
 }
 
-function resolveAccountId(): string {
-  return env.WORKER_ACCOUNT_ID || DEFAULT_ACCOUNT_ID;
+function resolveAccountId(accountId?: string): string {
+  return accountId?.trim() || DEFAULT_ACCOUNT_ID;
 }
 
-export async function getWhatsAppConnectionState(): Promise<WhatsAppConnectState> {
-  const redisState = await getWhatsAppConnectFromRedis(resolveAccountId());
+let activeWaAccountId = DEFAULT_ACCOUNT_ID;
+let activeMlAccountId = DEFAULT_ACCOUNT_ID;
+
+export async function getWhatsAppConnectionState(accountId?: string): Promise<WhatsAppConnectState> {
+  const resolvedAccountId = resolveAccountId(accountId ?? activeWaAccountId);
+  const redisState = await getWhatsAppConnectFromRedis(resolvedAccountId);
   if (redisState) {
     return { status: redisState.status, qr: redisState.qr, error: redisState.error };
   }
@@ -35,8 +42,9 @@ export async function getWhatsAppConnectionState(): Promise<WhatsAppConnectState
   return { status: 'idle', qr: null, error: null };
 }
 
-export async function startWhatsAppConnection(): Promise<WhatsAppConnectState> {
-  const current = await getWhatsAppConnectionState();
+export async function startWhatsAppConnection(accountId?: string): Promise<WhatsAppConnectState> {
+  activeWaAccountId = resolveAccountId(accountId);
+  const current = await getWhatsAppConnectionState(activeWaAccountId);
   if (
     current.status === 'connecting' ||
     current.status === 'qr' ||
@@ -46,20 +54,20 @@ export async function startWhatsAppConnection(): Promise<WhatsAppConnectState> {
   }
 
   if (canManagerSpawnWorkers()) {
-    const worker = await getWorkerState('whatsapp');
+    const worker = await getSenderWorkerState();
     if (worker.status !== 'running' && worker.status !== 'starting') {
-      await startWorker('whatsapp');
+      await startWorker();
     }
-    const after = await getWhatsAppConnectionState();
+    const after = await getWhatsAppConnectionState(activeWaAccountId);
     return after.status === 'idle' ? { status: 'connecting', qr: null, error: null } : after;
   }
 
-  const worker = await getWorkerState('whatsapp');
+  const worker = await getSenderWorkerState();
   if (worker.status !== 'running') {
     return {
       status: 'error',
       qr: null,
-      error: 'Worker WhatsApp não detectado. Inicie o serviço worker (Docker ou terminal).',
+      error: 'Worker de envio não detectado. Inicie o serviço worker (Docker ou npm run worker).',
     };
   }
 
@@ -81,6 +89,14 @@ let mlStatus: MercadoLivreConnectStatus = 'idle';
 let mlError: string | null = null;
 let mlSession: AffiliateLoginSession | undefined;
 
+async function resolveMercadoLivreAuthPath(accountId: string): Promise<string> {
+  const account = await findAccount(accountId, 'mercado_livre');
+  if (account?.platform === 'mercado_livre') {
+    return account.config.authPath;
+  }
+  return resolveAccountAuthPath(accountId, 'mercado_livre');
+}
+
 export function getMercadoLivreConnectionState(): MercadoLivreConnectState {
   return { status: mlStatus, error: mlError };
 }
@@ -89,11 +105,13 @@ async function closeMlSession(): Promise<void> {
   const session = mlSession;
   mlSession = undefined;
   if (session) {
-    await session.browser.close().catch(() => {});
+    await closeAffiliateLoginSession(session).catch(() => {});
   }
 }
 
-export function startMercadoLivreConnection(): MercadoLivreConnectState {
+export async function startMercadoLivreConnection(accountId?: string): Promise<MercadoLivreConnectState> {
+  activeMlAccountId = resolveAccountId(accountId);
+
   if (mlStatus === 'opening' || mlStatus === 'awaiting-login' || mlStatus === 'saving') {
     return getMercadoLivreConnectionState();
   }
@@ -104,12 +122,17 @@ export function startMercadoLivreConnection(): MercadoLivreConnectState {
   void (async () => {
     try {
       await closeMlSession();
+      setMlAuthPath(await resolveMercadoLivreAuthPath(activeMlAccountId));
       mlSession = await openAffiliateLoginSession();
       mlStatus = 'awaiting-login';
     } catch (error: unknown) {
       mlStatus = 'error';
-      mlError =
-        error instanceof Error ? error.message : 'Falha ao abrir navegador do Mercado Livre';
+      if (error instanceof MercadoLivrePanelLoginUnavailableError) {
+        mlError = error.userMessage;
+      } else {
+        mlError =
+          error instanceof Error ? error.message : 'Falha ao abrir navegador do Mercado Livre';
+      }
       logger.error({ error }, 'Mercado Livre login browser failed to open');
     }
   })();

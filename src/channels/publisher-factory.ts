@@ -3,7 +3,7 @@ import {
   getEnabledWhatsAppDestinations,
   listWhatsAppDestinations,
 } from '../accounts/whatsapp-destinations.js';
-import { resolveAccountAuthPath } from '../accounts/paths.js';
+import { resolveAccountAuthPath } from '../accounts/repository.js';
 import type { ChannelPublisher } from './types.js';
 import {
   connectWhatsApp,
@@ -11,7 +11,6 @@ import {
   isPlaceholderChannelId,
   requireWhatsAppSocket,
   sendOffer,
-  setWhatsAppAuthPath,
   validateWhatsAppDestination,
   WhatsAppOwnedElsewhereError,
 } from '../whatsapp/index.js';
@@ -39,6 +38,7 @@ async function resolveDestinationJid(
 
 export function createWhatsAppPublisher(account: WhatsAppAccount): ChannelPublisher {
   const { id, config } = account;
+  const authPath = resolveAccountAuthPath(id, 'whatsapp');
 
   return {
     channel: 'whatsapp',
@@ -47,19 +47,19 @@ export function createWhatsAppPublisher(account: WhatsAppAccount): ChannelPublis
     isEnabled: () => account.enabled,
 
     async verify() {
-      setWhatsAppAuthPath(resolveAccountAuthPath(id, 'whatsapp'));
-
       const destinations = getEnabledWhatsAppDestinations(config);
-      if (destinations.length === 0) {
-        return {
-          ok: false,
-          detail:
-            'Nenhum destino WhatsApp configurado — adicione um canal ou grupo em Configuração',
-        };
-      }
 
       try {
-        const sock = await connectWhatsApp();
+        const sock = await connectWhatsApp({ authPath, accountId: id });
+
+        if (destinations.length === 0) {
+          return {
+            ok: true,
+            detail:
+              'WhatsApp conectado — escaneie o QR no painel e configure destinos para enviar ofertas',
+          };
+        }
+
         const failures: string[] = [];
         let validCount = 0;
 
@@ -104,7 +104,7 @@ export function createWhatsAppPublisher(account: WhatsAppAccount): ChannelPublis
     },
 
     async publish(offer: OfferRecord, caption: string) {
-      const sock = await requireWhatsAppSocket();
+      const sock = await requireWhatsAppSocket(authPath);
       const destinations = getEnabledWhatsAppDestinations(config);
       let lastMessageId = '';
 
@@ -140,7 +140,7 @@ export function createWhatsAppPublisher(account: WhatsAppAccount): ChannelPublis
     },
 
     async publishText(text: string) {
-      const sock = await requireWhatsAppSocket();
+      const sock = await requireWhatsAppSocket(authPath);
       const destinations = getEnabledWhatsAppDestinations(config);
       let lastMessageId = '';
 
@@ -176,7 +176,7 @@ export function createWhatsAppPublisher(account: WhatsAppAccount): ChannelPublis
     },
 
     async shutdown() {
-      await disconnectWhatsApp().catch(() => {});
+      await disconnectWhatsApp(authPath).catch(() => {});
     },
   };
 }
@@ -194,13 +194,13 @@ export function createTelegramPublisher(account: TelegramAccount): ChannelPublis
       if (!config.botToken || !config.chatId) {
         return {
           ok: false,
-          detail: 'TELEGRAM_BOT_TOKEN ou TELEGRAM_CHAT_ID vazios — configure no .env',
+          detail: 'Token ou canal vazios — configure em Configuração › Integrador no painel',
         };
       }
 
       try {
-        const bot = await getBotIdentity();
-        const chat = await validateTelegramChat(config.chatId);
+        const bot = await getBotIdentity(config.botToken);
+        const chat = await validateTelegramChat(config.chatId, config.botToken);
 
         if (!chat.valid) {
           return { ok: false, detail: `Chat inválido: ${chat.reason}` };
@@ -217,12 +217,12 @@ export function createTelegramPublisher(account: TelegramAccount): ChannelPublis
     },
 
     async publish(offer: OfferRecord, caption: string) {
-      const result = await sendTelegramOffer(config.chatId, offer.image, caption);
+      const result = await sendTelegramOffer(config.chatId, offer.image, caption, config.botToken);
       return { messageId: String(result.message_id) };
     },
 
     async publishText(text: string) {
-      const result = await sendTelegramOffer(config.chatId, null, text);
+      const result = await sendTelegramOffer(config.chatId, null, text, config.botToken);
       return { messageId: String(result.message_id) };
     },
   };

@@ -7,11 +7,11 @@ import {
   hydrateAmazonSourcesCache,
 } from '../config/amazon-sources-config.js';
 import { hasValidSession, loadSessionMeta, loadStorageState } from '../mercado-livre/session.js';
+import { resolveMercadoLivreAffiliateTag } from '../accounts/ml-affiliate-tag.js';
 import { getCollectorQueue, isRedisEnabled, closeAllQueues } from '../queue/index.js';
 import { formatIsoInTimezone } from '../utils/datetime.js';
 
-export type PreflightProfile =
-  'all' | 'collector' | 'worker' | 'worker-telegram' | 'manager' | 'scheduler';
+export type PreflightProfile = 'all' | 'collector' | 'worker' | 'manager' | 'scheduler';
 
 export interface PreflightItem {
   ok: boolean;
@@ -159,13 +159,13 @@ async function checkTelegram(): Promise<PreflightItem> {
 }
 
 async function checkAffiliateTag(): Promise<PreflightItem> {
-  const tag = env.AFFILIATE_CONFIG.tag;
-  if (!tag) {
+  const tag = await resolveMercadoLivreAffiliateTag();
+  if (!tag.trim()) {
     return {
       ok: false,
       label: 'Tag afiliado (Mercado Livre)',
-      detail: 'AFFILIATE_CONFIG.tag vazio',
-      fix: 'Defina AFFILIATE_CONFIG={"tag":"sua-tag-ml"} no .env (tag do programa ML, não da Amazon)',
+      detail: 'Tag de afiliado ML não configurada',
+      fix: 'Contas → Mercado Livre → Configurar (tag) ou AFFILIATE_CONFIG={"tag":"sua-tag-ml"} no .env',
     };
   }
   return { ok: true, label: 'Tag afiliado (Mercado Livre)', detail: tag };
@@ -258,22 +258,17 @@ async function runChecks(profile: PreflightProfile): Promise<PreflightItem[]> {
   items.push(await checkDatabase());
   items.push(await checkOfferDeliverySchema());
 
-  if (
-    profile === 'all' ||
-    profile === 'collector' ||
-    profile === 'worker' ||
-    profile === 'worker-telegram'
-  ) {
+  if (profile === 'all' || profile === 'collector' || profile === 'worker') {
     items.push(await checkRedis());
+  }
+
+  if (profile === 'all' || profile === 'worker') {
+    items.push(await checkTelegram());
   }
 
   if (profile === 'all' || profile === 'collector' || profile === 'manager') {
     items.push(await checkCategories());
     items.push(await checkAmazonSources());
-  }
-
-  if (profile === 'all' || profile === 'worker-telegram') {
-    items.push(await checkTelegram());
   }
 
   if (profile === 'all' || profile === 'collector') {
@@ -327,7 +322,6 @@ function parseProfile(argv: string[]): PreflightProfile {
   if (
     value === 'collector' ||
     value === 'worker' ||
-    value === 'worker-telegram' ||
     value === 'manager' ||
     value === 'scheduler'
   ) {

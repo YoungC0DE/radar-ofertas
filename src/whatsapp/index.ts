@@ -40,32 +40,48 @@ function suppressLibsignalConsoleNoise(): void {
 
 suppressLibsignalConsoleNoise();
 
-let socket: WASocket | undefined;
-let isConnecting = false;
-let allowReconnect = true;
-let qrListener: ((qr: string) => void) | undefined;
+interface WhatsAppSession {
+  authPath: string;
+  accountId: string;
+  socket?: WASocket;
+  isConnecting: boolean;
+  allowReconnect: boolean;
+  qrListener?: (qr: string) => void;
+  ownerHeartbeatTimer?: NodeJS.Timeout;
+}
 
-let activeAuthPath = env.WHATSAPP_AUTH_PATH;
+const sessions = new Map<string, WhatsAppSession>();
+let defaultAuthPath = env.WHATSAPP_AUTH_PATH;
 
-/** Auth path da conta ativa neste processo (default: WHATSAPP_AUTH_PATH do .env). */
+function resolveSession(options?: { authPath?: string; accountId?: string }): WhatsAppSession {
+  const authPath = options?.authPath ?? defaultAuthPath;
+  const accountId = options?.accountId ?? DEFAULT_ACCOUNT_ID;
+  let session = sessions.get(authPath);
+  if (!session) {
+    session = { authPath, accountId, isConnecting: false, allowReconnect: true };
+    sessions.set(authPath, session);
+  } else if (options?.accountId) {
+    session.accountId = options.accountId;
+  }
+  return session;
+}
+
+/** Auth path padrão (conta default / wa:login). */
 export function getWhatsAppAuthPath(): string {
-  return activeAuthPath;
+  return defaultAuthPath;
 }
 
 export function setWhatsAppAuthPath(authPath: string): void {
-  activeAuthPath = authPath;
-}
-
-function activeAccountId(): string {
-  return env.WORKER_ACCOUNT_ID || DEFAULT_ACCOUNT_ID;
+  defaultAuthPath = authPath;
 }
 
 function syncConnectStateToRedis(
+  session: WhatsAppSession,
   status: 'idle' | 'connecting' | 'qr' | 'connected' | 'error',
   qr: string | null = null,
   error: string | null = null,
 ): void {
-  void publishWhatsAppConnectState(activeAccountId(), { status, qr, error });
+  void publishWhatsAppConnectState(session.accountId, { status, qr, error });
 }
 
 // --- Dono único da sessão (lock entre processos) -----------------------------
@@ -77,7 +93,6 @@ function syncConnectStateToRedis(
 // reporta que já está logado em outro lugar, sem brigar pela sessão.
 const OWNER_LOCK_STALE_MS = 30_000;
 const OWNER_HEARTBEAT_MS = 10_000;
-let ownerHeartbeatTimer: NodeJS.Timeout | undefined;
 
 // Chamado quando detectamos que outro processo já é dono da sessão (no login) ou
 // quando perdemos a sessão para outro processo (connectionReplaced). O worker
@@ -109,10 +124,6 @@ function ownerLockPathFor(authPath: string): string {
   return path.join(authPath, 'owner.lock');
 }
 
-function ownerLockPath(): string {
-  return ownerLockPathFor(getWhatsAppAuthPath());
-}
-
 async function readOwnerLockAt(authPath: string): Promise<OwnerLock | null> {
   try {
     const parsed = JSON.parse(await readFile(ownerLockPathFor(authPath), 'utf8')) as OwnerLock;
@@ -121,10 +132,6 @@ async function readOwnerLockAt(authPath: string): Promise<OwnerLock | null> {
   } catch {
     return null;
   }
-}
-
-async function readOwnerLock(): Promise<OwnerLock | null> {
-  return readOwnerLockAt(getWhatsAppAuthPath());
 }
 
 function isOwnLock(lock: OwnerLock): boolean {
@@ -142,19 +149,12 @@ function isPidRunning(pid: number): boolean {
     process.kill(pid, 0);
     return true;
   } catch (err) {
-    // ESRCH = não existe; EPERM = existe mas sem permissão (consideramos vivo).
     return (err as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
 
-/**
- * Existe um lock de OUTRO processo que ainda está vivo? Além do heartbeat, no
- * mesmo host confirmamos que o PID existe — assim um lock órfão de um worker
- * morto à força (ex.: restart do painel via taskkill, ou tsx watch) não bloqueia
- * o novo worker.
- */
-async function anotherOwnerAlive(): Promise<boolean> {
-  const owner = await getWhatsAppOwnerStatus();
+async function anotherOwnerAlive(authPath: string): Promise<boolean> {
+  const owner = await getWhatsAppOwnerStatusAtPath(authPath);
   return owner.active && !owner.isCurrentProcess;
 }
 
@@ -182,45 +182,47 @@ export async function getWhatsAppOwnerStatusAtPath(authPath: string): Promise<Wh
   };
 }
 
-/** Estado do dono da sessão WhatsApp (lock + PID vivo no mesmo host). */
+/** Estado do dono da sessão WhatsApp (auth path padrão). */
 export async function getWhatsAppOwnerStatus(): Promise<WhatsAppOwnerStatus> {
-  return getWhatsAppOwnerStatusAtPath(getWhatsAppAuthPath());
+  return getWhatsAppOwnerStatusAtPath(defaultAuthPath);
 }
 
-async function writeOwnerLock(): Promise<void> {
+async function writeOwnerLock(session: WhatsAppSession): Promise<void> {
   const payload: OwnerLock = {
     pid: process.pid,
     host: hostname(),
     heartbeat: new Date().toISOString(),
   };
-  await mkdir(getWhatsAppAuthPath(), { recursive: true }).catch(() => {});
-  await writeFile(ownerLockPath(), JSON.stringify(payload)).catch(() => {});
+  await mkdir(session.authPath, { recursive: true }).catch(() => {});
+  await writeFile(ownerLockPathFor(session.authPath), JSON.stringify(payload)).catch(() => {});
 }
 
-function startOwnerHeartbeat(): void {
-  if (ownerHeartbeatTimer) return;
-  ownerHeartbeatTimer = setInterval(() => {
-    if (socket) void writeOwnerLock();
+function startOwnerHeartbeat(session: WhatsAppSession): void {
+  if (session.ownerHeartbeatTimer) return;
+  session.ownerHeartbeatTimer = setInterval(() => {
+    if (session.socket) void writeOwnerLock(session);
   }, OWNER_HEARTBEAT_MS);
-  ownerHeartbeatTimer.unref?.();
+  session.ownerHeartbeatTimer.unref?.();
 }
 
-function stopOwnerHeartbeat(): void {
-  if (ownerHeartbeatTimer) {
-    clearInterval(ownerHeartbeatTimer);
-    ownerHeartbeatTimer = undefined;
+function stopOwnerHeartbeat(session: WhatsAppSession): void {
+  if (session.ownerHeartbeatTimer) {
+    clearInterval(session.ownerHeartbeatTimer);
+    session.ownerHeartbeatTimer = undefined;
   }
 }
 
-async function releaseOwnerLock(): Promise<void> {
-  stopOwnerHeartbeat();
-  const lock = await readOwnerLock();
+async function releaseOwnerLock(session: WhatsAppSession): Promise<void> {
+  stopOwnerHeartbeat(session);
+  const lock = await readOwnerLockAt(session.authPath);
   if (lock && isOwnLock(lock)) {
-    await rm(ownerLockPath(), { force: true }).catch(() => {});
+    await rm(ownerLockPathFor(session.authPath), { force: true }).catch(() => {});
   }
 }
 
 export interface ConnectWhatsAppOptions {
+  authPath?: string;
+  accountId?: string;
   onQr?: (qr: string) => void;
 }
 
@@ -243,24 +245,23 @@ export function isNewsletterChannelId(channelId: string): boolean {
   return isJidNewsletter(channelId) === true;
 }
 
-export async function hasWhatsAppCredentials(): Promise<boolean> {
+export async function hasWhatsAppCredentials(authPath = defaultAuthPath): Promise<boolean> {
   try {
-    await access(path.join(getWhatsAppAuthPath(), 'creds.json'));
+    await access(path.join(authPath, 'creds.json'));
     return true;
   } catch {
     return false;
   }
 }
 
-export async function clearWhatsAppCredentials(): Promise<void> {
-  socket = undefined;
-  isConnecting = false;
-  qrListener = undefined;
-  await rm(getWhatsAppAuthPath(), { recursive: true, force: true });
-  logger.warn(
-    { path: getWhatsAppAuthPath() },
-    'Credenciais do WhatsApp removidas — escaneie um novo QR para reconectar',
-  );
+export async function clearWhatsAppCredentials(authPath = defaultAuthPath): Promise<void> {
+  const session = resolveSession({ authPath });
+  session.socket = undefined;
+  session.isConnecting = false;
+  session.qrListener = undefined;
+  await rm(authPath, { recursive: true, force: true });
+  sessions.delete(authPath);
+  logger.warn({ path: authPath }, 'Credenciais do WhatsApp removidas — escaneie um novo QR');
 }
 
 function resolveNewsletterName(name: unknown): string | undefined {
@@ -388,6 +389,7 @@ export async function validateWhatsAppChannel(
 }
 
 async function createSocket(
+  session: WhatsAppSession,
   authState: Awaited<ReturnType<typeof useMultiFileAuthState>>['state'],
   saveCreds: () => Promise<void>,
 ): Promise<WASocket> {
@@ -410,54 +412,53 @@ async function createSocket(
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      logger.info('Aguardando leitura do QR code para autenticar o WhatsApp');
+      logger.info({ authPath: session.authPath }, 'Aguardando leitura do QR code WhatsApp');
       printQrCode(qr);
-      qrListener?.(qr);
-      syncConnectStateToRedis('qr', qr);
+      session.qrListener?.(qr);
+      syncConnectStateToRedis(session, 'qr', qr);
     }
 
     if (connection === 'open') {
-      socket = sock;
-      isConnecting = false;
-      qrListener = undefined;
-      void writeOwnerLock();
-      startOwnerHeartbeat();
-      syncConnectStateToRedis('connected');
-      logger.info('WhatsApp connected');
+      session.socket = sock;
+      session.isConnecting = false;
+      session.qrListener = undefined;
+      void writeOwnerLock(session);
+      startOwnerHeartbeat(session);
+      syncConnectStateToRedis(session, 'connected');
+      logger.info({ authPath: session.authPath }, 'WhatsApp connected');
     }
 
     if (connection === 'close') {
-      socket = undefined;
-      isConnecting = false;
-      stopOwnerHeartbeat();
+      session.socket = undefined;
+      session.isConnecting = false;
+      stopOwnerHeartbeat(session);
 
       const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
 
       if (statusCode === DisconnectReason.loggedOut) {
-        // Sessão morta. Sem apagar as credenciais, o Baileys nunca emite um novo
-        // QR (ele insiste no creds.json inválido). Limpamos para permitir re-scan.
-        logger.error('WhatsApp logged out — limpando credenciais para permitir novo QR');
-        syncConnectStateToRedis('error', null, 'Sessão encerrada — escaneie um novo QR');
-        void releaseOwnerLock();
-        void clearWhatsAppCredentials();
+        logger.error({ authPath: session.authPath }, 'WhatsApp logged out — limpando credenciais');
+        syncConnectStateToRedis(session, 'error', null, 'Sessão encerrada — escaneie um novo QR');
+        void releaseOwnerLock(session);
+        void clearWhatsAppCredentials(session.authPath);
         return;
       }
 
       if (statusCode === DisconnectReason.connectionReplaced) {
-        // Outra sessão (outro processo) assumiu a conexão. NÃO reconectamos —
-        // isso só reiniciaria o ping-pong. Avisamos o handler de conflito: no
-        // worker isso encerra este processo (não deve haver dois donos).
-        allowReconnect = false;
+        session.allowReconnect = false;
         logger.warn(
-          'WhatsApp: a sessão foi assumida por outro processo. Rode apenas UM processo com WhatsApp por vez.',
+          { authPath: session.authPath },
+          'WhatsApp: sessão assumida por outro processo.',
         );
         onOwnerConflict?.();
         return;
       }
 
-      if (allowReconnect) {
-        logger.warn('WhatsApp disconnected, reconnecting in 3s...');
-        setTimeout(() => void connectWhatsApp().catch(() => {}), 3000);
+      if (session.allowReconnect) {
+        logger.warn({ authPath: session.authPath }, 'WhatsApp disconnected, reconnecting in 3s...');
+        setTimeout(
+          () => void connectWhatsApp({ authPath: session.authPath, accountId: session.accountId }).catch(() => {}),
+          3000,
+        );
       }
     }
   });
@@ -472,37 +473,36 @@ async function createSocket(
 }
 
 export async function connectWhatsApp(options?: ConnectWhatsAppOptions): Promise<WASocket> {
-  if (options?.onQr) qrListener = options.onQr;
-  if (socket) return socket;
+  const session = resolveSession(options);
+  if (options?.onQr) session.qrListener = options.onQr;
+  if (session.socket) return session.socket;
 
-  if (isConnecting) {
+  if (session.isConnecting) {
     await new Promise<void>((resolve) => {
       const interval = setInterval(() => {
-        if (socket || !isConnecting) {
+        if (session.socket || !session.isConnecting) {
           clearInterval(interval);
           resolve();
         }
       }, 500);
     });
-    if (socket) return socket;
+    if (session.socket) return session.socket;
   }
 
-  // Se outro processo já é dono da sessão, não abrimos um socket concorrente
-  // (evita o connectionReplaced em loop). Avisamos o chamador — o worker duplicado
-  // encerra a si mesmo; o painel apenas mostra que já está logado.
-  if (await anotherOwnerAlive()) {
+  if (await anotherOwnerAlive(session.authPath)) {
     logger.warn(
-      'WhatsApp já está conectado em outro processo — ignorando novo login e mantendo a sessão existente.',
+      { authPath: session.authPath },
+      'WhatsApp já conectado em outro processo — ignorando novo login.',
     );
-    allowReconnect = false;
+    session.allowReconnect = false;
     throw new WhatsAppOwnedElsewhereError();
   }
 
-  isConnecting = true;
-  allowReconnect = true;
-  syncConnectStateToRedis('connecting');
-  const { state, saveCreds } = await useMultiFileAuthState(getWhatsAppAuthPath());
-  const sock = await createSocket(state, saveCreds);
+  session.isConnecting = true;
+  session.allowReconnect = true;
+  syncConnectStateToRedis(session, 'connecting');
+  const { state, saveCreds } = await useMultiFileAuthState(session.authPath);
+  const sock = await createSocket(session, state, saveCreds);
 
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('WhatsApp connection timeout')), 120_000);
@@ -516,8 +516,6 @@ export async function connectWhatsApp(options?: ConnectWhatsAppOptions): Promise
 
       if (connection === 'close') {
         const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
-        // Logout with stale creds never yields a QR; fail fast so callers (ex.: o
-        // painel) possam limpar e reiniciar em vez de travar 120s no timeout.
         if (statusCode === DisconnectReason.loggedOut) {
           clearTimeout(timeout);
           reject(new Error('WhatsApp logged out — credenciais inválidas, reconecte para novo QR'));
@@ -527,57 +525,54 @@ export async function connectWhatsApp(options?: ConnectWhatsAppOptions): Promise
   });
 }
 
-export async function disconnectWhatsApp(): Promise<void> {
-  allowReconnect = false;
-  const sock = socket;
-  socket = undefined;
-  isConnecting = false;
+export async function disconnectWhatsApp(authPath = defaultAuthPath): Promise<void> {
+  const session = resolveSession({ authPath });
+  session.allowReconnect = false;
+  const sock = session.socket;
+  session.socket = undefined;
+  session.isConnecting = false;
 
-  await releaseOwnerLock();
+  await releaseOwnerLock(session);
 
   if (sock) {
     sock.ev.removeAllListeners('connection.update');
     sock.ev.removeAllListeners('creds.update');
     sock.ev.removeAllListeners('messages.update');
     await sock.ws.close();
-    logger.info('WhatsApp disconnected');
+    logger.info({ authPath }, 'WhatsApp disconnected');
   }
 }
 
-/** Socket vivo atual (ou undefined se desconectado). */
-export function getWhatsAppSocket(): WASocket | undefined {
-  return socket;
+/** Socket vivo para um auth path (ou undefined). */
+export function getWhatsAppSocket(authPath = defaultAuthPath): WASocket | undefined {
+  return sessions.get(authPath)?.socket;
 }
 
-/**
- * Devolve o socket vivo para o caminho de envio. Diferente de connectWhatsApp(),
- * NÃO força uma reconexão concorrente quando a sessão pertence a outro processo —
- * isso reiniciaria o ping-pong. Se outro processo é o dono, lança na hora para o
- * BullMQ tentar o envio de novo mais tarde (o outro processo faz o envio). Numa
- * queda normal, aguarda a reconexão central subir dentro do timeout.
- */
-export async function requireWhatsAppSocket(timeoutMs = 45_000): Promise<WASocket> {
-  if (socket) return socket;
+export async function requireWhatsAppSocket(
+  authPath = defaultAuthPath,
+  timeoutMs = 45_000,
+): Promise<WASocket> {
+  const session = resolveSession({ authPath });
+  if (session.socket) return session.socket;
 
-  // A sessão é de outro processo: não brigamos, deixamos o dono enviar.
-  if (await anotherOwnerAlive()) {
+  if (await anotherOwnerAlive(session.authPath)) {
     throw new Error('WhatsApp conectado em outro processo — o envio será tentado novamente.');
   }
 
-  if (allowReconnect && !isConnecting) {
-    void connectWhatsApp().catch(() => {});
+  if (session.allowReconnect && !session.isConnecting) {
+    void connectWhatsApp({ authPath: session.authPath, accountId: session.accountId }).catch(() => {});
   }
 
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (socket) return socket;
+    if (session.socket) return session.socket;
     await new Promise((resolve) => setTimeout(resolve, 500));
-    if (socket) return socket;
-    if (await anotherOwnerAlive()) {
+    if (session.socket) return session.socket;
+    if (await anotherOwnerAlive(session.authPath)) {
       throw new Error('WhatsApp conectado em outro processo — o envio será tentado novamente.');
     }
-    if (allowReconnect && !isConnecting) {
-      void connectWhatsApp().catch(() => {});
+    if (session.allowReconnect && !session.isConnecting) {
+      void connectWhatsApp({ authPath: session.authPath, accountId: session.accountId }).catch(() => {});
     }
   }
 

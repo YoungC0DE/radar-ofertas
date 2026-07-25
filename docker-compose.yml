@@ -1,19 +1,16 @@
 # Radar Ofertas — produção
 #
-# Arquitetura de processos:
-#   collector     → 1 réplica (scraping; Playwright pooled + concurrency 1)
-#   scheduler     → mensagens automáticas (leve, sem Playwright)
-#   worker        → 1 réplica por sessão WhatsApp (Baileys não escala no mesmo número)
-#   worker-telegram → stateless; restart on-failure (exit 0 se TELEGRAM_ENABLED=false)
-#   manager       → N réplicas possíveis (stateless; lê Redis + owner.lock)
-#
-# Multi-conta WhatsApp: copie o bloco worker e defina WORKER_ACCOUNT_ID único por serviço.
-# Ver docker-compose.accounts.example.yml
+# Processos:
+#   collector  → coleta de ofertas (singleton)
+#   scheduler  → mensagens automáticas
+#   worker     → envio unificado (WhatsApp + Telegram, todas as contas)
+#   manager    → painel admin (stateless)
 
 x-app-environment: &app-environment
   NODE_ENV: production
   APP_TIMEZONE: ${APP_TIMEZONE:-America/Sao_Paulo}
   REDIS_ENABLED: "true"
+  TELEGRAM_ENABLED: "false"
   DATABASE_URL: postgresql://${POSTGRES_USER:-radar}:${POSTGRES_PASSWORD:-radar_secret}@postgres:5432/${POSTGRES_DB:-radar_ofertas}
   REDIS_URL: redis://redis:6379
   WHATSAPP_AUTH_PATH: /app/data/auth_info_baileys
@@ -38,16 +35,6 @@ x-app-base: &app-base
     migrate:
       condition: service_completed_successfully
 
-x-worker-whatsapp: &worker-whatsapp
-  <<: *app-base
-  command: ["npx", "tsx", "src/worker.ts"]
-  environment:
-    <<: *app-environment
-    SKIP_MIGRATIONS: "true"
-    WORKER_ACCOUNT_ID: ${WORKER_ACCOUNT_ID:-}
-  # Exit 0 em conflito de sessão (duplicata) não deve reiniciar em loop.
-  restart: on-failure
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -61,7 +48,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-radar} -d ${POSTGRES_DB:-radar_ofertas}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-radar} -d ${POSTGRES_DB:-radar_ofertas}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -86,7 +77,7 @@ services:
       - .env
     environment:
       <<: *app-environment
-    command: ["sh", "-c", "echo Migrations aplicadas"]
+    command: ["npm", "run", "migrate:deploy"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -106,28 +97,49 @@ services:
       SKIP_MIGRATIONS: "true"
 
   worker:
-    <<: *worker-whatsapp
-
-  worker-telegram:
     <<: *app-base
-    command: ["npx", "tsx", "src/worker-telegram.ts"]
+    command: ["npx", "tsx", "src/worker.ts"]
     environment:
       <<: *app-environment
       SKIP_MIGRATIONS: "true"
-      WORKER_ACCOUNT_ID: ${WORKER_ACCOUNT_ID:-}
-    # Com TELEGRAM_ENABLED=false o processo encerra com exit 0 — não reiniciar.
     restart: on-failure
+    volumes:
+      - ./data:/app/data
+      - ./src:/app/src
 
   manager:
     <<: *app-base
-    command: ["npx", "tsx", "manager/server.ts"]
+    entrypoint: ["/app/docker/manager-entrypoint.sh"]
+    command:
+      [
+        "npx",
+        "tsx",
+        "watch",
+        "--clear-screen=false",
+        "--include",
+        "./manager/**",
+        "--include",
+        "./src/**",
+        "manager/server.ts",
+      ]
     ports:
       - "${MANAGER_PORT:-3000}:3000"
+      - "${MANAGER_NOVNC_PORT:-6080}:${MANAGER_NOVNC_PORT:-6080}"
     environment:
       <<: *app-environment
       MANAGER_PORT: "3000"
       MANAGER_CAN_SPAWN_WORKERS: "false"
+      MANAGER_HOT_RELOAD: "true"
+      MANAGER_VNC_ENABLED: ${MANAGER_VNC_ENABLED:-false}
+      MANAGER_VNC_PORT: ${MANAGER_VNC_PORT:-5900}
+      MANAGER_VNC_DISPLAY: ${MANAGER_VNC_DISPLAY:-:99}
+      MANAGER_NOVNC_PORT: ${MANAGER_NOVNC_PORT:-6080}
       SKIP_MIGRATIONS: "true"
+    volumes:
+      - ./data:/app/data
+      # Código montado do host — evita rebuild a cada mudança no painel
+      - ./manager:/app/manager
+      - ./src:/app/src
 
 volumes:
   postgres_data:

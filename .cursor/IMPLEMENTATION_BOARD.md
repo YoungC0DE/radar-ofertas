@@ -78,7 +78,7 @@ _(nenhum item ativo)_
 - [x] Model `AutoMessage` no Prisma (manual / once / daily)
 - [x] Domínio `auto-messages/` (repository + service)
 - [x] UI em `/manager/template` (CRUD + envio manual)
-- [x] Agendamento via collector (due once + daily)
+- [x] Agendamento via `scheduler.ts` (due once + daily; tick a cada 60s)
 - [x] Jobs `send-auto-message` na fila do canal
 
 ### Contas (UI + schema + Prisma)
@@ -157,7 +157,7 @@ _(nenhum item ativo)_
 
 - [x] Testes unitários: parser, category-url, message-template, sampling, circuit-breaker, coupon-parser, ml-sources-config, datetime, service, account-config, redis-state
 - [x] Script `preflight.ts` com profiles (collector, worker, worker-telegram, manager)
-- [x] Script `up.ts` — orquestra collector + manager
+- [x] Script `up.ts` — orquestra collector + scheduler + manager
 - [x] Janela operacional de envio (`sender-schedule.ts` + `APP_TIMEZONE`)
 - [x] `REDIS_ENABLED=false` para dev sem Redis
 - [x] CI GitHub Actions: `tsc` (tsconfig.check.json) + `npm test`
@@ -201,10 +201,21 @@ _(nenhum item ativo)_
 - [x] Telegram Bot API (envio stateless)
 - [x] Agendamento periódico de coleta (reagendável via manager)
 
+### Amazon (coleta + afiliado)
+
+- [x] Módulo `src/amazon/` — HTTP + Playwright fallback, parser, browse node/busca/produto
+- [x] `config/amazon-sources-config.ts` — fontes por canal (.env + custom)
+- [x] `config/amazon-config-store.ts` — links de afiliado (`amazonAffiliateConfig`)
+- [x] `sources/routing.ts` — roteamento unificado ML + Amazon no collector
+- [x] `offers/platform.ts` + `offers/affiliate-link.ts` — detecção de plataforma e links
+- [x] UI em `/manager/sources/:channel` (seção Amazon) + Settings › Afiliados › Amazon
+- [x] `affiliates/registry.ts` — registro de plataformas (ML, Amazon, Shopee em breve)
+- [x] Testes: `amazon/parser.test.ts`, `amazon/affiliate-link.test.ts`, `amazon-sources-config.test.ts`, `platform.test.ts`, `affiliates/registry.test.ts`
+
 ### Documentação
 
 - [x] `.cursor/context/project.md` — escopo atualizado
-- [x] `.cursor/docs/` — architecture, channels, accounts, database, queues, manager, deployment
+- [x] `.cursor/docs/` — architecture, channels, accounts, database, queues, manager, deployment, amazon
 - [x] `.cursor/rules/` — rules sincronizadas com código atual
 
 ### Removido / descartado
@@ -255,7 +266,7 @@ _(nenhum item ativo)_
 ### Comandos úteis
 
 ```bash
-npm run up              # collector + manager (workers: Docker ou painel em dev)
+npm run up              # collector + scheduler + manager (workers: Docker ou painel em dev)
 npm run check           # valida ambiente
 npm run migrate         # aplica migrations (inclui tabela accounts)
 npm run ml:login        # login afiliado (navegador visível)

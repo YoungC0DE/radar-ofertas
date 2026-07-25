@@ -6,8 +6,8 @@ Conexão, eventos, reconexão e `sendOffer()` em `src/whatsapp/index.ts`; publis
 - Canal: `WHATSAPP_CHANNEL_ID` (ou `config.channelId` da conta)
 - Cache de canal: `whatsapp/channel-cache.ts` (nome, invite link)
 - Formatação: `offers/message-template.ts` (template editável no manager)
-- Apenas `worker.ts` mantém conexão Baileys ativa para envio
-- Consome a fila `offer-sender` (ou `offer-sender-{accountId}`) — o Telegram tem a sua ([Canais](./channels.md))
+- Apenas `worker.ts` mantém conexão Baileys ativa para envio (worker unificado)
+- Consome a fila `offer-sender` (ou `offer-sender-{accountId}`) — Telegram tem fila própria consumida pelo mesmo processo ([Canais](./channels.md))
 - **Lock de dono:** arquivo `owner.lock` em `WHATSAPP_AUTH_PATH` — impede dois processos na mesma sessão (`connectionReplaced`)
 - **QR/status no Redis:** worker publica em `radar:connect:wa:{accountId}`; painel lê e renderiza
 
@@ -21,11 +21,11 @@ Conexão, eventos, reconexão e `sendOffer()` em `src/whatsapp/index.ts`; publis
 
 > O **worker** é dono da sessão. O painel não abre socket Baileys em produção — apenas exibe o QR que o worker publica no Redis. Dois processos com socket ativo causam `connectionReplaced`.
 
-## Multi-conta
+## Multi-conta e destinos
 
 - Auth path por conta: `resolveAccountAuthPath(accountId, 'whatsapp')` em `accounts/paths.ts`
-- Worker consome conta via `WORKER_ACCOUNT_ID` (default: `default`)
-- Publisher carregado por `accounts/worker-publisher.ts`
+- Publisher carregado pelo worker unificado via `loadAllWorkerPublishers()`
+- **Múltiplos destinos** por conta: `config.destinations[]` (JIDs de canal newsletter ou grupo) — fallback para `channelId` legado. Gerenciados em Settings › Canal (`accounts/whatsapp-destinations.ts`).
 
 ## Template de mensagem
 

@@ -2,7 +2,7 @@ import type { OffersPageData } from '../models/offers-model.js';
 import { env } from '../../src/config/env.js';
 import { escapeHtml, formatCurrency, formatDate, statusBadge } from './helpers.js';
 import { renderDestino, renderPlatformBadge } from './offer-cells.js';
-import { renderLayout } from './layout.js';
+import { renderLayoutShell as renderLayout } from './layout/shell.js';
 import { pageData, pageScripts, pageStyles } from './page-assets.js';
 
 function filterLink(filter: string, label: string, active: string): string {

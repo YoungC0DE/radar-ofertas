@@ -3,18 +3,18 @@ import {
   saveSearchLimit,
 } from '../../src/config/queue-config-store.js';
 import {
+  hydrateAmazonOfferRecord,
   loadOfferDetail,
   loadOffersPage,
   parsePage,
   parseSentFilter,
 } from '../models/offers-model.js';
 import {
+  buildTemplateValues,
   loadMessageTemplate,
   loadPlaceholderVisibility,
   renderMessageTemplate,
-  buildTemplateValues,
 } from '../../src/offers/message-template.js';
-import { hydrateAmazonOfferRecord } from '../../src/amazon/offer-hydration.js';
 import {
   removeAllPendingOffers,
   removePendingOffer,
@@ -29,7 +29,9 @@ export async function showOffersList(searchParams: URLSearchParams): Promise<str
   const cleared = searchParams.get('cleared');
   const error = searchParams.get('error');
   const collectMessage =
-    searchParams.get('collectQueued') === '1' ? 'Busca de novos anúncios enfileirada.' : null;
+    searchParams.get('collectQueued') === '1'
+      ? 'Busca enfileirada — o collector processará em instantes (funciona fora da janela operacional).'
+      : null;
   const collectError = searchParams.get('collectError');
   const clearedCount = cleared ? Number.parseInt(cleared, 10) : null;
   const data = await loadOffersPage(filter, page);

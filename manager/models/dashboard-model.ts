@@ -3,6 +3,7 @@ import {
   getOperatingHoursEnd,
   hydrateQueueConfigCache,
 } from '../../src/config/queue-config-store.js';
+import { isTelegramIntegrationEnabled } from '../../src/channels/integration-state.js';
 import { env } from '../../src/config/env.js';
 import {
   findDeliveriesByOfferIds,
@@ -58,6 +59,8 @@ export async function loadDashboardData(
   } = {},
 ): Promise<DashboardData> {
   await hydrateQueueConfigCache();
+  const { hydrateIntegrationState } = await import('../../src/channels/integration-state.js');
+  await hydrateIntegrationState();
   const operatingHours = {
     start: getOperatingHoursStart(),
     end: getOperatingHoursEnd(),
@@ -123,7 +126,7 @@ export async function loadDashboardData(
     queues,
     // O Telegram só aparece quando ligado: quem não usa o canal não deve ver um
     // status vermelho permanente de algo que escolheu não ter.
-    sessions: env.TELEGRAM_ENABLED ? [mlSession, waSession, tgSession] : [mlSession, waSession],
+    sessions: isTelegramIntegrationEnabled() ? [mlSession, waSession, tgSession] : [mlSession, waSession],
     withinOperatingHours: isWithinOperatingHours(env.APP_TIMEZONE, {
       startHour: operatingHours.start,
       endHour: operatingHours.end,

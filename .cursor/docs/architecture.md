@@ -7,8 +7,8 @@ Sistema em processos separados, organizado por domínio. Integração com Mercad
 ```
 src/
 ├── app.ts              → collector (coleta + enfileira)
-├── worker.ts           → envio WhatsApp
-├── worker-telegram.ts  → envio Telegram
+├── scheduler.ts        → agendador de mensagens automáticas
+├── worker.ts           → envio unificado (WhatsApp + Telegram)
 ├── ml-login.ts         → login afiliado ML (setup manual / CLI)
 ├── wa-login.ts         → login WhatsApp (CLI)
 ├── config/             → ENV (Zod) + stores de runtime
@@ -16,14 +16,19 @@ src/
 │   ├── score-config.ts
 │   ├── brand-config.ts
 │   ├── ml-sources-config.ts
+│   ├── amazon-sources-config.ts
+│   ├── amazon-config-store.ts
 │   ├── queue-config-store.ts
 │   └── coupons-config-store.ts
 ├── accounts/           → multi-conta (tabela Prisma `accounts`)
+├── affiliates/         → registro de plataformas de afiliado
+├── sources/            → roteamento ML + Amazon no collector
 ├── channels/           → contrato de canal + publishers + worker-runner
 ├── whatsapp/           → Baileys + channel-cache
 ├── telegram/           → Bot API (fetch)
 ├── mercado-livre/      → scraping + sessão afiliado + cupons
-├── offers/             → domínio de ofertas + templates + cupons
+├── amazon/             → scraping + links de afiliado (?tag=)
+├── offers/             → domínio de ofertas + templates + cupons + roteamento afiliado
 ├── auto-messages/      → mensagens automáticas agendadas
 ├── jobs/               → workers BullMQ (collector, sender genérico)
 ├── queue/              → filas Redis + sender-schedule
@@ -59,7 +64,7 @@ manager/                → painel web (MVC)
 
 ### Config runtime (settings DB)
 
-Parâmetros operacionais (score, intervalos, horários, templates, brand, fontes ML, cupons, contas) persistidos na tabela `settings`. Editáveis pelo manager; lidos com cache em memória nos processos `app`, `worker` e `manager`. Fallback para `QUEUE_CONFIG` e defaults em ENV.
+Parâmetros operacionais (score, intervalos, horários, templates, brand, fontes ML/Amazon, cupons, contas) persistidos na tabela `settings`. Editáveis pelo manager; lidos com cache em memória nos processos `app`, `worker` e `manager`. Fallback para `QUEUE_CONFIG` e defaults em ENV.
 
 ### Processos separados
 
@@ -67,34 +72,37 @@ Parâmetros operacionais (score, intervalos, horários, templates, brand, fontes
 |----------|-------|--------|
 | Collector | `app.ts` | Coleta periódica + enfileiramento (Playwright pooled) |
 | Scheduler | `scheduler.ts` | Mensagens automáticas programadas (leve) |
-| Sender WhatsApp | `worker.ts` | Envio WhatsApp com janela operacional |
-| Sender Telegram | `worker-telegram.ts` | Envio Telegram com janela operacional |
+| Sender (unificado) | `worker.ts` | Envio WhatsApp + Telegram — todas as contas habilitadas |
 | Manager | `manager/server.ts` | Painel admin — leitor de estado em produção |
 | ML Login | `ml-login.ts` | Setup manual de sessão afiliado (CLI) |
 
-O `npm run up` sobe collector + scheduler + manager. Em **dev** (`MANAGER_CAN_SPAWN_WORKERS=true`), o painel pode spawnar workers. Em **produção/Docker**, workers são serviços separados (`worker`, `worker-telegram`).
+O `npm run up` sobe collector + scheduler + manager. Em **dev** (`MANAGER_CAN_SPAWN_WORKERS=true`), o painel pode spawnar o worker unificado. Em **produção/Docker**, o worker é um serviço separado (`worker`).
 
-### Um canal, um processo
+### Microsserviços de envio
 
-Cada canal de envio roda no seu próprio processo, com fila própria, e implementa o contrato `ChannelPublisher`. Falha isolada: uma queda do WhatsApp não impede o Telegram de publicar. O estado de envio é por `(canal, conta)` em `OfferDelivery` — ver [Canais](./channels.md).
+Quatro processos independentes: **collector**, **scheduler**, **worker** (sender) e **manager**. O worker de envio é **único** — `runUnifiedWorker()` em `channels/worker-runner.ts` carrega todos os publishers habilitados (`loadAllWorkerPublishers`) e consome **todas** as filas BullMQ de sender (WhatsApp, Telegram e variantes por conta) no mesmo processo.
+
+Filas permanecem **separadas por canal e conta** (isolamento de jobs e retry). Publishers implementam `ChannelPublisher`. O estado de envio é por `(canal, conta)` em `OfferDelivery` — ver [Canais](./channels.md).
+
+> Não escale o serviço `worker` horizontalmente — uma sessão Baileys por auth path exige um único processo dono (`owner.lock`).
 
 ### Multi-conta
 
-Domínio `accounts/` + tabela Prisma `accounts` + `account_id` em `offer_deliveries` + fan-out em `dispatchOffer`. Runtime completo: fila, sender e publishers por `accountId` via `WORKER_ACCOUNT_ID`. Pendente: spawn de workers por conta no painel — ver [Contas](./accounts.md).
+Domínio `accounts/` + tabela Prisma `accounts` + `account_id` em `offer_deliveries` + fan-out em `dispatchOffer`. Runtime: fila, sender e publishers por `accountId`; o worker unificado instancia um publisher (e um BullMQ Worker) por par `(canal, conta)` habilitado — ver [Contas](./accounts.md).
 
 ## Fluxo completo
 
 ```mermaid
 flowchart TD
-    A[Fontes ML por canal] --> B{HTTP scrape}
+    A[Fontes ML + Amazon por canal] --> B{HTTP scrape}
     B -->|sucesso| C[parser.ts → RawOffer]
     B -->|403 / vazio| D[browser-scraper Playwright]
     D --> C
     C --> E[score-config + offers/service]
     E --> F[dispatchOffer — fan-out canal × conta]
-    F --> G[offer-sender → worker.ts]
-    F --> H[offer-sender-telegram → worker-telegram.ts]
-    G --> I[message-template + whatsapp/]
+    F --> G[filas offer-sender*]
+    G --> H[worker.ts — runUnifiedWorker]
+    H --> I[message-template + whatsapp/]
     H --> J[message-template + telegram/]
     K[manager/] -.->|edita settings + lê estado Redis| L[(PostgreSQL)]
     W[worker] -.->|heartbeat + QR| R[(Redis)]
@@ -105,7 +113,7 @@ flowchart TD
 
 - TypeScript `strict: true`; `tsconfig.check.json` inclui `src/` e `manager/`.
 - CI: `.github/workflows/ci.yml` — `npm ci` → `tsc` → `npm test`.
-- 12 testes unitários (`node:test`); cobertura em parser, score, sampling, circuit-breaker, coupon-parser, account-config, redis-state.
+- ~28 testes unitários (`node:test`); cobertura em parser ML/Amazon, score, sampling, circuit-breaker, coupon-parser, account-config, redis-state, jobs.
 
 ## Princípios
 
@@ -114,12 +122,13 @@ flowchart TD
 - Regras de negócio apenas em `offers/`, `auto-messages/` e `config/score-config.ts`.
 - Manager apenas orquestra UI — reutiliza `src/`.
 - Um único processo mantém conexão WhatsApp ativa por sessão (worker + lock de dono + QR no Redis).
-- Um canal, um processo — o envio de um canal nunca derruba o outro.
+- Worker unificado — um processo consome todas as filas de envio; filas separadas por canal isolam retry e ritmo.
 - Playwright não roda em cada ciclo de coleta — apenas fallback.
 
 ## Documentação relacionada
 
 - [Mercado Livre — Scraping](./mercado-livre.md)
+- [Amazon — Scraping](./amazon.md)
 - [Filas](./queues.md)
 - [Database](./database.md)
 - [Canais de envio](./channels.md)

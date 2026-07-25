@@ -12,7 +12,7 @@ import {
 import { env } from '../../src/config/env.js';
 import { escapeHtml, formatCurrency, formatDate, statusBadge } from './helpers.js';
 import { renderPlatformBadge } from './offer-cells.js';
-import { renderLayout } from './layout.js';
+import { renderLayoutShell as renderLayout } from './layout/shell.js';
 import { pageScripts, pageStyles } from './page-assets.js';
 
 function configRow(label: string, value: string, hint?: string): string {

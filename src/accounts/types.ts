@@ -32,6 +32,8 @@ export interface TelegramAccountConfig {
 
 export interface MercadoLivreAccountConfig {
   authPath: string;
+  /** Tag do programa de afiliados ML (matt_tool). Vazio usa AFFILIATE_CONFIG do .env. */
+  affiliateTag?: string;
 }
 
 export interface WhatsAppAccount {

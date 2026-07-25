@@ -41,8 +41,7 @@ function waConnectKey(accountId: string): string {
 }
 
 export function resolveWorkerAccountId(accountId?: string): string {
-  if (accountId) return accountId;
-  return env.WORKER_ACCOUNT_ID || DEFAULT_ACCOUNT_ID;
+  return accountId?.trim() || DEFAULT_ACCOUNT_ID;
 }
 
 function getRedis(): Redis | null {

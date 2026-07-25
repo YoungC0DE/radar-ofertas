@@ -33,6 +33,7 @@ const telegramConfigSchema = z.object({
 
 const mercadoLivreConfigSchema = z.object({
   authPath: z.string(),
+  affiliateTag: z.string().optional().default(''),
 });
 
 const accountRecordSchema = z.object({

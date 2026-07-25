@@ -8,4 +8,6 @@ export {
   renderAccordionStatusBadge,
   renderAccordionTitle,
 } from './accordion.js';
-export { EDIT_ICON, ML_ICON, WA_ICON, TELEGRAM_ICON, WORKER_ICON, PRISMA_ICON } from './icons.js';
+export { renderTabs } from './tabs.js';
+export type { TabItem } from './tabs.js';
+export { EDIT_ICON, CONFIG_ICON, ML_ICON, WA_ICON, TELEGRAM_ICON, WORKER_ICON, PRISMA_ICON } from './icons.js';

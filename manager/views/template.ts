@@ -8,7 +8,7 @@ import {
   getPlaceholderHelp,
 } from '../models/template-model.js';
 import { escapeHtml, formatDate } from './helpers.js';
-import { renderLayout } from './layout.js';
+import { renderLayoutShell as renderLayout } from './layout/shell.js';
 import { pageData, pageScripts, pageStyles } from './page-assets.js';
 import { env } from '../../src/config/env.js';
 import type { AutoMessageRecord } from '../../src/auto-messages/types.js';

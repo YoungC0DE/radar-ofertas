@@ -2,7 +2,6 @@ import type { SettingsSaveType } from '../../models/settings-model.js';
 import { escapeHtml } from '../helpers.js';
 
 const SAVED_MESSAGES: Partial<Record<NonNullable<SettingsSaveType>, string>> = {
-  channel: 'Link do canal salvo com sucesso.',
   interval: 'Intervalo de envio atualizado com sucesso.',
   brand: 'Identidade visual atualizada com sucesso.',
   score: 'Regras de pontuação atualizadas com sucesso.',

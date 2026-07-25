@@ -347,6 +347,7 @@
         color: var(--danger, #dc2626);
         font-size: 0.9rem;
         margin: 12px 0 0;
+        white-space: pre-line;
       }
       .wa-qr-wrap {
         display: flex;
@@ -367,8 +368,94 @@
         word-break: break-all;
         font-size: 0.85rem;
       }
+      .settings-tabs {
+        margin-top: 4px;
+      }
+      .settings-tab-list {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+        padding-bottom: 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .settings-tab {
+        appearance: none;
+        background: transparent;
+        border: 1px solid transparent;
+        border-bottom: 2px solid transparent;
+        border-radius: 8px 8px 0 0;
+        color: var(--text-muted);
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-bottom: -1px;
+        padding: 10px 14px;
+        transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+      }
+      .settings-tab:hover {
+        background: var(--surface-2);
+        color: var(--text);
+      }
+      .settings-tab.active {
+        background: var(--surface);
+        border-color: var(--border);
+        border-bottom-color: var(--surface);
+        color: var(--accent);
+      }
+      .settings-tab .badge {
+        font-size: 0.68rem;
+        margin-left: 4px;
+        vertical-align: middle;
+      }
+      .settings-tab-panels {
+        min-height: 120px;
+      }
+      .settings-tab-panel {
+        animation: settings-tab-in 0.18s ease;
+      }
+      @keyframes settings-tab-in {
+        from { opacity: 0; transform: translateY(4px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .settings-panel-section > .meta:first-child {
+        margin-top: 0;
+      }
+      .settings-tabs-sub {
+        margin-top: 8px;
+      }
+      .settings-tab-list-sub {
+        margin-bottom: 16px;
+        gap: 4px;
+      }
+      .settings-tab-sub {
+        font-size: 0.85rem;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        margin-bottom: 0;
+      }
+      .settings-tab-sub.active {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      .settings-tab-sub.active .badge {
+        background: rgba(255, 255, 255, 0.2);
+        color: #fff;
+      }
+      .affiliate-platform-intro {
+        margin-bottom: 16px;
+      }
       .affiliate-programs-section {
-        margin-top: 32px;
+        margin-top: 0;
+      }
+      .connect-section {
+        margin-top: 0;
+      }
+      .integration-section {
+        margin-top: 0;
       }
       .settings-accordions {
         display: flex;

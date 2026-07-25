@@ -6,7 +6,7 @@ Envio em `src/telegram/index.ts` (Bot API pura sobre `fetch`, sem dependência n
 - Credenciais: `TELEGRAM_BOT_TOKEN` (do @BotFather)
 - Destino: `TELEGRAM_CHAT_ID` (`@seucanal` ou id `-100…`)
 - Formatação: `offers/message-template.ts` — o **mesmo** template do WhatsApp
-- Apenas `worker-telegram.ts` consome a fila `offer-sender-telegram`
+- Fila `offer-sender-telegram` consumida pelo **worker unificado** (`worker.ts`)
 
 ## Setup
 
@@ -24,11 +24,11 @@ TELEGRAM_CHAT_ID=@meucanal
 
 | Comando | Uso |
 |---------|-----|
-| `npm run worker:telegram` | Sobe o worker de envio do Telegram |
-| Settings → Worker de envio — Telegram | Inicia/para o worker pelo painel |
+| `npm run worker` | Sobe o worker unificado (WhatsApp + Telegram) |
+| Settings → Worker de envio | Inicia/para o worker pelo painel |
 | `npm run check` | Valida bot, canal e permissão de admin |
 
-> Com `TELEGRAM_ENABLED=false`, nada é enfileirado para o Telegram e o worker encerra no boot (exit 0).
+> Com `TELEGRAM_ENABLED=false`, nada é enfileirado para o Telegram e o publisher Telegram é ignorado no boot do worker.
 
 ## Diferenças em relação ao WhatsApp
 
@@ -36,7 +36,7 @@ TELEGRAM_CHAT_ID=@meucanal
 |---|---|---|
 | Conexão | Socket Baileys persistente | HTTP stateless (Bot API) |
 | Sessão | `./data/auth_info_baileys` + lock de dono | Nenhuma — só o token |
-| Réplicas | Apenas **uma** (`connectionReplaced`) | Várias são seguras |
+| Réplicas do worker | Apenas **uma** (`connectionReplaced`) | Mesmo worker — várias contas Telegram OK |
 | Setup | QR code | Token + bot admin do canal |
 | Imagem | Baixamos os bytes e subimos | A API busca a URL sozinha |
 | Limite de legenda | — | 1024 com foto, 4096 em texto |
@@ -46,7 +46,7 @@ Sem markup no envio (`parse_mode` ausente): o template é texto puro, então um 
 ## Posição no fluxo
 
 ```
-offer-sender-telegram → jobs/sender (telegramPublisher) → sendOffer → canal Telegram
+offer-sender-telegram → worker.ts (runUnifiedWorker) → telegramPublisher → canal Telegram
 ```
 
 ## Erros comuns

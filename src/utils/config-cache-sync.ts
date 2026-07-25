@@ -1,4 +1,5 @@
 import { invalidateAccountsCache } from '../accounts/repository.js';
+import { hydrateIntegrationState, invalidateIntegrationState } from '../channels/integration-state.js';
 import { hydrateBrandCache, invalidateBrandCache } from '../config/brand-config.js';
 import {
   hydrateAmazonConfigCache,
@@ -26,8 +27,10 @@ import {
 } from './cache-coherence.js';
 
 export function registerConfigCacheHandlers(): void {
-  registerCacheInvalidationHandler('accounts', () => {
+  registerCacheInvalidationHandler('accounts', async () => {
     invalidateAccountsCache();
+    invalidateIntegrationState();
+    await hydrateIntegrationState();
   });
 
   registerCacheInvalidationHandler('queue-config', async () => {

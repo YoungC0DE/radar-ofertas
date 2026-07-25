@@ -1,27 +1,82 @@
+import { CHANNELS } from '../channels/index.js';
+import { createPublisher } from '../channels/publisher-factory.js';
+import { getWorkerAccountIdsForChannel } from '../accounts/channel-accounts.js';
+import { findAccount } from '../accounts/repository.js';
 import { hydrateBrandCache } from '../config/brand-config.js';
 import { hydrateQueueConfigCache } from '../config/queue-config-store.js';
 import { hydrateScoreConfigCache } from '../config/score-config.js';
 import { startSenderWorker } from '../jobs/sender.js';
+import type { Worker } from 'bullmq';
 import { hydrateCouponTemplateCache } from '../offers/coupon-template.js';
 import { hydrateTemplateCache } from '../offers/message-template.js';
-import { closeAllQueues } from '../queue/index.js';
+import { closeAllQueues, type SenderJobData } from '../queue/index.js';
+import { bootstrapCacheCoherence } from '../utils/config-cache-sync.js';
+import { startWhatsAppInviteResolveListener } from '../whatsapp/invite-resolve-rpc.js';
+import { hydrateIntegrationState } from '../channels/integration-state.js';
 import { logger } from '../utils/logger.js';
 import { startWorkerHeartbeatLoop } from '../utils/redis-state.js';
-import { bootstrapCacheCoherence } from '../utils/config-cache-sync.js';
 import { CHANNEL_LABELS, type ChannelPublisher } from './types.js';
-/**
- * Boot compartilhado dos workers de envio: hidrata os caches de config, valida o
- * canal e sobe o worker da fila daquele canal. Cada canal roda no seu processo,
- * então uma falha do WhatsApp não derruba o Telegram nem vice-versa.
- */
-export async function runChannelWorker(publisher: ChannelPublisher): Promise<void> {
+
+interface ActivePublisher {
+  publisher: ChannelPublisher;
+  bullWorker: Worker<SenderJobData>;
+  stopHeartbeat: () => void;
+}
+
+/** Carrega publishers de contas elegíveis ao worker (WhatsApp inclui pareamento sem destinos). */
+async function loadAllWorkerPublishers(): Promise<ChannelPublisher[]> {
+  const publishers: ChannelPublisher[] = [];
+
+  for (const channel of CHANNELS) {
+    const accountIds = await getWorkerAccountIdsForChannel(channel);
+    for (const accountId of accountIds) {
+      const account = await findAccount(accountId, channel);
+      if (!account) continue;
+      if (channel === 'telegram' && !account.enabled) continue;
+      publishers.push(createPublisher(account));
+    }
+  }
+
+  return publishers;
+}
+
+async function verifyPublisher(publisher: ChannelPublisher): Promise<boolean> {
   const { channel, accountId } = publisher;
   const label = CHANNEL_LABELS[channel];
+  const verification = await publisher.verify();
 
-  logger.info({ channel, accountId }, `Starting ${label} sender worker process`);
+  if (!verification.ok) {
+    if (verification.duplicate) {
+      logger.error(
+        { channel, accountId },
+        `${label}: ${verification.detail} — sessão duplicada ignorada neste worker.`,
+      );
+      return false;
+    }
 
-  if (!publisher.isEnabled()) {
-    logger.warn({ channel, accountId }, `${label} está desabilitado — encerrando este worker`);
+    logger.error(
+      { channel, accountId },
+      `${label} não pôde ser verificado: ${verification.detail}`,
+    );
+    return false;
+  }
+
+  logger.info({ channel, accountId }, `${label} verificado — ${verification.detail}`);
+  return true;
+}
+
+/**
+ * Boot único do worker de envio: hidrata caches, conecta todos os canais/contas
+ * habilitados e consome as filas BullMQ correspondentes no mesmo processo.
+ */
+export async function runUnifiedWorker(): Promise<void> {
+  logger.info('Starting unified sender worker process');
+
+  await hydrateIntegrationState();
+
+  const publishers = await loadAllWorkerPublishers();
+  if (publishers.length === 0) {
+    logger.warn('Nenhum canal de envio habilitado — encerrando worker');
     process.exit(0);
   }
 
@@ -34,37 +89,42 @@ export async function runChannelWorker(publisher: ChannelPublisher): Promise<voi
     bootstrapCacheCoherence(),
   ]);
 
-  const verification = await publisher.verify();
+  const startedAt = new Date().toISOString();
+  const active: ActivePublisher[] = [];
 
-  if (!verification.ok) {
-    if (verification.duplicate) {
-      // Outro processo já é dono da conexão. Não é erro de config: encerramos em
-      // silêncio para o Docker não reiniciar em loop.
-      logger.error(
-        { channel, accountId },
-        `${label}: ${verification.detail} — encerrando este worker duplicado.`,
-      );
-      process.exit(0);
-    }
+  for (const publisher of publishers) {
+    const ok = await verifyPublisher(publisher);
+    if (!ok) continue;
 
-    logger.error(
-      { channel, accountId },
-      `${label} não pôde ser verificado: ${verification.detail}`,
-    );
+    const { channel, accountId } = publisher;
+    active.push({
+      publisher,
+      bullWorker: startSenderWorker(publisher),
+      stopHeartbeat: startWorkerHeartbeatLoop(channel, accountId, startedAt),
+    });
+  }
+
+  if (active.length === 0) {
+    logger.error('Nenhum canal pôde ser verificado — encerrando worker');
     process.exit(1);
   }
 
-  logger.info({ channel, accountId }, `${label} verificado — ${verification.detail}`);
+  logger.info(
+    { channels: active.map(({ publisher }) => `${publisher.channel}:${publisher.accountId}`) },
+    'Unified sender worker ready',
+  );
 
-  const startedAt = new Date().toISOString();
-  const stopHeartbeat = startWorkerHeartbeatLoop(channel, accountId, startedAt);
-  const worker = startSenderWorker(publisher);
+  const hasWhatsApp = active.some(({ publisher }) => publisher.channel === 'whatsapp');
+  const stopInviteResolveListener = hasWhatsApp ? startWhatsAppInviteResolveListener() : null;
 
   const shutdown = async (signal: string): Promise<void> => {
-    logger.info({ channel, accountId, signal }, `Shutting down ${label} sender worker`);
-    stopHeartbeat();
-    await publisher.shutdown?.().catch(() => {});
-    await worker.close();
+    logger.info({ signal }, 'Shutting down unified sender worker');
+    stopInviteResolveListener?.();
+    for (const entry of active) {
+      entry.stopHeartbeat();
+      await entry.publisher.shutdown?.().catch(() => {});
+      await entry.bullWorker.close();
+    }
     await closeAllQueues();
     process.exit(0);
   };

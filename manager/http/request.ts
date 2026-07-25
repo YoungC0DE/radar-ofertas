@@ -10,10 +10,12 @@ import { stopCacheInvalidationSubscriber } from '../../src/utils/cache-coherence
 import { closeMetricsRedis } from '../../src/utils/metrics.js';
 import { closeSenderPacingRedis } from '../../src/utils/sender-pacing.js';
 import { logger } from '../../src/utils/logger.js';
-import { toManagerErrorMessage } from '../views/error-message.js';
+import { toUserErrorMessage } from '../../src/utils/user-error.js';
 import { escapeHtml } from '../views/helpers.js';
-import { renderLayout } from '../views/layout.js';
+import { renderLayoutShell as renderLayout } from '../views/layout/shell.js';
 import { serveStaticAsset } from './static.js';
+import { handleDevLiveReloadStream } from '../dev/live-reload.js';
+import { isManagerHotReloadEnabled } from '../dev/mode.js';
 
 export type HttpMethod = 'GET' | 'POST';
 
@@ -34,7 +36,11 @@ export interface RouteDefinition {
 }
 
 export function sendHtml(res: ServerResponse, status: number, html: string): void {
-  res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8' });
+  const headers: Record<string, string> = { 'Content-Type': 'text/html; charset=utf-8' };
+  if (isManagerHotReloadEnabled()) {
+    headers['Cache-Control'] = 'no-store';
+  }
+  res.writeHead(status, headers);
   res.end(html);
 }
 
@@ -123,13 +129,23 @@ export function createRouter(routes: RouteDefinition[]) {
     const host = req.headers.host ?? 'localhost';
     const url = new URL(req.url ?? '/', `http://${host}`);
 
+    const path = normalizePath(url.pathname);
+    const method = (req.method ?? 'GET').toUpperCase() as HttpMethod;
+
+    if (isManagerHotReloadEnabled() && method === 'GET' && path === '/manager/__dev/live') {
+      handleDevLiveReloadStream(req, res);
+      return;
+    }
+
     if (!isAuthorized(req, url)) {
       sendText(res, 401, 'Unauthorized — defina MANAGER_TOKEN ou use ?token=');
       return;
     }
 
-    const path = normalizePath(url.pathname);
-    const method = (req.method ?? 'GET').toUpperCase() as HttpMethod;
+    if (method === 'GET' && path === '/') {
+      sendRedirect(res, url.search ? `/manager${url.search}` : '/manager');
+      return;
+    }
 
     if (method === 'GET' && path.startsWith('/manager/assets/')) {
       const assetPath = path.slice('/manager/assets/'.length);
@@ -161,7 +177,7 @@ export function createRouter(routes: RouteDefinition[]) {
       );
     } catch (error) {
       logger.error({ error, path }, 'Manager request failed');
-      const message = toManagerErrorMessage(error);
+      const message = toUserErrorMessage(error);
       sendHtml(
         res,
         500,

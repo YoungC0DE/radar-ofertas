@@ -34,7 +34,7 @@ alwaysApply: false
 
 ## Chaves `settings` conhecidas
 
-`scoreConfig`, `brandSettings`, `messageTemplate`, `messageTemplatePlaceholders`, `couponMessageTemplate`, `whatsappChannelCache`, `senderDelayMinutes`, `collectorIntervalMinutes`, `operatingHoursStart`, `operatingHoursEnd`, `searchLimit`, `affiliateLinkDelayMs`, `affiliateLinkBacklogDelayMinutes`, `affiliateLinkBacklogThreshold`, `mlCustomSources`, `mlEnvSourceFlags`, `couponsUrl`
+`scoreConfig`, `brandSettings`, `messageTemplate`, `messageTemplatePlaceholders`, `couponMessageTemplate`, `whatsappChannelCache`, `senderDelayMinutes`, `collectorIntervalMinutes`, `operatingHoursStart`, `operatingHoursEnd`, `searchLimit`, `affiliateLinkDelayMs`, `affiliateLinkBacklogDelayMinutes`, `affiliateLinkBacklogThreshold`, `mlCustomSources`, `mlEnvSourceFlags`, `amazonCustomSources`, `amazonEnvSourceFlags`, `amazonAffiliateConfig`, `couponsUrl`
 
 ```bash
 npm run migrate        # dev

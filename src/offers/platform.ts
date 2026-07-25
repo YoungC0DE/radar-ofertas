@@ -1,11 +1,7 @@
-import { isAmazonProductUrl } from '../amazon/url.js';
+import { isAmazonAsin, isAmazonProductUrl } from '../amazon/url.js';
 import type { OfferRecord } from './types.js';
 
 export type OfferPlatform = 'mercado_livre' | 'amazon' | 'unknown';
-
-function looksLikeAmazonAsin(productId: string): boolean {
-  return /^[A-Z0-9]{10}$/i.test(productId.trim());
-}
 
 function looksLikeMercadoLivreId(productId: string): boolean {
   return /^MLB-?\d+/i.test(productId.trim());
@@ -26,7 +22,7 @@ export function detectOfferPlatform(
 
   const productId = offer.mercadoLivreId.trim();
   if (looksLikeMercadoLivreId(productId)) return 'mercado_livre';
-  if (looksLikeAmazonAsin(productId)) return 'amazon';
+  if (isAmazonAsin(productId)) return 'amazon';
 
   return 'unknown';
 }

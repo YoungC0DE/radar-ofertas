@@ -64,6 +64,11 @@ export function isAmazonProductUrl(input: string): boolean {
   return extractAmazonAsin(input) !== null;
 }
 
+/** ASIN de 10 caracteres alfanuméricos (sem URL). */
+export function isAmazonAsin(productId: string): boolean {
+  return normalizeAsinCandidate(productId) !== null;
+}
+
 export function isAmazonHostname(hostname: string): boolean {
   return /(^|\.)amazon\./i.test(hostname);
 }

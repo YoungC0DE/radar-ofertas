@@ -11,7 +11,7 @@ Domínio `src/accounts/` + página `/manager/accounts`. Permite cadastrar múlti
 | `default-accounts.ts` | Conta `default` derivada do `.env` (compatibilidade) |
 | `account-config.ts` | Validação Zod de `config` por plataforma |
 | `repository.ts` | Persistência na tabela `accounts` (Prisma) com cache em memória |
-| `worker-publisher.ts` | Carrega publisher da conta via `WORKER_ACCOUNT_ID` |
+| `worker-publisher.ts` | `loadAllWorkerPublishers()` — carrega todos os publishers habilitados |
 | `channel-accounts.ts` | `getEnabledAccountIdsForChannel()` |
 
 ### Persistência
@@ -26,7 +26,7 @@ Se a tabela estiver vazia no primeiro `loadAccounts()`, o repository faz seed co
 
 | Plataforma | Campos em `config` |
 |------------|-------------------|
-| `whatsapp` | `channelId`, `authPath`, `channelName?`, `inviteLink?` |
+| `whatsapp` | `channelId`, `authPath`, `channelName?`, `inviteLink?`, `destinations?` |
 | `telegram` | `botToken`, `chatId` |
 | `mercado_livre` | `authPath` |
 
@@ -45,7 +45,7 @@ Exemplo de linha:
 }
 ```
 
-A conta `default` usa os mesmos paths do `.env` (`WHATSAPP_AUTH_PATH`, `ML_AUTH_PATH`, `TELEGRAM_BOT_TOKEN`, etc.). Contas adicionais usam `data/accounts/{id}/{platform}/`.
+A conta `default` usa os mesmos paths do `.env` (`WHATSAPP_AUTH_PATH`, `ML_AUTH_PATH`, `TELEGRAM_BOT_TOKEN`, etc.). Contas adicionais usam `data/accounts/{id}/{platform}/`. WhatsApp suporta **múltiplos destinos** por conta (`destinations[]` com JID de canal/grupo) — gerenciados em Settings › Canal.
 
 ## Manager — `/manager/accounts`
 
@@ -90,13 +90,13 @@ Job id determinístico: `send-offer-{canal}-{accountId}-{offerId}` (ou sem accou
 | `dispatchOffer` fan-out por conta | ✅ |
 | `enqueueOfferSend` com fila por `accountId` | ✅ |
 | `jobs/sender.ts` delivery por conta | ✅ |
-| Worker por conta (`WORKER_ACCOUNT_ID`) | ✅ |
+| Worker unificado com publishers por conta | ✅ |
 | Publishers/sessões parametrizados por conta | ✅ |
-| Painel spawna workers com `WORKER_ACCOUNT_ID` | ✅ |
+| Painel spawna worker unificado | ✅ |
 
 ### Spawn pelo painel
 
-Com `MANAGER_CAN_SPAWN_WORKERS=true` (dev local), Settings → Operações exibe **um card de worker por conta habilitada**. Cada spawn define `WORKER_ACCOUNT_ID` no processo filho. Em Docker/produção (`MANAGER_CAN_SPAWN_WORKERS=false`), use `docker-compose.accounts.example.yml` ou `WORKER_ACCOUNT_ID=x npm run worker`.
+Com `MANAGER_CAN_SPAWN_WORKERS=true` (dev local), Settings → Operações exibe **um card de worker unificado** que publica em WhatsApp e Telegram. O processo carrega todas as contas habilitadas via `loadAllWorkerPublishers()`. Em Docker/produção (`MANAGER_CAN_SPAWN_WORKERS=false`), o serviço `worker` do compose assume o envio.
 
 ## Documentação relacionada
 

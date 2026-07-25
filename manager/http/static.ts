@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ServerResponse } from 'node:http';
+import { shouldCacheManagerStaticAssets } from '../dev/mode.js';
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../public');
 
@@ -44,7 +45,7 @@ export async function serveStaticAsset(
     const ext = path.extname(filePath).toLowerCase();
     res.writeHead(200, {
       'Content-Type': MIME_TYPES[ext] ?? 'application/octet-stream',
-      'Cache-Control': process.env.NODE_ENV === 'production' ? 'public, max-age=3600' : 'no-cache',
+      'Cache-Control': shouldCacheManagerStaticAssets() ? 'public, max-age=3600' : 'no-store',
     });
     res.end(content);
     return true;

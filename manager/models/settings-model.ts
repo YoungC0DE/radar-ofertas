@@ -30,18 +30,13 @@ import { env } from '../../src/config/env.js';
 import { isWithinOperatingHours } from '../../src/utils/datetime.js';
 import { isRedisEnabled, rescheduleCollectorJob } from '../../src/queue/index.js';
 import {
-  resolveWhatsAppChannelInviteLink,
-  resolveWhatsAppChannelName,
-  saveWhatsAppChannelInviteLink,
-} from '../../src/whatsapp/channel-cache.js';
-import {
   getBrandInitial,
   getBrandLogoHref,
   getBrandSettings,
   hydrateBrandCache,
   saveBrandSettings,
-} from './brand-model.js';
-import { isPlaceholderChannelId } from '../../src/whatsapp/index.js';
+} from '../../src/config/brand-config.js';
+import { hydrateIntegrationState } from '../../src/channels/integration-state.js';
 import {
   getMercadoLivreSessionStatus,
   getTelegramSessionStatus,
@@ -49,20 +44,15 @@ import {
   type SessionStatus,
 } from './session-model.js';
 import {
-  getWorkerState,
   canManagerSpawnWorkers,
   listWorkerStates,
   type WorkerState,
   type AccountWorkerState,
 } from './process-model.js';
-import {
-  ensureDefaultWhatsAppDestinationFromEnv,
-  loadWhatsAppDestinationViews,
-  type WhatsAppDestinationView,
-} from './whatsapp-destinations-model.js';
+import { ensureDefaultWhatsAppDestinationFromEnv } from './whatsapp-destinations-model.js';
+import { loadTelegramIntegrationView } from './integration-model.js';
 
 export type SettingsSaveType =
-  | 'channel'
   | 'interval'
   | 'brand'
   | 'score'
@@ -83,10 +73,6 @@ export interface SettingsData {
   scoreRulesSummary: string[];
   collectorIntervalMinutes: number;
   senderDelayMinutes: number;
-  channelId: string;
-  channelName: string | null;
-  channelInviteLink: string;
-  whatsappDestinations: WhatsAppDestinationView[];
   brandName: string;
   brandSubtitle: string;
   brandLogoHref: string | null;
@@ -95,11 +81,10 @@ export interface SettingsData {
   waSession: SessionStatus;
   telegramEnabled: boolean;
   telegramChatId: string;
+  telegramHasBotToken: boolean;
   tgSession: SessionStatus | null;
   workerState: WorkerState;
-  whatsappWorkers: AccountWorkerState[];
-  telegramWorkerState: WorkerState;
-  telegramWorkers: AccountWorkerState[];
+  senderWorker: AccountWorkerState;
   canSpawnWorkers: boolean;
   mlCouponsUrl: string;
   amazonBaseUrl: string;
@@ -118,38 +103,27 @@ export async function loadSettingsData(
   saved: SettingsSaveType = null,
   error: string | null = null,
 ): Promise<SettingsData> {
-  await Promise.all([hydrateQueueConfigCache(), hydrateBrandCache(), hydrateCouponsConfigCache(), hydrateAmazonConfigCache()]);
+  await Promise.all([hydrateQueueConfigCache(), hydrateBrandCache(), hydrateCouponsConfigCache(), hydrateAmazonConfigCache(), hydrateIntegrationState()]);
   await ensureDefaultWhatsAppDestinationFromEnv();
   const scoreConfig = await getRuntimeScoreConfigAsync();
   const senderDelayMinutes = await getSenderDelayMinutesFromDb();
+  const telegramIntegration = await loadTelegramIntegrationView();
   const [mlSession, waSession, tgSession] = await Promise.all([
     getMercadoLivreSessionStatus(),
     getWhatsAppSessionStatus(),
-    env.TELEGRAM_ENABLED ? getTelegramSessionStatus() : Promise.resolve(null),
+    telegramIntegration.enabled ? getTelegramSessionStatus() : Promise.resolve(null),
   ]);
   const operatingHours = {
     start: getOperatingHoursStart(),
     end: getOperatingHoursEnd(),
   };
 
-  const whatsappDestinations = await loadWhatsAppDestinationViews();
-  const primaryDestination = whatsappDestinations.find((destination) => destination.enabled);
-  const channelId = primaryDestination?.jid ?? env.WHATSAPP_CHANNEL_ID;
-  let channelName: string | null = primaryDestination?.label ?? null;
-  let channelInviteLink = primaryDestination?.inviteLink ?? '';
-
-  if (channelId && !isPlaceholderChannelId(channelId)) {
-    channelName ??= await resolveWhatsAppChannelName(channelId);
-    if (!channelInviteLink) {
-      channelInviteLink = (await resolveWhatsAppChannelInviteLink(channelId)) ?? '';
-    }
-  }
-
   const brand = getBrandSettings();
   const mlCouponsUrl = await getCouponsUrlFromDb();
   const amazonConfig = await getAmazonConfigFromDb();
-  const whatsappWorkers = await listWorkerStates('whatsapp');
-  const telegramWorkers = env.TELEGRAM_ENABLED ? await listWorkerStates('telegram') : [];
+  const senderWorkers = await listWorkerStates();
+  const senderWorker = senderWorkers[0]!;
+  const workerState = senderWorker.state;
 
   return {
     timezone: env.APP_TIMEZONE,
@@ -164,23 +138,18 @@ export async function loadSettingsData(
     scoreRulesSummary: describeScoreRules(scoreConfig),
     collectorIntervalMinutes: getCollectorIntervalMinutes(),
     senderDelayMinutes,
-    channelId,
-    channelName,
-    channelInviteLink,
-    whatsappDestinations,
     brandName: brand.name,
     brandSubtitle: brand.subtitle,
     brandLogoHref: getBrandLogoHref(brand),
     brandInitial: getBrandInitial(brand.name),
     mlSession,
     waSession,
-    telegramEnabled: env.TELEGRAM_ENABLED,
-    telegramChatId: env.TELEGRAM_CHAT_ID,
+    telegramEnabled: telegramIntegration.enabled,
+    telegramChatId: telegramIntegration.chatId,
+    telegramHasBotToken: telegramIntegration.hasBotToken,
     tgSession,
-    workerState: whatsappWorkers[0]?.state ?? (await getWorkerState('whatsapp')),
-    whatsappWorkers,
-    telegramWorkerState: telegramWorkers[0]?.state ?? (await getWorkerState('telegram')),
-    telegramWorkers,
+    workerState,
+    senderWorker,
     canSpawnWorkers: canManagerSpawnWorkers(),
     mlCouponsUrl,
     amazonBaseUrl: amazonConfig.baseUrl,
@@ -189,12 +158,6 @@ export async function loadSettingsData(
     saved,
     error,
   };
-}
-
-export async function saveChannelInviteLink(
-  inviteLink: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  return runSave(() => saveWhatsAppChannelInviteLink(inviteLink), 'Falha ao salvar link do canal');
 }
 
 export async function saveSendIntervalMinutes(

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { formatCouponMessage, isShortAffiliateLink } from './coupon-message.js';
+import { formatCouponMessage, isShortAffiliateLink } from './coupon-template.js';
 import { renderCouponTemplate, sampleCouponTemplateValues } from './coupon-template.js';
 import type { MlCoupon } from '../mercado-livre/types.js';
 

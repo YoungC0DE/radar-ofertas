@@ -1,4 +1,8 @@
 import { telegramPublisher } from './telegram-publisher.js';
+import {
+  isTelegramIntegrationEnabled,
+  isWhatsAppIntegrationConfigured,
+} from './integration-state.js';
 import { CHANNELS, type Channel, type ChannelPublisher } from './types.js';
 import { whatsappPublisher } from './whatsapp-publisher.js';
 
@@ -15,13 +19,14 @@ export function getPublisher(channel: Channel): ChannelPublisher {
 }
 
 /**
- * Canais ligados no .env. É esta lista que o collector usa para o fan-out —
- * um canal desligado nunca chega a ter oferta enfileirada.
+ * Canais com integração configurada no painel (contas + destinos).
+ * Um canal desligado ou sem credenciais nunca recebe oferta enfileirada.
  */
 export function getEnabledChannels(): Channel[] {
-  return CHANNELS.filter((channel) => PUBLISHERS[channel].isEnabled());
+  return CHANNELS.filter((channel) => isChannelEnabled(channel));
 }
 
 export function isChannelEnabled(channel: Channel): boolean {
-  return PUBLISHERS[channel].isEnabled();
+  if (channel === 'whatsapp') return isWhatsAppIntegrationConfigured();
+  return isTelegramIntegrationEnabled();
 }

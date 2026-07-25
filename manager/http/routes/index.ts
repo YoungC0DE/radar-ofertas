@@ -28,16 +28,12 @@ import {
 } from '../../controllers/template-controller.js';
 import {
   handleBrandSave,
-  handleChannelLinkSave,
   handleCouponsUrlSave,
   handleAmazonAffiliateSave,
   handleOperatingHoursSave,
   handleScoreSave,
   handleSendIntervalSave,
   handleSenderDelaySave,
-  handleWhatsAppDestinationAdd,
-  handleWhatsAppDestinationRemove,
-  handleWhatsAppDestinationToggle,
   showSettingsPage,
 } from '../../controllers/settings-controller.js';
 import { getLogsJson, showLogsPage } from '../../controllers/logs-controller.js';
@@ -79,10 +75,17 @@ import {
 import {
   handleAccountAdd,
   handleAccountDelete,
+  handleAccountMercadoLivreConfigSave,
+  handleAccountTelegramConfigSave,
   handleAccountToggle,
+  handleAccountWhatsAppChannelSave,
+  handleAccountWhatsAppDestinationAdd,
+  handleAccountWhatsAppDestinationRemove,
+  handleAccountWhatsAppDestinationToggle,
   showAccountsPage,
 } from '../../controllers/accounts-controller.js';
 import { getMetrics } from '../../../src/utils/metrics.js';
+import { isAccountPlatform } from '../../../src/accounts/types.js';
 
 export const dashboardRoutes: RouteDefinition[] = [
   {
@@ -103,7 +106,7 @@ export const dashboardRoutes: RouteDefinition[] = [
             url.searchParams.get('sendError') ?? url.searchParams.get('deleteError') ?? undefined,
           collectMessage:
             url.searchParams.get('collectQueued') === '1'
-              ? 'Busca de novos anúncios enfileirada.'
+              ? 'Busca enfileirada — o collector processará em instantes (funciona fora da janela operacional).'
               : undefined,
           collectError: url.searchParams.get('collectError') ?? undefined,
         }),
@@ -275,45 +278,6 @@ export const settingsRoutes: RouteDefinition[] = [
     handler: async ({ req, res }) => {
       const form = parseFormUrlEncoded(await readFormBody(req));
       sendHtml(res, 200, await handleOperatingHoursSave(form));
-    },
-  },
-  {
-    method: 'POST',
-    pattern: '/manager/settings/channel-link',
-    handler: async ({ req, res }) => {
-      const form = parseFormUrlEncoded(await readFormBody(req));
-      sendHtml(res, 200, await handleChannelLinkSave(form.inviteLink ?? ''));
-    },
-  },
-  {
-    method: 'POST',
-    pattern: '/manager/settings/whatsapp-destinations/add',
-    handler: async ({ req, res }) => {
-      const form = parseFormUrlEncoded(await readFormBody(req));
-      sendHtml(res, 200, await handleWhatsAppDestinationAdd(form.inviteInput ?? ''));
-    },
-  },
-  {
-    method: 'POST',
-    pattern: '/manager/settings/whatsapp-destinations/remove',
-    handler: async ({ req, res }) => {
-      const form = parseFormUrlEncoded(await readFormBody(req));
-      sendHtml(res, 200, await handleWhatsAppDestinationRemove(form.destinationId ?? ''));
-    },
-  },
-  {
-    method: 'POST',
-    pattern: '/manager/settings/whatsapp-destinations/toggle',
-    handler: async ({ req, res }) => {
-      const form = parseFormUrlEncoded(await readFormBody(req));
-      sendHtml(
-        res,
-        200,
-        await handleWhatsAppDestinationToggle(
-          form.destinationId ?? '',
-          form.enabled === '1' || form.enabled === 'true',
-        ),
-      );
     },
   },
   {
@@ -495,48 +459,6 @@ export const sourcesRoutes: RouteDefinition[] = [
   },
 ];
 
-export const connectionRoutes: RouteDefinition[] = [
-  {
-    method: 'POST',
-    pattern: '/manager/settings/connect/wa/start',
-    handler: async ({ res }) => sendJson(res, 200, await startWhatsAppConnectJson()),
-  },
-  {
-    method: 'GET',
-    pattern: '/manager/settings/connect/wa/status',
-    handler: async ({ res }) => sendJson(res, 200, await getWhatsAppConnectJson()),
-  },
-  {
-    method: 'POST',
-    pattern: '/manager/settings/connect/ml/start',
-    handler: async ({ res }) => {
-      sendJson(res, 200, startMercadoLivreConnectJson());
-    },
-  },
-  {
-    method: 'POST',
-    pattern: '/manager/settings/connect/ml/finish',
-    handler: async ({ res }) => sendJson(res, 200, await finishMercadoLivreConnectJson()),
-  },
-  {
-    method: 'POST',
-    pattern: '/manager/settings/connect/ml/cancel',
-    handler: async ({ res }) => sendJson(res, 200, await cancelMercadoLivreConnectJson()),
-  },
-  {
-    method: 'GET',
-    pattern: '/manager/settings/connect/ml/status',
-    handler: async ({ res }) => {
-      sendJson(res, 200, getMercadoLivreConnectJson());
-    },
-  },
-  {
-    method: 'GET',
-    pattern: '/manager/settings/connect/telegram/status',
-    handler: async ({ res }) => sendJson(res, 200, await getTelegramConnectJson()),
-  },
-];
-
 export const workerRoutes: RouteDefinition[] = [
   {
     method: 'POST',
@@ -615,10 +537,18 @@ export const accountsRoutes: RouteDefinition[] = [
     method: 'GET',
     pattern: '/manager/accounts',
     handler: async ({ res, url }) => {
-      const saved = url.searchParams.get('saved') === '1' ? 'Salvo com sucesso' : null;
-      const deleted = url.searchParams.get('deleted') === '1' ? 'Conta removida' : null;
-      const error = url.searchParams.get('error') ?? null;
-      sendHtml(res, 200, await showAccountsPage(saved ?? deleted, error));
+      const saved = url.searchParams.get('saved');
+      const deleted = url.searchParams.get('deleted') === '1' ? 'deleted' : null;
+      const error = url.searchParams.get('error');
+      const configAccountId = url.searchParams.get('config');
+      const configPlatformRaw = url.searchParams.get('configPlatform');
+      const configPlatform =
+        configPlatformRaw && isAccountPlatform(configPlatformRaw) ? configPlatformRaw : null;
+      sendHtml(
+        res,
+        200,
+        await showAccountsPage(saved ?? deleted, error, configAccountId, configPlatform),
+      );
     },
   },
   {
@@ -631,18 +561,128 @@ export const accountsRoutes: RouteDefinition[] = [
   },
   {
     method: 'POST',
-    pattern: '/manager/accounts/:accountId/toggle',
+    pattern: '/manager/accounts/:accountId/:platform/toggle',
     handler: async ({ res, params }) => {
-      const result = await handleAccountToggle(params.accountId);
+      const result = await handleAccountToggle(params.accountId, params.platform);
       sendRedirect(res, result.redirect);
     },
   },
   {
     method: 'POST',
-    pattern: '/manager/accounts/:accountId/delete',
+    pattern: '/manager/accounts/:accountId/:platform/delete',
     handler: async ({ res, params }) => {
-      const result = await handleAccountDelete(params.accountId);
+      const result = await handleAccountDelete(params.accountId, params.platform);
       sendRedirect(res, result.redirect);
+    },
+  },
+  {
+    method: 'POST',
+    pattern: '/manager/accounts/:accountId/whatsapp-channel',
+    handler: async ({ req, res, params }) => {
+      const form = parseFormUrlEncoded(await readFormBody(req));
+      const result = await handleAccountWhatsAppChannelSave(params.accountId, form.inviteLink ?? '');
+      sendRedirect(res, result.redirect);
+    },
+  },
+  {
+    method: 'POST',
+    pattern: '/manager/accounts/:accountId/whatsapp-destinations/add',
+    handler: async ({ req, res, params }) => {
+      const form = parseFormUrlEncoded(await readFormBody(req));
+      const result = await handleAccountWhatsAppDestinationAdd(params.accountId, form.inviteInput ?? '');
+      sendRedirect(res, result.redirect);
+    },
+  },
+  {
+    method: 'POST',
+    pattern: '/manager/accounts/:accountId/whatsapp-destinations/remove',
+    handler: async ({ req, res, params }) => {
+      const form = parseFormUrlEncoded(await readFormBody(req));
+      const result = await handleAccountWhatsAppDestinationRemove(
+        params.accountId,
+        form.destinationId ?? '',
+      );
+      sendRedirect(res, result.redirect);
+    },
+  },
+  {
+    method: 'POST',
+    pattern: '/manager/accounts/:accountId/whatsapp-destinations/toggle',
+    handler: async ({ req, res, params }) => {
+      const form = parseFormUrlEncoded(await readFormBody(req));
+      const result = await handleAccountWhatsAppDestinationToggle(
+        params.accountId,
+        form.destinationId ?? '',
+        form.enabled === '1' || form.enabled === 'true',
+      );
+      sendRedirect(res, result.redirect);
+    },
+  },
+  {
+    method: 'POST',
+    pattern: '/manager/accounts/:accountId/telegram',
+    handler: async ({ req, res, params }) => {
+      const form = parseFormUrlEncoded(await readFormBody(req));
+      const result = await handleAccountTelegramConfigSave(params.accountId, form);
+      sendRedirect(res, result.redirect);
+    },
+  },
+  {
+    method: 'POST',
+    pattern: '/manager/accounts/:accountId/mercado-livre',
+    handler: async ({ req, res, params }) => {
+      const form = parseFormUrlEncoded(await readFormBody(req));
+      const result = await handleAccountMercadoLivreConfigSave(params.accountId, form);
+      sendRedirect(res, result.redirect);
+    },
+  },
+  {
+    method: 'POST',
+    pattern: '/manager/accounts/:accountId/connect/whatsapp/start',
+    handler: async ({ res, params }) => {
+      sendJson(res, 200, await startWhatsAppConnectJson(params.accountId));
+    },
+  },
+  {
+    method: 'GET',
+    pattern: '/manager/accounts/:accountId/connect/whatsapp/status',
+    handler: async ({ res, params }) => {
+      sendJson(res, 200, await getWhatsAppConnectJson(params.accountId));
+    },
+  },
+  {
+    method: 'POST',
+    pattern: '/manager/accounts/:accountId/connect/mercado-livre/start',
+    handler: async ({ res, params }) => {
+      sendJson(res, 200, await startMercadoLivreConnectJson(params.accountId));
+    },
+  },
+  {
+    method: 'POST',
+    pattern: '/manager/accounts/:accountId/connect/mercado-livre/finish',
+    handler: async ({ res }) => {
+      sendJson(res, 200, await finishMercadoLivreConnectJson());
+    },
+  },
+  {
+    method: 'POST',
+    pattern: '/manager/accounts/:accountId/connect/mercado-livre/cancel',
+    handler: async ({ res }) => {
+      sendJson(res, 200, await cancelMercadoLivreConnectJson());
+    },
+  },
+  {
+    method: 'GET',
+    pattern: '/manager/accounts/:accountId/connect/mercado-livre/status',
+    handler: async ({ res }) => {
+      sendJson(res, 200, getMercadoLivreConnectJson());
+    },
+  },
+  {
+    method: 'POST',
+    pattern: '/manager/accounts/:accountId/connect/telegram/verify',
+    handler: async ({ res, params }) => {
+      sendJson(res, 200, await getTelegramConnectJson(params.accountId));
     },
   },
 ];
@@ -656,6 +696,5 @@ export const managerRoutes: RouteDefinition[] = [
   ...couponsRoutes,
   ...sourcesRoutes,
   ...accountsRoutes,
-  ...connectionRoutes,
   ...workerRoutes,
 ];

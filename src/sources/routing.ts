@@ -1,4 +1,5 @@
 import type { Channel } from '../channels/types.js';
+import { isMercadoLivreAffiliateTagConfigured } from '../accounts/ml-affiliate-tag.js';
 import {
   getActiveAmazonSourcesForChannel,
   getChannelsForAmazonSource,
@@ -13,13 +14,13 @@ import { isAmazonSourceUrl } from '../amazon/source-url.js';
 import { iterateAmazonScrapedPages } from '../amazon/index.js';
 import { iterateScrapedPages } from '../mercado-livre/index.js';
 import type { RawOffer } from '../offers/types.js';
+import { logger } from '../utils/logger.js';
+
+const ML_TAG_SKIP_LOG =
+  'Coleta ML ignorada — configure a tag de afiliado em Contas → Mercado Livre → Configurar';
 
 export async function hydrateAllSourcesCaches(): Promise<void> {
   await Promise.all([hydrateMlSourcesCache(), hydrateAmazonSourcesCache()]);
-}
-
-export function isAmazonCollectionSource(source: string): boolean {
-  return isAmazonSourceUrl(source);
 }
 
 export function getActiveSourcesForChannel(channel: Channel): string[] {
@@ -29,16 +30,22 @@ export function getActiveSourcesForChannel(channel: Channel): string[] {
 }
 
 export function getChannelsForSource(source: string): Channel[] {
-  if (isAmazonCollectionSource(source)) {
+  if (isAmazonSourceUrl(source)) {
     return getChannelsForAmazonSource(source);
   }
   return getChannelsForCategory(source);
 }
 
 export async function* iterateSourcePages(source: string): AsyncGenerator<RawOffer[]> {
-  if (isAmazonCollectionSource(source)) {
+  if (isAmazonSourceUrl(source)) {
     yield* iterateAmazonScrapedPages(source);
     return;
   }
+
+  if (!(await isMercadoLivreAffiliateTagConfigured())) {
+    logger.warn({ source }, ML_TAG_SKIP_LOG);
+    return;
+  }
+
   yield* iterateScrapedPages(source);
 }

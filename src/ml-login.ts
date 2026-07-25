@@ -1,4 +1,4 @@
-import { loginAffiliateSession } from './mercado-livre/auth.js';
+import { loginAffiliateSession, MercadoLivrePanelLoginUnavailableError } from './mercado-livre/auth.js';
 import { logger } from './utils/logger.js';
 
 async function main(): Promise<void> {
@@ -7,6 +7,10 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
+  if (error instanceof MercadoLivrePanelLoginUnavailableError) {
+    logger.error(error.userMessage);
+    process.exit(1);
+  }
   logger.error({ error }, 'ML affiliate login failed');
   process.exit(1);
 });
