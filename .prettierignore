@@ -3,6 +3,5 @@ node_modules
 data
 docs
 package-lock.json
-prisma/migrations
-manager/public
-src/mercado-livre/fixtures
+backend/prisma/migrations
+backend/src/mercado-livre/fixtures

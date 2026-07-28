@@ -9,14 +9,13 @@ export default tseslint.config(
       'node_modules/**',
       'data/**',
       'docs/**',
-      'manager/public/**',
     ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   eslintConfigPrettier,
   {
-    files: ['src/**/*.ts', 'manager/**/*.ts'],
+    files: ['backend/**/*.ts'],
     ignores: ['**/*.test.ts'],
     languageOptions: {
       parserOptions: {

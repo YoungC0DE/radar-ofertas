@@ -6,14 +6,14 @@ alwaysApply: false
 
 # Database
 
-- Prisma ORM; schema em `prisma/schema.prisma`.
+- Prisma ORM; schema em `backend/prisma/schema.prisma`.
 - Ofertas e entregas: acesso via `offers/repository.ts` — nunca chamar `prisma` direto de jobs ou scraping.
 - Auto-messages: acesso via `auto-messages/repository.ts`.
 - Contas: tabela `accounts` via `accounts/repository.ts` (validação Zod em `account-config.ts`).
 - Estado compartilhado (heartbeat worker, QR WhatsApp): `utils/redis-state.ts`.
 - Settings (key-value): tabela `settings` para config runtime editável pelo manager.
 - `mercado_livre_id` unique para duplicidade.
-- Migrations versionadas em `prisma/migrations/`.
+- Migrations versionadas em `backend/prisma/migrations/`.
 
 ## Tabelas
 

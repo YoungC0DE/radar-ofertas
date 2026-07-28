@@ -4,7 +4,8 @@
 #   collector  → coleta de ofertas (singleton)
 #   scheduler  → mensagens automáticas
 #   worker     → envio unificado (WhatsApp + Telegram, todas as contas)
-#   manager    → painel admin (stateless)
+#   api        → API REST + login ML (noVNC opcional)
+#   frontend   → SPA React (nginx) — proxy /api → api
 
 x-app-environment: &app-environment
   NODE_ENV: production
@@ -18,8 +19,12 @@ x-app-environment: &app-environment
   ML_USE_BROWSER_FALLBACK: ${ML_USE_BROWSER_FALLBACK:-true}
   ML_BROWSER_HEADLESS: ${ML_BROWSER_HEADLESS:-true}
 
+x-app-build: &app-build
+  context: .
+  dockerfile: docker/Dockerfile.backend
+
 x-app-base: &app-base
-  build: .
+  build: *app-build
   restart: unless-stopped
   env_file:
     - .env
@@ -71,7 +76,7 @@ services:
       retries: 5
 
   migrate:
-    build: .
+    build: *app-build
     restart: "no"
     env_file:
       - .env
@@ -84,58 +89,47 @@ services:
 
   collector:
     <<: *app-base
-    command: ["npx", "tsx", "src/app.ts"]
+    command: ["npx", "tsx", "backend/src/app.ts"]
     environment:
       <<: *app-environment
       SKIP_MIGRATIONS: "true"
     volumes:
       - ./data:/app/data
-      - ./src:/app/src
+      - ./backend/src:/app/backend/src
 
   scheduler:
     <<: *app-base
-    command: ["npx", "tsx", "src/scheduler.ts"]
+    command: ["npx", "tsx", "backend/src/scheduler.ts"]
     environment:
       <<: *app-environment
       SKIP_MIGRATIONS: "true"
     volumes:
       - ./data:/app/data
-      - ./src:/app/src
+      - ./backend/src:/app/backend/src
 
   worker:
     <<: *app-base
-    command: ["npx", "tsx", "src/worker.ts"]
+    command: ["npx", "tsx", "backend/src/worker.ts"]
     environment:
       <<: *app-environment
       SKIP_MIGRATIONS: "true"
     restart: on-failure
     volumes:
       - ./data:/app/data
-      - ./src:/app/src
+      - ./backend/src:/app/backend/src
 
-  manager:
+  api:
     <<: *app-base
-    entrypoint: ["/app/docker/manager-entrypoint.sh"]
-    command:
-      [
-        "npx",
-        "tsx",
-        "watch",
-        "--clear-screen=false",
-        "--include",
-        "./manager/**",
-        "--include",
-        "./src/**",
-        "manager/server.ts",
-      ]
+    entrypoint: ["/app/docker/api-entrypoint.sh"]
+    command: ["npx", "tsx", "backend/api/server.ts"]
+    expose:
+      - "3001"
     ports:
-      - "${MANAGER_PORT:-3000}:3000"
       - "${MANAGER_NOVNC_PORT:-6080}:${MANAGER_NOVNC_PORT:-6080}"
     environment:
       <<: *app-environment
-      MANAGER_PORT: "3000"
+      API_PORT: "3001"
       MANAGER_CAN_SPAWN_WORKERS: "false"
-      MANAGER_HOT_RELOAD: "true"
       MANAGER_VNC_ENABLED: ${MANAGER_VNC_ENABLED:-false}
       MANAGER_VNC_PORT: ${MANAGER_VNC_PORT:-5900}
       MANAGER_VNC_DISPLAY: ${MANAGER_VNC_DISPLAY:-:99}
@@ -143,9 +137,20 @@ services:
       SKIP_MIGRATIONS: "true"
     volumes:
       - ./data:/app/data
-      # Código montado do host — evita rebuild a cada mudança no painel
-      - ./manager:/app/manager
-      - ./src:/app/src
+      - ./backend:/app/backend
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        VITE_API_BASE_URL: ""
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      api:
+        condition: service_started
 
 volumes:
   postgres_data:

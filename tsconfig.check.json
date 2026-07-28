@@ -5,5 +5,5 @@
     "outDir": "./build",
     "noEmit": true
   },
-  "include": ["src", "manager"]
+  "include": ["backend", "packages/shared"]
 }

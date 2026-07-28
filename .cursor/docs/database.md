@@ -113,6 +113,7 @@ Configuração runtime editável pelo manager. Chave primária: `key` (string).
 |-------|------|-----|
 | `radar:app-logs` | LIST | Logs compartilhados (`log-store.ts`) |
 | `radar:ml-scrape-count` | STRING | Contador de visitas ML |
+| `radar:collector:heartbeat` | HASH | Heartbeat do collector (TTL 30s) |
 | `radar:worker:{channel}:{accountId}` | HASH | Heartbeat do worker (TTL 30s) |
 | `radar:connect:wa:{accountId}` | HASH | QR/status WhatsApp (TTL 120s) |
 

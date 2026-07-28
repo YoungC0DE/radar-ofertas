@@ -1,0 +1,55 @@
+---
+description: SPA React em frontend/ — Vite, React Router, tema claro/escuro
+globs: frontend/**/*
+alwaysApply: false
+---
+
+# Frontend React
+
+Entry dev: `npm run dev:frontend` → `:5173` (proxy `/api` → `:3001`).
+
+## Stack
+
+- React 19 + React Router 7 + Vite 7
+- CSS modular em `frontend/src/styles/` — sem UI framework
+- Vitest + Testing Library para componentes (`npm run test --workspace=frontend`)
+- Playwright E2E (`npm run test:e2e`)
+
+## Estrutura
+
+```
+frontend/src/
+├── services/      # api.ts (fetch REST), auth-storage.ts
+├── types/         # api.ts — tipos espelhados da API
+├── contexts/      # AuthProvider, auth-context
+├── hooks/         # useAuth, usePolling, useAsyncLoad
+├── components/    # UI por domínio
+├── pages/         # rotas principais (lazy-loaded)
+├── routes/        # router.tsx, ProtectedRoute.tsx
+├── styles/        # variables (temas), layout, components
+└── utils/         # helpers puros (testáveis)
+```
+
+## Convenções
+
+- Imports relativos com extensão `.js`
+- Requisições HTTP apenas em `services/` — páginas usam hooks ou chamam `api` indiretamente
+- Tipos da API em `packages/shared/` — import via `@radar/shared` (frontend reexporta em `types/api.ts`)
+- Feedback: `ToastProvider`
+- Polling: `usePolling` (QR WhatsApp, worker status)
+- Carregamento inicial: `useAsyncLoad` quando aplicável
+- Tema: `data-theme` + CSS variables — ver `.cursor/docs/frontend.md`
+- Props tipadas com `readonly` quando imutáveis
+
+## Testes
+
+- Componentes: `*.test.tsx` com Vitest + jsdom
+- Utils puros: `*.test.ts` no mesmo workspace
+- E2E: `frontend/e2e/` com API mockada
+- Root `npm test` executa backend (node:test) + frontend (vitest)
+
+## Segurança
+
+- React escapa JSX por padrão (XSS)
+- Auth via JWT Bearer — tokens em `services/auth-storage.ts`
+- Same-origin em produção (nginx proxy `/api`)

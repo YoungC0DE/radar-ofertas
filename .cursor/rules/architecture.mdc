@@ -8,40 +8,34 @@ alwaysApply: true
 Estrutura simples organizada por domínio. Evitar camadas extras e arquivos pequenos desnecessários.
 
 ```
-src/
-├── app.ts              → entry: collector
-├── scheduler.ts        → entry: agendador de auto-messages
-├── worker.ts           → entry: envio unificado (WhatsApp + Telegram)
-├── ml-login.ts         → entry: login afiliado ML
-├── config/             → ENV (Zod) + stores de runtime (settings DB)
-│   ├── score-config.ts, brand-config.ts, queue-config-store.ts
-│   ├── ml-sources-config.ts, amazon-sources-config.ts, amazon-config-store.ts
-│   ├── coupons-config-store.ts
-├── accounts/           → contas por plataforma (tabela Prisma `accounts`)
-├── affiliates/         → registro de plataformas de afiliado
-├── sources/            → roteamento ML + Amazon no collector
-├── channels/           → contrato de canal + publishers + worker-runner
-├── whatsapp/           → Baileys (conexão + envio + lock de dono)
-├── telegram/           → Bot API
-├── mercado-livre/      → scraping híbrido + sessão afiliado + cupons
-├── amazon/             → scraping + links de afiliado (?tag=)
-├── offers/             → tipos, persistência, regras de negócio, templates
-├── auto-messages/      → mensagens automáticas agendadas
-├── jobs/               → workers BullMQ (collector, sender genérico)
-├── queue/              → filas Redis/BullMQ + agendamento de envio
-├── database/           → Prisma client
-├── scripts/            → preflight, up (orquestração local)
-└── utils/              → logger, log-store, redis-state, datetime
+backend/
+├── src/
+│   ├── app.ts              → entry: collector
+│   ├── scheduler.ts        → entry: agendador de auto-messages
+│   ├── worker.ts           → entry: envio unificado (WhatsApp + Telegram)
+│   ├── ml-login.ts         → entry: login afiliado ML
+│   ├── config/             → ENV (Zod) + stores de runtime (settings DB)
+│   ├── accounts/           → contas por plataforma (tabela Prisma `accounts`)
+│   ├── affiliates/         → registro de plataformas de afiliado
+│   ├── sources/            → roteamento ML + Amazon no collector
+│   ├── channels/           → contrato de canal + publishers + worker-runner
+│   ├── whatsapp/           → Baileys (conexão + envio + lock de dono)
+│   ├── telegram/           → Bot API
+│   ├── mercado-livre/      → scraping híbrido + sessão afiliado + cupons
+│   ├── amazon/             → scraping + links de afiliado (?tag=)
+│   ├── offers/             → tipos, persistência, regras de negócio, templates
+│   ├── auto-messages/      → mensagens automáticas agendadas
+│   ├── jobs/               → workers BullMQ (collector, sender genérico)
+│   ├── queue/              → filas Redis/BullMQ + agendamento de envio
+│   ├── database/           → Prisma client
+│   ├── scripts/            → preflight, up (orquestração local)
+│   └── utils/              → logger, log-store, redis-state, datetime
+├── api/                    → API REST Fastify (/api/v1)
+├── manager/models/         → models de painel (temporário — usado pela API)
+└── prisma/                 → schema e migrations
 
-manager/                → painel web (MVC server-rendered)
-├── server.ts           → entry: npm run manager
-├── http/               → router declarativo + helpers HTTP
-│   └── routes/         → rotas por domínio (~54 rotas)
-├── routes/             → exporta handleManagerRequest
-├── controllers/        → handlers de request
-├── models/             → dados para views (reutiliza src/)
-├── views/              → HTML em TS (components/ + settings/sections/)
-└── public/             → CSS/JS estáticos
+frontend/               → SPA React (Vite)
+docker/                 → Dockerfiles, nginx, entrypoints VNC
 ```
 
 ## Regras
@@ -52,16 +46,16 @@ manager/                → painel web (MVC server-rendered)
 - Ofertas: acesso ao banco via `offers/repository.ts`.
 - Contas: persistência em `accounts/repository.ts` (tabela `accounts`).
 - Configuração runtime: `config/*-config*.ts` e `queue-config-store.ts` leem/escrevem tabela `settings` (fallback em ENV).
-- `npm run up` sobe collector + scheduler + manager; worker via Docker ou spawn pelo painel em dev (`MANAGER_CAN_SPAWN_WORKERS`).
+- `npm run up` sobe collector + scheduler + API + frontend; worker via Docker ou spawn pelo painel em dev (`MANAGER_CAN_SPAWN_WORKERS`).
 - Processos pesados passam por `queue/` + `jobs/`.
-- Microsserviços: collector, scheduler, worker (sender unificado), manager — cada um com entry próprio.
+- Microsserviços: collector, scheduler, worker, api, frontend — cada um com entry próprio.
 - Worker unificado (`worker.ts` → `runUnifiedWorker`) consome todas as filas de envio; filas separadas por canal/conta.
-- `manager/` apenas orquestra UI — reutiliza `src/` para lógica de negócio.
+- `backend/api/` + `frontend/` — painel admin; models em `manager/models/` (temporário).
 - Novas features: adicionar ao domínio correto, não criar camada nova.
 - Mercado Livre: scraping híbrido (HTTP primeiro, Playwright fallback). Proibido depender da API oficial.
 - Amazon: scraping híbrido em `amazon/`; links via `?tag=` (sem sessão). Roteamento de fontes em `sources/routing.ts`.
 - Sessão de afiliado persistida em `ML_AUTH_PATH` — mesmo padrão de `WHATSAPP_AUTH_PATH`.
-- Tipos checados via `npx tsc -p tsconfig.check.json` (inclui `src/` e `manager/`).
+- Tipos checados via `npx tsc -p tsconfig.check.json` (inclui `backend/`).
 - CI: `.github/workflows/ci.yml` — `tsc` + `npm test`.
 
 ## Multi-conta

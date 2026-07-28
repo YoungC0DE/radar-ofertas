@@ -1,0 +1,35 @@
+# Override de desenvolvimento — hot reload do frontend (Vite) + API exposta no host.
+#
+# Uso:
+#   npm run docker:dev
+#   # ou
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d frontend-dev
+#
+# Painel com HMR: http://localhost:5173
+# Pare o nginx estático se estiver rodando: docker compose stop frontend
+
+services:
+  api:
+    ports:
+      - "${API_PORT:-3001}:3001"
+
+  frontend-dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend.dev
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      VITE_DEV_HOST: "0.0.0.0"
+      VITE_USE_POLLING: "true"
+      VITE_DEV_API_PROXY_TARGET: "http://api:3001"
+      VITE_HMR_CLIENT_PORT: "${FRONTEND_DEV_PORT:-5173}"
+    volumes:
+      - ./frontend:/app/frontend
+      - ./packages/shared:/app/packages/shared
+    ports:
+      - "${FRONTEND_DEV_PORT:-5173}:5173"
+    depends_on:
+      api:
+        condition: service_started

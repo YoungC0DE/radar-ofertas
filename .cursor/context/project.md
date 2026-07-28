@@ -9,7 +9,9 @@ Bot automatizado: **Mercado Livre e Amazon → ofertas → canais (WhatsApp / Te
 - Gerar links de afiliado: ML encurtados com **sessão persistida** (estilo Baileys); Amazon com `?tag=` (config editável no painel).
 - Publicar ofertas qualificadas em **um ou mais canais** (template editável).
 - Enviar **cupons** e **mensagens automáticas** (bom dia, promoções) pelos canais.
-- Gerenciar tudo via **manager** web (`/manager`): settings, conexões, contas, worker, logs.
+- Gerenciar tudo via **painel React** (`frontend/`, dev `:5173`, Docker `:3000`): settings, conexões, contas, worker, logs, template.
+
+**Frontend React:** ver `.cursor/docs/frontend.md` — tema claro/escuro, JWT, SSE de logs.
 
 **Fora de escopo:** API Oficial do Mercado Livre para coleta ou geração de links de afiliado.
 
@@ -20,7 +22,7 @@ Bot automatizado: **Mercado Livre e Amazon → ofertas → canais (WhatsApp / Te
 | Scraping híbrido (HTTP + Playwright) | ✅ Adotada |
 | Sessão de afiliado persistida em arquivos locais | ✅ Adotada |
 | Config runtime em tabela `settings` (editável pelo manager) | ✅ Adotada |
-| Microsserviços: collector, scheduler, worker, manager | ✅ Adotada |
+| Microsserviços: collector, scheduler, worker, api, frontend | ✅ Adotada |
 | Worker unificado de envio (WhatsApp + Telegram) | ✅ Adotada |
 | Filas BullMQ separadas por canal/conta | ✅ Adotada |
 | Contas em tabela Prisma `accounts` | ✅ Adotada |
@@ -38,7 +40,7 @@ Bot automatizado: **Mercado Livre e Amazon → ofertas → canais (WhatsApp / Te
 
 ## Estrutura (por domínio)
 
-`config/` · `accounts/` · `channels/` · `whatsapp/` · `telegram/` · `mercado-livre/` · `amazon/` · `affiliates/` · `sources/` · `offers/` · `auto-messages/` · `jobs/` · `queue/` · `database/` · `utils/` · `scripts/` · `manager/`
+`backend/src/` · `backend/api/` · `frontend/` · `backend/manager/models/` · `backend/prisma/` · `packages/shared/`
 
 ### Config runtime (`config/`)
 
@@ -87,11 +89,11 @@ mercado-livre/
 └── coupon-parser.ts   → parse HTML/JSON de cupons
 ```
 
-### Manager (`manager/`)
+### Painel admin (React + API)
 
-Painel MVC server-rendered: dashboard, ofertas, cupons, contas, fontes por canal, settings, template (ofertas + cupons + auto-messages), logs.
+Substitui o manager SSR removido na Fase 6. SPA em `frontend/`; API REST em `backend/api/`; models temporários em `backend/manager/models/`.
 
-Em **produção/Docker**: manager é leitor de estado (Redis + `owner.lock`), não spawna workers (`MANAGER_CAN_SPAWN_WORKERS=false`).
+Em **produção/Docker**: API é leitora de estado (Redis + `owner.lock`), não spawna workers (`MANAGER_CAN_SPAWN_WORKERS=false`).
 
 ## Fluxo da aplicação
 
@@ -123,8 +125,9 @@ worker.ts — runUnifiedWorker → ChannelPublisher (WhatsApp Baileys / Telegram
 | `scheduler.ts` | `npm run scheduler` | Agendador de mensagens automáticas (tick a cada 60s) |
 | `worker.ts` | `npm run worker` | Sender unificado — WhatsApp + Telegram, todas as contas habilitadas |
 | `ml-login.ts` | `npm run ml:login` | Login afiliado ML — salva sessão em `ML_AUTH_PATH` |
-| `manager/server.ts` | `npm run manager` | Painel web em `/manager` |
-| `scripts/up.ts` | `npm run up` | Sobe collector + scheduler + manager |
+| `backend/api/server.ts` | `npm run api` | API REST + painel admin |
+| `frontend/` (Vite) | `npm run dev:frontend` | SPA React (:5173) |
+| `scripts/up.ts` | `npm run up` | Sobe collector + scheduler + API + frontend |
 
 Worker em produção: serviço Docker `worker`. Em dev: spawn pelo painel (`MANAGER_CAN_SPAWN_WORKERS=true`) ou `npm run worker` no terminal.
 
@@ -144,7 +147,7 @@ Worker em produção: serviço Docker `worker`. Em dev: spawn pelo painel (`MANA
 
 ## Qualidade
 
-- TypeScript `strict: true`; checagem de tipos via `npx tsc -p tsconfig.check.json` (inclui `src/` e `manager/`).
+- TypeScript `strict: true`; checagem de tipos via `npx tsc -p tsconfig.check.json` (inclui `backend/`).
 - CI GitHub Actions: `npm ci` → `tsc` → `npm test` (`.github/workflows/ci.yml`).
 - ~28 arquivos de teste unitário (`node:test` + `assert`), incluindo Amazon e manager.
 

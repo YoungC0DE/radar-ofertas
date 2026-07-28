@@ -3,40 +3,45 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "install:browser": "playwright install-deps chromium && playwright install chromium",
-    "check": "tsx --env-file=.env src/scripts/preflight.ts",
+    "install:browser": "npx playwright install-deps chromium && npx playwright install chromium",
+    "check": "tsx --env-file=.env backend/src/scripts/preflight.ts",
     "setup": "npm run check -- --guide",
-    "up": "tsx --env-file=.env src/scripts/up.ts",
-    "preflight": "tsx --env-file=.env src/scripts/preflight.ts",
-    "dev": "tsx watch --env-file=.env src/app.ts",
-    "scheduler": "tsx watch --env-file=.env src/scheduler.ts",
-    "worker": "tsx watch --env-file=.env src/worker.ts",
-    "manager": "tsx watch --env-file=.env --clear-screen=false --include \"./manager/**\" --include \"./src/**\" manager/server.ts",
-    "start:app": "node --env-file=.env build/app.js",
-    "start:worker": "node --env-file=.env build/worker.js",
-    "start:manager": "node --env-file=.env build/manager/server.js",
+    "up": "tsx --env-file=.env backend/src/scripts/up.ts",
+    "preflight": "tsx --env-file=.env backend/src/scripts/preflight.ts",
+    "dev": "tsx watch --env-file=.env backend/src/app.ts",
+    "scheduler": "tsx watch --env-file=.env backend/src/scheduler.ts",
+    "worker": "tsx watch --env-file=.env backend/src/worker.ts",
+    "api": "tsx watch --env-file=.env --clear-screen=false --include \"./backend/**\" backend/api/server.ts",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "docker:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres redis migrate api collector scheduler worker frontend-dev",
+    "docker:dev:frontend": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d frontend-dev",
+    "docker:dev:down": "docker compose -f docker-compose.yml -f docker-compose.dev.yml down",
+    "build:frontend": "npm run build --workspace=frontend",
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "prisma:generate": "prisma generate",
-    "ml:login": "tsx --env-file=.env src/ml-login.ts",
-    "wa:login": "tsx --env-file=.env src/wa-login.ts",
-    "wa:channel": "tsx --env-file=.env src/wa-channel.ts",
-    "wa:destination": "tsx --env-file=.env src/wa-destination.ts",
-    "e2e:test": "tsx --env-file=.env src/run-e2e-test.ts",
-    "test": "tsx --import ./src/test/preload.ts src/test/run-tests.ts",
-    "lint": "eslint \"src/**/*.ts\" \"manager/**/*.ts\"",
+    "ml:login": "tsx --env-file=.env backend/src/ml-login.ts",
+    "wa:login": "tsx --env-file=.env backend/src/wa-login.ts",
+    "wa:channel": "tsx --env-file=.env backend/src/wa-channel.ts",
+    "wa:destination": "tsx --env-file=.env backend/src/wa-destination.ts",
+    "e2e:test": "tsx --env-file=.env backend/src/run-e2e-test.ts",
+    "test": "tsx --import ./backend/src/test/preload.ts backend/src/test/run-tests.ts && npm run test --workspace=frontend",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "lint": "eslint \"backend/**/*.ts\"",
     "lint:fix": "npm run lint -- --fix",
-    "format": "prettier --write src manager",
-    "format:check": "prettier --check src manager",
+    "format": "prettier --write backend",
+    "format:check": "prettier --check backend",
     "postinstall": "prisma generate && playwright install chromium",
     "predev": "npm run preflight -- --profile=collector",
     "prescheduler": "npm run preflight -- --profile=scheduler",
     "preworker": "npm run preflight -- --profile=worker",
-    "premanager": "npm run preflight -- --profile=manager"
+    "preapi": "npm run preflight -- --profile=api"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.52.0",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^25.8.0",
     "eslint": "^10.7.0",
     "eslint-config-prettier": "^10.1.8",
@@ -47,14 +52,43 @@
     "typescript-eslint": "^8.65.0"
   },
   "dependencies": {
+    "@fastify/cors": "^11.3.0",
+    "@fastify/rate-limit": "^11.1.0",
     "@hapi/boom": "^10.0.1",
     "@prisma/client": "^6.19.0",
     "baileys": "git+https://github.com/alesdi/Baileys.git#fix/newsletter-media-upload-path",
+    "bcryptjs": "^3.0.3",
     "bullmq": "^5.66.4",
     "cheerio": "^1.1.2",
+    "fastify": "^5.10.0",
+    "ioredis": "^5.11.1",
+    "jose": "^6.2.4",
     "pino": "^10.3.1",
     "playwright": "^1.52.0",
     "qrcode-terminal": "^0.12.0",
     "zod": "^4.4.3"
-  }
+  },
+  "prisma": {
+    "schema": "backend/prisma/schema.prisma"
+  },
+  "workspaces": [
+    "frontend",
+    "packages/shared"
+  ],
+  "description": "Bot automatizado que coleta ofertas do Mercado Livre e da Amazon, pontua oportunidades, gera links de afiliado e publica em WhatsApp e Telegram. Painel React (frontend/) + API REST (backend/api/).",
+  "main": "eslint.config.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YoungC0DE/radar-ofertas.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/YoungC0DE/radar-ofertas/issues"
+  },
+  "homepage": "https://github.com/YoungC0DE/radar-ofertas#readme"
 }

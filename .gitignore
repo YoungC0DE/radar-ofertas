@@ -1,6 +1,10 @@
 .env
 build
+frontend/dist
 node_modules
 auth_info_baileys
 data/
 .prisma/
+test-results/
+playwright-report/
+blob-report/

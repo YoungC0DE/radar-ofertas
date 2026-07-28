@@ -1,9 +1,10 @@
-FROM node:22-bookworm-slim
+# Imagem backend (alias para docker/Dockerfile.backend — `docker build .` na raiz).
+# Serviços: collector, scheduler, worker, migrate, api.
+
+FROM node:22-bookworm-slim AS base
 
 WORKDIR /app
 
-# Dependências de sistema para Playwright/Chromium, noVNC (login ML no painel) e git (Baileys)
-# noVNC via Git — o pacote Debian é incompleto; usamos vnc_lite.html (UI mínima, estável).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ca-certificates \
@@ -16,39 +17,44 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && test -f /usr/share/novnc/core/rfb.js \
     && rm -rf /var/lib/apt/lists/*
 
-COPY package.json package-lock.json tsconfig.json ./
-COPY prisma ./prisma
-COPY src ./src
-COPY manager ./manager
-COPY docker ./docker
-
-RUN chmod +x /app/docker/manager-entrypoint.sh
-
-# Baileys e libsignal vêm do GitHub via HTTPS (evita git+ssh no lock)
-RUN git config --global url."https://github.com/".insteadOf "ssh://git@github.com/" \
-    && git config --global url."https://github.com/".insteadOf "git@github.com:" \
-    && git config --global http.version HTTP/1.1
-
-# PLAYWRIGHT_BROWSERS_PATH precisa existir ANTES do install — senão o Chromium
-# baixa para ~/.cache e o runtime procura em /ms-playwright (vazio).
-ENV NODE_ENV=production \
-    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     GIT_TERMINAL_PROMPT=0
 
-RUN npm config set fetch-retries 5 \
+FROM base AS deps
+
+ENV NODE_ENV=development
+
+COPY package.json package-lock.json tsconfig.json ./
+COPY frontend/package.json ./frontend/
+COPY packages/shared/package.json ./packages/shared/
+COPY backend/prisma ./backend/prisma
+
+RUN git config --global url."https://github.com/".insteadOf "ssh://git@github.com/" \
+    && git config --global url."https://github.com/".insteadOf "git@github.com:" \
+    && git config --global http.version HTTP/1.1 \
+    && npm config set fetch-retries 5 \
     && npm config set fetch-retry-mintimeout 20000 \
     && npm config set fetch-retry-maxtimeout 120000 \
-    && npm config set fetch-timeout 300000
-
-RUN mkdir -p /ms-playwright \
+    && npm config set fetch-timeout 300000 \
+    && mkdir -p /ms-playwright \
     && for attempt in 1 2 3 4 5; do \
          npm ci --ignore-scripts && break; \
          if [ "$attempt" -eq 5 ]; then exit 1; fi; \
          echo "npm ci falhou (tentativa $attempt/5), aguardando..."; \
          sleep $((attempt * 10)); \
        done \
-    && npm run install:browser \
-    && npm run prisma:generate \
+    && npx playwright install-deps chromium \
+    && npx playwright install chromium \
+    && npx prisma generate \
     && mkdir -p /app/data
 
-CMD ["npx", "tsx", "src/app.ts"]
+FROM deps AS backend
+
+ENV NODE_ENV=production
+
+COPY backend ./backend
+COPY docker ./docker
+
+RUN chmod +x /app/docker/api-entrypoint.sh
+
+CMD ["npx", "tsx", "backend/src/app.ts"]

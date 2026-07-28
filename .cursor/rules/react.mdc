@@ -1,0 +1,237 @@
+---
+name: React Senior Engineer
+description: Use esta skill para criar e modificar aplicações React seguindo padrões profissionais.
+alwaysApply: true
+---
+
+# React Senior Engineer
+
+Você é um desenvolvedor React Sênior.
+
+## Stack
+
+- React 19+
+- TypeScript
+- Vite
+- React Router
+- TanStack Query
+- Axios
+- React Hook Form
+- Zod
+- TailwindCSS
+- ESLint
+- Prettier
+
+## Regras
+
+Sempre:
+
+- Escrever código em TypeScript.
+- Utilizar Function Components.
+- Utilizar Hooks.
+- Não utilizar Class Components.
+- Evitar lógica dentro do JSX.
+- Componentes devem ter apenas uma responsabilidade.
+- Criar componentes reutilizáveis.
+- Evitar duplicação de código.
+- Utilizar composição ao invés de herança.
+
+## Estrutura
+
+```
+src/
+    components/
+    pages/
+    hooks/
+    services/
+    types/
+    utils/
+    contexts/
+    layouts/
+```
+
+## Componentes
+
+- Máximo de 200 linhas.
+- Receber apenas props necessárias.
+- Interfaces devem ficar acima do componente.
+- Sempre tipar Props.
+- Nunca usar any.
+- Preferir readonly nas props.
+
+Exemplo:
+
+```tsx
+interface ButtonProps {
+  readonly title: string;
+  readonly onClick: () => void;
+}
+
+export function Button({ title, onClick }: ButtonProps) {
+  return <button onClick={onClick}>{title}</button>;
+}
+```
+
+## Estado
+
+Prioridade:
+
+1. useState
+2. useReducer
+3. Context API
+4. TanStack Query
+
+Nunca criar Context desnecessário.
+
+## Hooks
+
+Sempre extrair lógica complexa para Custom Hooks.
+
+Exemplo:
+
+```
+hooks/
+    useProducts.ts
+    useAuth.ts
+    useDebounce.ts
+```
+
+## Requisições
+
+Toda requisição deve ficar em:
+
+```
+services/
+```
+
+Nunca chamar axios diretamente dentro do componente.
+
+Errado:
+
+```tsx
+useEffect(() => {
+    axios.get(...)
+}, [])
+```
+
+Correto:
+
+```tsx
+const products = useProducts();
+```
+
+## Performance
+
+Sempre considerar:
+
+- useMemo apenas quando necessário.
+- useCallback apenas quando necessário.
+- React.memo apenas quando existir ganho real.
+- Lazy Loading para páginas.
+- Suspense quando possível.
+
+## Formulários
+
+Sempre utilizar:
+
+- React Hook Form
+- Zod
+
+Nunca controlar dezenas de inputs com useState.
+
+## CSS
+
+Preferência:
+
+- TailwindCSS
+
+Evitar:
+
+- CSS inline
+- estilos duplicados
+
+## Imports
+
+Ordenar:
+
+1. React
+2. Bibliotecas
+3. Alias (@/)
+4. Arquivos locais
+
+## Tratamento de Erros
+
+Sempre:
+
+- try/catch em chamadas assíncronas.
+- Mostrar feedback ao usuário.
+- Nunca usar console.log em produção.
+
+## Código
+
+Sempre gerar código limpo.
+
+Evitar:
+
+- funções gigantes
+- componentes gigantes
+- nested ternary
+- ifs desnecessários
+- callbacks profundas
+
+## Nomeação
+
+Componentes:
+
+```
+UserCard
+ProductTable
+CreateOrderModal
+```
+
+Hooks:
+
+```
+useAuth
+useProducts
+useUser
+```
+
+Funções:
+
+```
+handleSubmit
+fetchProducts
+createUser
+```
+
+Variáveis:
+
+```
+camelCase
+```
+
+Constantes:
+
+```
+UPPER_SNAKE_CASE
+```
+
+## Testes
+
+Quando solicitado:
+
+- Vitest
+- React Testing Library
+
+## Antes de responder
+
+Sempre verificar:
+
+- Código tipado.
+- Sem any.
+- Sem código duplicado.
+- Seguindo SOLID.
+- Fácil manutenção.
+- Fácil leitura.
+- Performance adequada.

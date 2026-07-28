@@ -1,66 +1,11 @@
-# Manager
+---
+description: Manager SSR removido — ver frontend + API
+globs: manager/**/*
+alwaysApply: false
+---
 
-Painel admin server-rendered em `manager/`. Entry: `npm run manager` → `http://localhost:MANAGER_PORT/manager`.
+# Manager (legado)
 
-## Estrutura
+O painel SSR foi **removido na Fase 6**. Resta apenas `manager/models/` — dados consumidos pela API REST.
 
-```
-manager/
-├── app.ts / server.ts     → entry HTTP
-├── http/
-│   ├── request.ts         → helpers HTTP, auth, createRouter
-│   ├── static.ts          → assets em /manager/assets/*
-│   └── routes/index.ts    → rotas declarativas por domínio (~54 rotas)
-├── routes/index.ts        → exporta handleManagerRequest
-├── controllers/           → handlers finos (parse form, redirect)
-├── models/
-│   ├── shared/            → helpers reutilizáveis (save-result)
-│   ├── logs/              → classificação de logs (fora das views)
-│   └── *.ts               → dados por página; reutiliza src/
-└── views/
-    ├── components/        → UI compartilhada (icons, cards, badges)
-    ├── layout/            → shell HTML + nav
-    ├── settings/          → página de config dividida por seção
-    ├── logs/              → view enxuta
-    ├── page-assets.ts     → pageStyles / pageScripts / pageData
-    └── *.ts               → demais páginas
-
-public/                    → CSS/JS estáticos servidos em /manager/assets/*
-├── css/                   → base.css + um arquivo por página
-└── js/
-    ├── shared/            → modal, polling, confirm, offer-delete
-    └── *.js               → um arquivo por página com interatividade
-```
-
-## Páginas principais
-
-`/manager` · `/manager/offers` · `/manager/coupons` · `/manager/accounts` · `/manager/sources/:channel` · `/manager/settings` · `/manager/template` · `/manager/logs`
-
-## Assets estáticos
-
-- CSS compartilhado em `public/css/base.css`; CSS de página via `pageStyles('nome.css')`.
-- JS de página via `pageScripts(...)` com `defer`; dados dinâmicos em `<script type="application/json" id="*-page-data">`.
-- **Hot reload:** `manager/dev/mode.ts` (`MANAGER_HOT_RELOAD` ou `NODE_ENV` ≠ `production`); SSE em `/manager/__dev/live` + polling em `manager/dev/file-watcher.ts` (todo `manager/`). Docker: `tsx watch` no serviço `manager`.
-- Classificação de logs só no servidor (`models/logs/log-classifier.ts`); o cliente consome campos já classificados da API.
-
-## Auth e segurança
-
-- `MANAGER_TOKEN` opcional. Se definido, exige `?token=` ou header `Authorization: Bearer`. Se ausente, libera tudo.
-- Forms HTML **não** propagam token — POSTs falham com token ativo.
-- CSRF **não** implementado.
-- `escapeHtml` em views — não escapa `'` (risco XSS em atributos JS).
-
-## Regras
-
-- Não colocar regra de negócio no manager — delegar para `src/offers/`, `src/config/`, `src/accounts/`, `src/auto-messages/`.
-- Models do manager podem importar de `src/`; `src/` nunca importa de `manager/`.
-- Views não classificam logs nem interpretam mensagens — isso fica em `models/logs/`.
-- Componentes reutilizáveis em `views/components/` — não duplicar markup de cards/ícones.
-- Novas rotas: adicionar em `http/routes/index.ts` no grupo do domínio correto.
-- Evitar controllers importando `src/` direto — preferir models (exceções atuais: offers, dashboard).
-- Workers: status via Redis + `owner.lock` (WhatsApp). Spawn pelo painel só com `MANAGER_CAN_SPAWN_WORKERS=true` — um worker unificado (WhatsApp + Telegram).
-- QR WhatsApp: worker publica em Redis; painel lê (`redis-state.ts`). Login ML permanece local ao manager (single-node).
-
-## Multi-conta
-
-Página `/manager/accounts` implementada (add, toggle, delete). Runtime de envio por conta completo via filas e publishers; worker unificado carrega todas as contas habilitadas — ver `.cursor/docs/accounts.md`.
+Substituto: `frontend/` + `backend/api/`. Ver `.cursor/rules/api.mdc` e `.cursor/docs/frontend.md`.

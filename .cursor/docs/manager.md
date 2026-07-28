@@ -1,160 +1,22 @@
-# Manager — Painel Web
+# Manager SSR — removido
 
-Painel admin server-rendered em `manager/`. Sem framework frontend — HTML gerado em TypeScript.
+O painel server-rendered em `manager/views/` foi **removido na Fase 6** (cutover).
 
-## Acesso
+## Substituto
 
-```bash
-npm run manager
-# → http://localhost:3000/manager (porta via MANAGER_PORT)
-```
+| Antes | Agora |
+|-------|-------|
+| `npm run manager` | `npm run api` + `npm run dev:frontend` ou `npm run up` |
+| `http://localhost:3000/manager` | `http://localhost:5173` (dev) ou `http://localhost:3000` (Docker) |
+| Rotas HTML em `manager/http/` | API REST em `backend/api/` |
+| Views TS em `manager/views/` | SPA em `frontend/` |
 
-Auth opcional: `MANAGER_TOKEN` exige `?token=...` ou header `Authorization: Bearer`. Se ausente, **libera tudo** — adequado para uso local/VPN; não expor publicamente sem token.
+## O que permanece em `manager/`
 
-> **Limitação:** forms HTML não propagam o token automaticamente. Com `MANAGER_TOKEN` definido, POSTs de formulário tendem a retornar 401. CSRF não implementado.
+Apenas **`manager/models/`** — camada de dados usada pela API REST (settings, contas, ofertas, logs, etc.). Será migrada para `backend/` em refatoração futura.
 
-## Páginas
+## Documentação
 
-| Rota | Descrição |
-|------|-----------|
-| `/manager` | Dashboard — status, coleta manual, envio imediato |
-| `/manager/offers` | Lista de ofertas (filtro por status) |
-| `/manager/offers/:id` | Detalhe da oferta + preview da mensagem |
-| `/manager/coupons` | Cupons ML — refresh, envio, link de loja |
-| `/manager/accounts` | Contas multi-plataforma (WhatsApp, Telegram, ML) |
-| `/manager/sources/:channel` | Fontes de coleta por canal (`whatsapp` \| `telegram`) — ML e Amazon |
-| `/manager/settings` | Score, brand, horários, intervalos, conexões, workers |
-| `/manager/template` | Template de ofertas + cupons + mensagens automáticas |
-| `/manager/logs` | Logs da aplicação (collector, worker, manager) |
-| `/manager/health` | Health check (`ok`) |
-| `/manager/api/metrics` | Métricas de envio (JSON) |
-| `/manager/api/logs` | Logs em JSON (Redis via `log-store.ts`) |
-| `/manager/api/coupons` | Cupons em JSON (refresh sob demanda) |
-
-## Estrutura MVC
-
-```
-manager/
-├── server.ts              → entry point
-├── app.ts                 → createServer → handleManagerRequest
-├── http/
-│   ├── request.ts         → createRouter, auth, helpers HTTP
-│   ├── static.ts          → assets em /manager/assets/*
-│   └── routes/index.ts    → rotas declarativas por domínio (~54 rotas)
-├── routes/index.ts        → exporta handleManagerRequest
-├── controllers/           → handlers finos (parse form, redirect, JSON)
-├── models/
-│   ├── shared/            → save-result, db helpers
-│   ├── logs/              → classificação de logs
-│   └── *.ts               → dados por página; reutiliza src/
-├── views/
-│   ├── components/        → cards, badges, icons, config-row
-│   ├── layout/            → shell HTML + nav
-│   ├── settings/          → página + sections/ + modals
-│   ├── logs/              → view de logs
-│   └── *.ts               → demais páginas
-└── public/
-    ├── css/               → base.css + um arquivo por página
-    └── js/                → interatividade client-side
-```
-
-Rotas agrupadas em `http/routes/index.ts`: `dashboardRoutes`, `offersRoutes`, `settingsRoutes`, `templateRoutes`, `logsRoutes`, `couponsRoutes`, `sourcesRoutes`, `connectionRoutes`, `processRoutes`, `accountsRoutes`.
-
-## Settings editáveis
-
-Tudo persiste na tabela `settings` e é lido pelos processos via cache:
-
-- **Score** — tiers por desconto, avaliação, vendas, preço
-- **Brand** — nome, subtítulo, logo (base64)
-- **Horários** — janela operacional de envio
-- **Intervalos** — coleta e delay entre envios
-- **Fontes ML** — categorias do `.env` (ativar/desativar) + URLs customizadas **por canal**
-- **Fontes Amazon** — `AMAZON_SOURCES` do `.env` + links customizados **por canal** (browse node, busca, produto)
-- **Afiliado Amazon** — baseUrl, ID da loja (`?tag=`), prefixo opcional (Settings › Afiliados)
-- **Canal** — invite link do WhatsApp; múltiplos destinos por conta (`whatsappDestinations`)
-- **Template** — mensagem de ofertas e cupons com placeholders
-- **Auto-messages** — mensagens programadas (manual / once / daily)
-- **Cupons** — URL da página de cupons ML
-- **Links afiliado** — delay entre gerações e backoff quando há backlog (em `/manager/offers`)
-
-## Conexões (via painel)
-
-| Integração | Fluxo no painel | Persistência |
-|------------|-----------------|--------------|
-| WhatsApp | QR em Settings → Conectar (lido do Redis, publicado pelo worker) | `WHATSAPP_AUTH_PATH` |
-| Mercado Livre | Navegador → login manual → "Salvar sessão" (single-node) | `ML_AUTH_PATH` |
-| Telegram | Validação via `npm run check` (token + chatId) | `.env` |
-
-APIs JSON de conexão:
-
-| Endpoint | Método | Função |
-|----------|--------|--------|
-| `/manager/settings/connect/wa/start` | POST | Inicia pareamento WhatsApp |
-| `/manager/settings/connect/wa/status` | GET | Status + QR |
-| `/manager/settings/connect/ml/start` | POST | Abre navegador ML |
-| `/manager/settings/connect/ml/finish` | POST | Salva sessão após login |
-| `/manager/settings/connect/ml/cancel` | POST | Cancela fluxo ML |
-| `/manager/settings/connect/ml/status` | GET | Status do fluxo ML |
-| `/manager/settings/connect/telegram/status` | GET | Status da config Telegram |
-
-> O **worker** é dono da sessão WhatsApp. O QR e o status de conexão são publicados em Redis (`radar:connect:wa:{accountId}`) pelo worker; o painel apenas lê e renderiza (stateless, replicável).
-
-## Workers de envio
-
-O `npm run up` sobe collector + scheduler + manager, **não** o worker — evita dois processos disputando a sessão WhatsApp.
-
-| Modo | Comportamento |
-|------|---------------|
-| Dev (`MANAGER_CAN_SPAWN_WORKERS=true`) | Painel pode iniciar/parar/reiniciar o **worker unificado** via spawn |
-| Produção/Docker (`MANAGER_CAN_SPAWN_WORKERS=false`) | Worker é serviço Docker separado; painel só exibe status |
-
-Um único processo publica em WhatsApp e Telegram. Settings → Operações exibe um card **Worker de envio**.
-
-Status derivado de:
-- **WhatsApp:** `owner.lock` na pasta de auth + heartbeat Redis (`radar:worker:{channel}:{accountId}`)
-- **Telegram:** heartbeat Redis (mesmo processo worker)
-
-| Endpoint | Método | Função |
-|----------|--------|--------|
-| `/manager/settings/worker/start` | POST | Inicia worker unificado — só com spawn habilitado |
-| `/manager/settings/worker/stop` | POST | Encerra worker — só com spawn habilitado |
-| `/manager/settings/worker/restart` | POST | Reinicia worker — só com spawn habilitado |
-| `/manager/settings/worker/status` | GET | Status do processo (externo ou local) |
-
-Parâmetros `?channel=` e `?accountId=` nas rotas de worker são **legados** — o status é sempre do worker unificado.
-
-Login ML (`connection-model.ts`) permanece stateful no processo do manager — operação single-node/dev.
-
-## Segurança
-
-| Tema | Situação |
-|------|----------|
-| Auth | `MANAGER_TOKEN` opcional; sem token = acesso livre |
-| CSRF | Ausente em todos os POSTs |
-| XSS | `escapeHtml` em views (não escapa `'` — risco em atributos JS como `onsubmit` em `accounts.ts`) |
-| Static files | Path traversal protegido em `http/static.ts` |
-| Body size | `readFormBody` sem limite — risco de DoS em POST |
-
-## Regras
-
-- Manager **não** contém regra de negócio — delega para `src/`.
-- `src/` nunca importa de `manager/`.
-- Models do manager importam funções de `src/config/`, `src/offers/`, `src/accounts/`, etc.
-- Controllers devem ser finos; evitar import direto de `src/` (exceções atuais: `offers-controller`, `dashboard-controller`).
-
-## Hot reload (dev)
-
-Com `MANAGER_HOT_RELOAD=true` (automático quando `NODE_ENV` ≠ `production`; no Docker o compose define `true` no serviço `manager`):
-
-| Camada | Mecanismo |
-|--------|-----------|
-| CSS/JS/views/controllers/models | Polling em `manager/dev/file-watcher.ts` → SSE → browser recarrega |
-| TypeScript do servidor (`manager/` + `src/`) | `tsx watch` reinicia o processo |
-
-No Docker, volumes `./manager` e `./src` + `tsx watch` evitam rebuild do container a cada alteração.
-
-## Preflight e CI
-
-- `npm run manager` executa `preflight --profile=manager` antes de subir.
-- Tipos checados via `npx tsc -p tsconfig.check.json` (inclui `manager/`).
-- CI: `.github/workflows/ci.yml` — `tsc` + `npm test` em PRs e push para `main`.
+- [frontend-api.md](./frontend-api.md) — stack atual
+- [frontend.md](./frontend.md) — páginas React
+- [parity-checklist.md](./parity-checklist.md) — validação de paridade

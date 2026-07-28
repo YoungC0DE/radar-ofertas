@@ -1,0 +1,40 @@
+---
+description: API REST Fastify em backend/api/
+globs: backend/**/*
+alwaysApply: false
+---
+
+# API REST
+
+Entry: `npm run api` → `backend/api/server.ts` → `/api/v1/*`.
+
+## Estrutura
+
+```
+backend/api/
+├── server.ts       → entry
+├── app.ts          → Fastify + CORS + error handler
+├── routes/         → rotas por domínio
+├── controllers/    → handlers HTTP
+├── serializers/    → JSON response DTOs
+├── schemas/        → validação Zod
+├── services/       → auth JWT, refresh tokens
+└── middleware/     → authenticate
+```
+
+## Models
+
+Controllers delegam para `manager/models/` (camada temporária até migrar para `backend/`).
+
+## Auth
+
+- JWT access + refresh (`JWT_SECRET`, tabela `users`)
+- Bootstrap: `API_ADMIN_USERNAME` / `API_ADMIN_PASSWORD`
+- Preflight profile: `api`
+
+## Regras
+
+- Validação Zod em todos os endpoints (schemas/)
+- Erros padronizados via `errors/api-errors.ts` + `registerErrorHandler()` na raiz do app (não encapsulado)
+- Rate limit: `@fastify/rate-limit` — login/refresh 10 req/min
+- CORS: `API_CORS_ORIGINS` ou localhost dev (5173, 3000)
