@@ -22,6 +22,7 @@ import { Alert } from '../components/ui/Alert.js';
 import { Page } from '../components/ui/Layout.js';
 import { Spinner } from '../components/ui/Spinner.js';
 import { DEFAULT_ACCOUNT_ID } from '../constants/accounts.js';
+import { openNovncTab } from '../utils/novnc.js';
 
 const MAIN_TABS = ['geral', 'afiliados', 'conexoes', 'operacoes'] as const;
 
@@ -142,7 +143,10 @@ export function SettingsPage() {
           data={data}
           telegramBusy={telegramBusy}
           onConnectWhatsApp={() => setWaLoginAccountId(waAccountId)}
-          onConnectMercadoLivre={() => setMlLoginAccountId(mlAccountId)}
+          onConnectMercadoLivre={() => {
+            openNovncTab(data.novncPort);
+            setMlLoginAccountId(mlAccountId);
+          }}
           onVerifyTelegram={() => {
             setTelegramBusy(true);
             void api

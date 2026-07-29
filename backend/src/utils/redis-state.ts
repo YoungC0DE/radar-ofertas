@@ -5,6 +5,7 @@ import { Redis } from 'ioredis';
 import { DEFAULT_ACCOUNT_ID } from '../accounts/types.js';
 import type { Channel } from '../channels/types.js';
 import { env } from '../config/env.js';
+import { logger } from './logger.js';
 
 export const WORKER_HEARTBEAT_TTL_SEC = 30;
 export const WORKER_HEARTBEAT_INTERVAL_MS = 10_000;
@@ -36,7 +37,7 @@ export interface RedisWorkerHeartbeat {
 export type RedisProcessHeartbeat = RedisWorkerHeartbeat;
 
 let redisClient: Redis | null = null;
-let redisFailed = false;
+let connectPromise: Promise<boolean> | null = null;
 
 function workerKey(channel: Channel, accountId: string): string {
   return `radar:worker:${channel}:${accountId}`;
@@ -51,30 +52,37 @@ export function resolveWorkerAccountId(accountId?: string): string {
 }
 
 function getRedis(): Redis | null {
-  if (!env.REDIS_ENABLED || redisFailed) return null;
+  if (!env.REDIS_ENABLED) return null;
   if (!redisClient) {
     redisClient = new Redis(env.REDIS_URL, {
       maxRetriesPerRequest: 1,
       lazyConnect: true,
       enableOfflineQueue: false,
     });
-    redisClient.on('error', () => {
-      redisFailed = true;
+    redisClient.on('error', (error) => {
+      logger.warn({ error }, 'Redis client error');
     });
   }
   return redisClient;
 }
 
 async function ensureConnected(redis: Redis): Promise<boolean> {
-  try {
-    if (redis.status !== 'ready') {
-      await redis.connect();
-    }
-    return true;
-  } catch {
-    redisFailed = true;
-    return false;
+  if (redis.status === 'ready') return true;
+
+  if (!connectPromise) {
+    connectPromise = redis
+      .connect()
+      .then(() => true)
+      .catch((error: unknown) => {
+        logger.warn({ error }, 'Falha ao conectar no Redis');
+        return false;
+      })
+      .finally(() => {
+        connectPromise = null;
+      });
   }
+
+  return connectPromise;
 }
 
 export async function publishWorkerHeartbeat(
@@ -104,8 +112,8 @@ export async function publishWorkerHeartbeat(
       })
       .expire(key, WORKER_HEARTBEAT_TTL_SEC)
       .exec();
-  } catch {
-    redisFailed = true;
+  } catch (error) {
+    logger.warn({ error }, 'Falha em operação Redis');
   }
 }
 
@@ -128,8 +136,8 @@ export async function getWorkerHeartbeat(
       host: raw.host ?? 'unknown',
       updatedAt: raw.updatedAt ?? '',
     };
-  } catch {
-    redisFailed = true;
+  } catch (error) {
+    logger.warn({ error }, 'Falha em operação Redis');
     return null;
   }
 }
@@ -152,8 +160,8 @@ export async function clearWorkerHeartbeat(channel: Channel, accountId: string):
 
   try {
     await redis.del(workerKey(channel, accountId));
-  } catch {
-    redisFailed = true;
+  } catch (error) {
+    logger.warn({ error }, 'Falha em operação Redis');
   }
 }
 
@@ -206,8 +214,8 @@ export async function publishWhatsAppConnectState(
       })
       .expire(key, CONNECT_STATE_TTL_SEC)
       .exec();
-  } catch {
-    redisFailed = true;
+  } catch (error) {
+    logger.warn({ error }, 'Falha em operação Redis');
   }
 }
 
@@ -227,8 +235,8 @@ export async function getWhatsAppConnectFromRedis(
       error: raw.error || null,
       updatedAt: raw.updatedAt ?? '',
     };
-  } catch {
-    redisFailed = true;
+  } catch (error) {
+    logger.warn({ error }, 'Falha em operação Redis');
     return null;
   }
 }
@@ -257,8 +265,8 @@ export async function publishCollectorHeartbeat(
       })
       .expire(COLLECTOR_HEARTBEAT_KEY, COLLECTOR_HEARTBEAT_TTL_SEC)
       .exec();
-  } catch {
-    redisFailed = true;
+  } catch (error) {
+    logger.warn({ error }, 'Falha em operação Redis');
   }
 }
 
@@ -278,8 +286,8 @@ export async function getCollectorHeartbeat(): Promise<RedisProcessHeartbeat | n
       host: raw.host ?? 'unknown',
       updatedAt: raw.updatedAt ?? '',
     };
-  } catch {
-    redisFailed = true;
+  } catch (error) {
+    logger.warn({ error }, 'Falha em operação Redis');
     return null;
   }
 }
@@ -290,8 +298,8 @@ export async function clearCollectorHeartbeat(): Promise<void> {
 
   try {
     await redis.del(COLLECTOR_HEARTBEAT_KEY);
-  } catch {
-    redisFailed = true;
+  } catch (error) {
+    logger.warn({ error }, 'Falha em operação Redis');
   }
 }
 

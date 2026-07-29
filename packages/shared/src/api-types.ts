@@ -42,7 +42,9 @@ export type DashboardResponse = {
   sentOffers: unknown[];
 };
 
-export type OfferSentFilter = 'all' | 'pending' | 'sent';
+export type OfferSentFilter = 'all' | 'pending' | 'sent' | 'error';
+export type OfferOriginFilter = 'all' | 'mercado_livre' | 'amazon';
+export type OfferDestinationFilter = 'all' | 'whatsapp' | 'telegram';
 
 export type Channel = 'whatsapp' | 'telegram';
 
@@ -95,6 +97,8 @@ export type OffersPageResponse = {
   scheduleByOfferId: Record<string, string>;
   deliveriesByOfferId: Record<string, SerializedDelivery[]>;
   filter: OfferSentFilter;
+  origin: OfferOriginFilter;
+  destination: OfferDestinationFilter;
   page: number;
   pageSize: number;
   total: number;
@@ -230,6 +234,8 @@ export type SettingsResponse = {
     };
     canSpawnWorkers: boolean;
   };
+  /** Porta noVNC para abrir o desktop do login ML (null = desabilitado). */
+  novncPort: number | null;
   mlCouponsUrl: string;
   amazonAffiliate: {
     baseUrl: string;
@@ -410,6 +416,8 @@ export type AccountsResponse = {
   integrationPlatforms: Array<{ id: AccountPlatform; label: string }>;
   marketplacePlatforms: Array<{ id: AccountPlatform; label: string }>;
   canSpawnWorkers: boolean;
+  /** Porta noVNC para abrir o desktop do login ML (null = desabilitado). */
+  novncPort: number | null;
 };
 
 export type WhatsAppConnectState = {
@@ -421,6 +429,8 @@ export type WhatsAppConnectState = {
 export type MercadoLivreConnectState = {
   status: 'idle' | 'opening' | 'awaiting-login' | 'saving' | 'connected' | 'error';
   error: string | null;
+  /** Porta do noVNC no host quando `MANAGER_VNC_ENABLED`; o painel monta a URL com o hostname atual. */
+  novncPort: number | null;
 };
 
 export type TelegramVerifyState = {

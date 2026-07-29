@@ -110,17 +110,28 @@ export async function resolveWhatsAppInvite(
   }
 
   const channelCode = extractNewsletterInviteCode(trimmed) ?? trimmed;
-  const meta = await sock.newsletterMetadata('invite', channelCode);
-  if (!meta?.id) {
-    throw new Error(
-      'Link não reconhecido — use chat.whatsapp.com/... para grupo ou whatsapp.com/channel/... para canal',
-    );
-  }
+  try {
+    const meta = await sock.newsletterMetadata('invite', channelCode);
+    if (!meta?.id) {
+      throw new Error(
+        'Link não reconhecido — use chat.whatsapp.com/... para grupo ou whatsapp.com/channel/... para canal',
+      );
+    }
 
-  return {
-    jid: meta.id,
-    kind: 'newsletter',
-    label: resolveNewsletterName(meta.name) ?? resolveNewsletterName(meta.thread_metadata?.name),
-    inviteLink: normalizeWhatsAppInviteLink(trimmed, 'newsletter'),
-  };
+    return {
+      jid: meta.id,
+      kind: 'newsletter',
+      label: resolveNewsletterName(meta.name) ?? resolveNewsletterName(meta.thread_metadata?.name),
+      inviteLink: normalizeWhatsAppInviteLink(trimmed, 'newsletter'),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('Link não reconhecido')) throw error;
+    if (/graphql|bad request|not found|404/i.test(message)) {
+      throw new Error(
+        'Não foi possível resolver o link do canal. Confira o link (whatsapp.com/channel/...) e se o WhatsApp está logado.',
+      );
+    }
+    throw error instanceof Error ? error : new Error(message);
+  }
 }

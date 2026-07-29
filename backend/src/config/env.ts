@@ -129,6 +129,13 @@ const envSchema = z
       .string()
       .default('true')
       .transform((val) => val === 'true' || val === '1'),
+    /** Xvfb + x11vnc + noVNC no container da API (login ML visível). */
+    MANAGER_VNC_ENABLED: z
+      .string()
+      .default('false')
+      .transform((val) => val === 'true' || val === '1'),
+    /** Porta HTTP do noVNC publicada no host. */
+    MANAGER_NOVNC_PORT: z.coerce.number().int().positive().default(6080),
     /** Porta da API REST (backend/api). */
     API_PORT: z.coerce.number().int().positive().default(3001),
     /** Segredo HS256 para access/refresh JWT. Obrigatório quando a API sobe. */

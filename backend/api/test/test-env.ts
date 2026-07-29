@@ -46,6 +46,8 @@ export function buildTestEnv(overrides: Partial<Env> = {}): Env {
     },
     REDIS_ENABLED: false,
     MANAGER_CAN_SPAWN_WORKERS: true,
+    MANAGER_VNC_ENABLED: false,
+    MANAGER_NOVNC_PORT: 6080,
     API_PORT: 3001,
     JWT_SECRET: 'test-secret-with-at-least-32-characters-long',
     JWT_ACCESS_EXPIRES_IN: '15m',

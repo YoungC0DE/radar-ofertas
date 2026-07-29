@@ -13,6 +13,7 @@ import { Badge } from '../ui/Badge.js';
 import { Button } from '../ui/Button.js';
 import { Checkbox } from '../ui/Checkbox.js';
 import { Input } from '../ui/Input.js';
+import { useConfirm } from '../feedback/ConfirmProvider.js';
 
 const fieldInputClass =
   'h-10 w-full rounded-[10px] border border-border bg-bg-secondary px-3 text-sm text-text-primary transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25';
@@ -97,6 +98,7 @@ function ScheduleFields({
 }
 
 export function AutoMessageCard({ message, onSave, onSend, onDelete, busy }: AutoMessageCardProps) {
+  const { confirm } = useConfirm();
   const [state, setState] = useState(() => autoMessageToFormState(message));
 
   const preview = useMemo(() => renderAutoMessagePreview(state.content), [state.content]);
@@ -162,8 +164,16 @@ export function AutoMessageCard({ message, onSave, onSend, onDelete, busy }: Aut
           variant="danger"
           disabled={busy}
           onClick={() => {
-            if (!window.confirm('Excluir esta mensagem automática?')) return;
-            void onDelete(message.id);
+            void (async () => {
+              const ok = await confirm({
+                title: 'Excluir mensagem',
+                message: 'Excluir esta mensagem automática?',
+                confirmLabel: 'Excluir',
+                tone: 'danger',
+              });
+              if (!ok) return;
+              await onDelete(message.id);
+            })();
           }}
         >
           Excluir

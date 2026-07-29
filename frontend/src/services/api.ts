@@ -18,6 +18,8 @@ import {
   type LogsResponse,
   type MercadoLivreConnectState,
   type OfferDetailResponse,
+  type OfferDestinationFilter,
+  type OfferOriginFilter,
   type OfferSentFilter,
   type OffersPageResponse,
   type PatchSourcesBody,
@@ -162,12 +164,35 @@ export const api = {
 
   dashboard: () => apiRequest<DashboardResponse>('/dashboard'),
 
-  collectOffers: () =>
-    apiRequest<{ queued: true }>('/offers/collect', { method: 'POST' }),
+  collectOffers: (body?: {
+    searchLimit?: number;
+    sendAfterCollect?: boolean;
+    sendDelayMinutes?: number;
+  }) =>
+    apiRequest<{
+      queued: true;
+      searchLimit: number;
+      sendAfterCollect: boolean;
+      sendDelayMinutes: number | null;
+    }>('/offers/collect', {
+      method: 'POST',
+      body: body ?? {},
+    }),
 
-  listOffers: (params: { status?: OfferSentFilter; page?: number } = {}) => {
+  listOffers: (
+    params: {
+      status?: OfferSentFilter;
+      origin?: OfferOriginFilter;
+      destination?: OfferDestinationFilter;
+      page?: number;
+    } = {},
+  ) => {
     const search = new URLSearchParams();
     if (params.status && params.status !== 'all') search.set('status', params.status);
+    if (params.origin && params.origin !== 'all') search.set('origin', params.origin);
+    if (params.destination && params.destination !== 'all') {
+      search.set('destination', params.destination);
+    }
     if (params.page && params.page > 1) search.set('page', String(params.page));
     const query = search.toString();
     return apiRequest<OffersPageResponse>(`/offers${query ? `?${query}` : ''}`);

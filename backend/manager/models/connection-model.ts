@@ -9,6 +9,7 @@ import {
 } from '../../src/mercado-livre/auth.js';
 import { setMlAuthPath } from '../../src/mercado-livre/session.js';
 import { DEFAULT_ACCOUNT_ID } from '../../src/accounts/types.js';
+import { resolveNovncPort } from '../../src/config/novnc.js';
 import { getWhatsAppConnectFromRedis } from '../../src/utils/redis-state.js';
 import { logger } from '../../src/utils/logger.js';
 import { canManagerSpawnWorkers, getSenderWorkerState, startWorker } from './process-model.js';
@@ -64,10 +65,13 @@ export async function startWhatsAppConnection(accountId?: string): Promise<Whats
 
   const worker = await getSenderWorkerState();
   if (worker.status !== 'running') {
+    // Em Docker o heartbeat só existe com o worker no ar. Se o Redis ainda não
+    // tem QR, devolvemos connecting para o painel continuar o poll — o erro duro
+    // impedia ver o QR que o worker publicava segundos depois.
     return {
-      status: 'error',
+      status: 'connecting',
       qr: null,
-      error: 'Worker de envio não detectado. Inicie o serviço worker (Docker ou npm run worker).',
+      error: 'Aguardando worker de envio… Se persistir, confira o serviço worker no Docker.',
     };
   }
 
@@ -83,6 +87,7 @@ export type MercadoLivreConnectStatus =
 export interface MercadoLivreConnectState {
   status: MercadoLivreConnectStatus;
   error: string | null;
+  novncPort: number | null;
 }
 
 let mlStatus: MercadoLivreConnectStatus = 'idle';
@@ -98,7 +103,7 @@ async function resolveMercadoLivreAuthPath(accountId: string): Promise<string> {
 }
 
 export function getMercadoLivreConnectionState(): MercadoLivreConnectState {
-  return { status: mlStatus, error: mlError };
+  return { status: mlStatus, error: mlError, novncPort: resolveNovncPort() };
 }
 
 async function closeMlSession(): Promise<void> {

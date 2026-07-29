@@ -16,6 +16,8 @@ import {
   getOfferStats,
   updateOfferAffiliateLink,
   updateOfferMarketInsights,
+  type OfferDestinationFilter,
+  type OfferOriginFilter,
   type OfferSentFilter,
 } from '../../src/offers/repository.js';
 import type { DeliveryRecord, OfferRecord } from '../../src/offers/types.js';
@@ -23,12 +25,18 @@ import { estimatePendingSendTimes } from '../../src/queue/sender-schedule.js';
 import { logger } from '../../src/utils/logger.js';
 import { type DatabaseSnapshot, withDatabase } from './db-model.js';
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 20;
 
 export interface AffiliateLinkDelaySettings {
   delayMs: number;
   backlogDelayMinutes: number;
   backlogThreshold: number;
+}
+
+export interface OffersListFilters {
+  status: OfferSentFilter;
+  origin: OfferOriginFilter;
+  destination: OfferDestinationFilter;
 }
 
 export interface OffersPageData {
@@ -38,6 +46,8 @@ export interface OffersPageData {
   /** Entregas por oferta (destino/canais). Vazio se o canal não recebe a oferta. */
   deliveriesByOfferId: Map<string, DeliveryRecord[]>;
   filter: OfferSentFilter;
+  origin: OfferOriginFilter;
+  destination: OfferDestinationFilter;
   page: number;
   pageSize: number;
   total: number;
@@ -48,7 +58,7 @@ export interface OffersPageData {
 }
 
 export function parseSentFilter(value: string | null): OfferSentFilter {
-  if (value === 'pending' || value === 'sent') return value;
+  if (value === 'pending' || value === 'sent' || value === 'error') return value;
   return 'all';
 }
 
@@ -68,16 +78,18 @@ export async function loadAffiliateLinkDelaySettings(): Promise<AffiliateLinkDel
 }
 
 export async function loadOffersPage(
-  filter: OfferSentFilter,
+  filters: OffersListFilters,
   page: number,
 ): Promise<OffersPageData> {
+  const { status, origin, destination } = filters;
   const result = await withDatabase(
     async () => {
-      const total = await countOffers(filter);
+      const query = { sent: status, origin, destination };
+      const total = await countOffers(query);
       const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
       const safePage = Math.min(page, totalPages);
       const offset = (safePage - 1) * PAGE_SIZE;
-      const offers = await findOffers({ sent: filter, limit: PAGE_SIZE, offset });
+      const offers = await findOffers({ ...query, limit: PAGE_SIZE, offset });
       const stats = await getOfferStats();
       return { offers, total, totalPages, page: safePage, pendingCount: stats.pending };
     },
@@ -99,7 +111,9 @@ export async function loadOffersPage(
     offers: result.data.offers,
     scheduleByOfferId,
     deliveriesByOfferId,
-    filter,
+    filter: status,
+    origin,
+    destination,
     page: result.data.page,
     pageSize: PAGE_SIZE,
     total: result.data.total,

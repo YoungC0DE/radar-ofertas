@@ -7,6 +7,7 @@ import {
 } from '../../utils/template-preview.js';
 import { Button } from '../ui/Button.js';
 import { Checkbox } from '../ui/Checkbox.js';
+import { useConfirm } from '../feedback/ConfirmProvider.js';
 import {
   Table,
   TableBody,
@@ -40,6 +41,7 @@ export function MessageTemplateEditor({
   onSave,
 }: MessageTemplateEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { confirm } = useConfirm();
 
   const [template, setTemplate] = useState(initialTemplate);
   const [visibility, setVisibility] = useState(initialVisibility);
@@ -73,9 +75,11 @@ export function MessageTemplateEditor({
   }
 
   async function handleReset() {
-    const ok = window.confirm(
-      'Restaurar o texto padrão? Isso não salva até você clicar em Salvar.',
-    );
+    const ok = await confirm({
+      title: 'Restaurar padrão',
+      message: 'Restaurar o texto padrão? Isso não salva até você clicar em Salvar.',
+      confirmLabel: 'Restaurar',
+    });
     if (!ok) return;
     setTemplate(defaultTemplate);
   }

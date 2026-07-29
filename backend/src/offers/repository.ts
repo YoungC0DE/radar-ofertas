@@ -1,4 +1,8 @@
-import type { Offer as PrismaOffer, OfferDelivery as PrismaOfferDelivery } from '@prisma/client';
+import type {
+  Offer as PrismaOffer,
+  OfferDelivery as PrismaOfferDelivery,
+  Prisma,
+} from '@prisma/client';
 import { getEnabledAccountIdsForChannel } from '../accounts/channel-accounts.js';
 import { CHANNELS, type Channel } from '../channels/types.js';
 import { env } from '../config/env.js';
@@ -263,7 +267,9 @@ export async function offerWasSentTo(
   return count > 0;
 }
 
-export type OfferSentFilter = 'all' | 'pending' | 'sent';
+export type OfferSentFilter = 'all' | 'pending' | 'sent' | 'error';
+export type OfferOriginFilter = 'all' | 'mercado_livre' | 'amazon';
+export type OfferDestinationFilter = 'all' | 'whatsapp' | 'telegram';
 
 export interface OfferStats {
   total: number;
@@ -273,21 +279,88 @@ export interface OfferStats {
 
 export interface FindOffersOptions {
   sent?: OfferSentFilter;
+  origin?: OfferOriginFilter;
+  destination?: OfferDestinationFilter;
   limit?: number;
   offset?: number;
 }
 
-function sentWhere(sent: OfferSentFilter = 'all') {
-  if (sent === 'pending') return { sentAt: null };
+function statusWhere(sent: OfferSentFilter = 'all'): Prisma.OfferWhereInput {
+  if (sent === 'pending') {
+    return {
+      sentAt: null,
+      NOT: {
+        deliveries: {
+          some: { error: { not: null }, sentAt: null },
+        },
+      },
+    };
+  }
   if (sent === 'sent') return { sentAt: { not: null } };
+  if (sent === 'error') {
+    return {
+      sentAt: null,
+      deliveries: {
+        some: { error: { not: null }, sentAt: null },
+      },
+    };
+  }
   return {};
+}
+
+function originWhere(origin: OfferOriginFilter = 'all'): Prisma.OfferWhereInput {
+  if (origin === 'amazon') {
+    return {
+      OR: [
+        { permalink: { contains: 'amazon', mode: 'insensitive' } },
+        {
+          AND: [
+            { NOT: { mercadoLivreId: { startsWith: 'MLB', mode: 'insensitive' } } },
+            { NOT: { mercadoLivreId: { startsWith: 'mlb' } } },
+            { permalink: { equals: null } },
+          ],
+        },
+      ],
+    };
+  }
+  if (origin === 'mercado_livre') {
+    return {
+      OR: [
+        { mercadoLivreId: { startsWith: 'MLB', mode: 'insensitive' } },
+        { permalink: { contains: 'mercadolivre', mode: 'insensitive' } },
+        { permalink: { contains: 'mercadolibre', mode: 'insensitive' } },
+      ],
+    };
+  }
+  return {};
+}
+
+function destinationWhere(
+  destination: OfferDestinationFilter = 'all',
+): Prisma.OfferWhereInput {
+  if (destination === 'whatsapp' || destination === 'telegram') {
+    return { deliveries: { some: { channel: destination } } };
+  }
+  return {};
+}
+
+function buildOffersWhere(options: FindOffersOptions): Prisma.OfferWhereInput {
+  const parts = [
+    statusWhere(options.sent ?? 'all'),
+    originWhere(options.origin ?? 'all'),
+    destinationWhere(options.destination ?? 'all'),
+  ].filter((part) => Object.keys(part).length > 0);
+
+  if (parts.length === 0) return {};
+  if (parts.length === 1) return parts[0]!;
+  return { AND: parts };
 }
 
 export async function getOfferStats(): Promise<OfferStats> {
   const [total, pending, sent] = await Promise.all([
     prisma.offer.count(),
-    prisma.offer.count({ where: { sentAt: null } }),
-    prisma.offer.count({ where: { sentAt: { not: null } } }),
+    prisma.offer.count({ where: statusWhere('pending') }),
+    prisma.offer.count({ where: statusWhere('sent') }),
   ]);
   return { total, pending, sent };
 }
@@ -318,20 +391,22 @@ export async function getChannelStats(channel: Channel): Promise<ChannelStats> {
   return { channel, sent, pending, failed, lastSentAt: last?.sentAt ?? null };
 }
 
-export async function countOffers(sent: OfferSentFilter = 'all'): Promise<number> {
-  return prisma.offer.count({ where: sentWhere(sent) });
+export async function countOffers(options: FindOffersOptions | OfferSentFilter = 'all'): Promise<number> {
+  const filters: FindOffersOptions =
+    typeof options === 'string' ? { sent: options } : options;
+  return prisma.offer.count({ where: buildOffersWhere(filters) });
 }
 
 export async function findOffers(options: FindOffersOptions = {}): Promise<OfferRecord[]> {
-  const { sent = 'all', limit = 50, offset = 0 } = options;
+  const { sent = 'all', limit = 20, offset = 0 } = options;
   const orderBy =
     sent === 'sent'
       ? { sentAt: 'desc' as const }
-      : sent === 'pending'
+      : sent === 'pending' || sent === 'error'
         ? { createdAt: 'asc' as const }
         : { createdAt: 'desc' as const };
   const offers = await prisma.offer.findMany({
-    where: sentWhere(sent),
+    where: buildOffersWhere(options),
     orderBy,
     take: limit,
     skip: offset,

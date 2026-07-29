@@ -108,14 +108,21 @@ export async function runUnifiedWorker(): Promise<void> {
   const active: ActivePublisher[] = [];
 
   for (const publisher of publishers) {
-    const ok = await verifyPublisher(publisher);
-    if (!ok) continue;
-
     const { channel, accountId } = publisher;
+    // Heartbeat antes do verify: no WhatsApp o pareamento (QR) pode levar minutos e o
+    // painel só detecta o worker via Redis. Sem isso, a API devolve idle/erro e o modal
+    // fica em "Aguardando worker…" mesmo com QR já publicado.
+    const stopHeartbeat = startWorkerHeartbeatLoop(channel, accountId, startedAt);
+    const ok = await verifyPublisher(publisher);
+    if (!ok) {
+      stopHeartbeat();
+      continue;
+    }
+
     active.push({
       publisher,
       bullWorker: startSenderWorker(publisher),
-      stopHeartbeat: startWorkerHeartbeatLoop(channel, accountId, startedAt),
+      stopHeartbeat,
     });
   }
 

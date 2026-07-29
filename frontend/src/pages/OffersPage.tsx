@@ -1,24 +1,30 @@
 import { Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { api } from '../services/api.js';
-import type { OfferSentFilter, OffersPageResponse, SerializedOffer } from '../types/api.js';
+import type {
+  OfferDestinationFilter,
+  OfferOriginFilter,
+  OfferSentFilter,
+  OffersPageResponse,
+  SerializedOffer,
+} from '../types/api.js';
 import { ApiError } from '../types/api.js';
-import { AffiliateDelayModal } from '../components/offers/AffiliateDelayModal.js';
+import { CollectOffersModal } from '../components/offers/CollectOffersModal.js';
 import {
+  collectDeliveryErrors,
   DestinationBadges,
   OfferStatusBadge,
+  resolveOfferListStatus,
 } from '../components/offers/DestinationBadges.js';
 import { PlatformBadge } from '../components/offers/PlatformBadge.js';
+import { useConfirm } from '../components/feedback/ConfirmProvider.js';
 import { useToast } from '../components/feedback/ToastProvider.js';
 import { PageHeader } from '../components/layout/PageHeader.js';
 import { Alert } from '../components/ui/Alert.js';
 import { Button } from '../components/ui/Button.js';
 import { Checkbox } from '../components/ui/Checkbox.js';
-import { FilterChip, FilterGroup } from '../components/ui/FilterChip.js';
-import { Input } from '../components/ui/Input.js';
 import { Page } from '../components/ui/Layout.js';
 import { Spinner } from '../components/ui/Spinner.js';
 import {
@@ -31,14 +37,21 @@ import {
 } from '../components/ui/Table.js';
 import { formatCurrency, formatDate, truncateText } from '../utils/format.js';
 
-const FILTERS: Array<{ value: OfferSentFilter; label: string }> = [
-  { value: 'all', label: 'Todas' },
-  { value: 'pending', label: 'Pendentes' },
-  { value: 'sent', label: 'Enviadas' },
-];
+const selectClass =
+  'h-10 rounded-[10px] border border-border bg-bg-secondary px-3 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25';
 
-function parseFilter(value: string | null): OfferSentFilter {
-  if (value === 'pending' || value === 'sent') return value;
+function parseStatus(value: string | null): OfferSentFilter {
+  if (value === 'pending' || value === 'sent' || value === 'error') return value;
+  return 'all';
+}
+
+function parseOrigin(value: string | null): OfferOriginFilter {
+  if (value === 'mercado_livre' || value === 'amazon') return value;
+  return 'all';
+}
+
+function parseDestination(value: string | null): OfferDestinationFilter {
+  if (value === 'whatsapp' || value === 'telegram') return value;
   return 'all';
 }
 
@@ -58,15 +71,17 @@ function actionLabel(base: string, count: number): string {
 export function OffersPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { pushToast } = useToast();
+  const { confirm } = useConfirm();
 
-  const filter = parseFilter(searchParams.get('status'));
+  const status = parseStatus(searchParams.get('status'));
+  const origin = parseOrigin(searchParams.get('origin'));
+  const destination = parseDestination(searchParams.get('destination'));
   const page = parsePage(searchParams.get('page'));
 
   const [data, setData] = useState<OffersPageResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchLimit, setSearchLimit] = useState('');
-  const [delayModalOpen, setDelayModalOpen] = useState(false);
+  const [collectModalOpen, setCollectModalOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
@@ -86,15 +101,14 @@ export function OffersPage() {
   const loadOffers = useCallback(async () => {
     setError(null);
     try {
-      const response = await api.listOffers({ status: filter, page });
+      const response = await api.listOffers({ status, origin, destination, page });
       setData(response);
-      setSearchLimit(String(response.searchLimit));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao carregar ofertas');
     } finally {
       setLoading(false);
     }
-  }, [filter, page]);
+  }, [status, origin, destination, page]);
 
   useEffect(() => {
     setLoading(true);
@@ -103,7 +117,19 @@ export function OffersPage() {
 
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [filter, page]);
+  }, [status, origin, destination, page]);
+
+  function patchParams(patch: Record<string, string | null>) {
+    const params = new URLSearchParams(searchParams);
+    for (const [key, value] of Object.entries(patch)) {
+      if (value == null || value === 'all' || (key === 'page' && value === '1')) {
+        params.delete(key);
+      } else {
+        params.set(key, value);
+      }
+    }
+    setSearchParams(params);
+  }
 
   function toggleSelectOffer(id: string) {
     setSelectedIds((current) => {
@@ -130,67 +156,34 @@ export function OffersPage() {
     setSelectedIds(new Set());
   }
 
-  function setFilter(next: OfferSentFilter) {
-    const params = new URLSearchParams(searchParams);
-    if (next === 'all') params.delete('status');
-    else params.set('status', next);
-    params.delete('page');
-    setSearchParams(params);
-  }
-
-  function setPage(next: number) {
-    const params = new URLSearchParams(searchParams);
-    if (next <= 1) params.delete('page');
-    else params.set('page', String(next));
-    setSearchParams(params);
-  }
-
-  async function handleCollect() {
+  async function handleCollect(payload: {
+    searchLimit: number;
+    sendAfterCollect: boolean;
+    sendDelayMinutes?: number;
+  }) {
     setActionLoading(true);
     try {
-      await api.collectOffers();
+      await api.collectOffers(payload);
       pushToast('Coleta enfileirada com sucesso', 'success');
-    } catch (err) {
-      pushToast(err instanceof ApiError ? err.message : 'Falha ao enfileirar coleta', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  }
-
-  async function handleSearchLimitSubmit(event: FormEvent) {
-    event.preventDefault();
-    const value = Number.parseInt(searchLimit, 10);
-    if (!Number.isFinite(value)) return;
-
-    setActionLoading(true);
-    try {
-      await api.patchSearchLimit(value);
-      pushToast('Limite de busca salvo', 'success');
       await loadOffers();
     } catch (err) {
-      pushToast(err instanceof ApiError ? err.message : 'Falha ao salvar limite', 'error');
+      pushToast(err instanceof ApiError ? err.message : 'Falha ao enfileirar coleta', 'error');
+      throw err;
     } finally {
       setActionLoading(false);
     }
-  }
-
-  async function handleAffiliateDelaySave(body: {
-    affiliateDelayMs: number;
-    affiliateBacklogDelayMinutes: number;
-    affiliateBacklogThreshold: number;
-  }) {
-    await api.patchAffiliateDelay(body);
-    pushToast('Configuração de delay salva', 'success');
-    await loadOffers();
   }
 
   async function handleClearSelected() {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
 
-    const ok = window.confirm(
-      `Remover ${ids.length} oferta(s) selecionada(s)? Elas não serão enviadas.`,
-    );
+    const ok = await confirm({
+      title: 'Remover ofertas',
+      message: `Remover ${ids.length} oferta(s) selecionada(s)? Elas não serão enviadas.`,
+      confirmLabel: 'Remover',
+      tone: 'danger',
+    });
     if (!ok) return;
 
     setActionLoading(true);
@@ -217,7 +210,12 @@ export function OffersPage() {
   }
 
   async function handleDeleteOffer(id: string) {
-    const ok = window.confirm('Apagar esta oferta pendente? Ela não será enviada.');
+    const ok = await confirm({
+      title: 'Apagar oferta',
+      message: 'Apagar esta oferta pendente? Ela não será enviada.',
+      confirmLabel: 'Apagar',
+      tone: 'danger',
+    });
     if (!ok) return;
 
     setActionLoading(true);
@@ -242,9 +240,11 @@ export function OffersPage() {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
 
-    const ok = window.confirm(
-      `Forçar envio de ${ids.length} oferta(s)? Ignora janela operacional e delay entre envios.`,
-    );
+    const ok = await confirm({
+      title: 'Forçar envio',
+      message: `Forçar envio de ${ids.length} oferta(s)? Ignora janela operacional e delay entre envios.`,
+      confirmLabel: 'Enviar agora',
+    });
     if (!ok) return;
 
     setActionLoading(true);
@@ -274,11 +274,6 @@ export function OffersPage() {
     return <Spinner label="Carregando ofertas…" />;
   }
 
-  const delayLabel =
-    data?.affiliateDelay.backlogDelayMinutes === 1
-      ? '1 min'
-      : `${data?.affiliateDelay.backlogDelayMinutes ?? 0} min`;
-
   const selectionActionsDisabled = actionLoading || selectedCount === 0;
 
   return (
@@ -287,35 +282,9 @@ export function OffersPage() {
         title="Ofertas"
         actions={
           <div className="flex flex-wrap items-center gap-4">
-            <Button onClick={() => void handleCollect()} disabled={actionLoading}>
+            <Button onClick={() => setCollectModalOpen(true)} disabled={actionLoading}>
               Buscar novos anúncios
             </Button>
-            <form
-              className="flex flex-wrap items-center gap-2"
-              onSubmit={(event) => void handleSearchLimitSubmit(event)}
-            >
-              <span className="whitespace-nowrap text-sm text-text-secondary">Buscar até</span>
-              <Input
-                id="search-limit-input"
-                type="number"
-                className="!w-[72px] text-center"
-                wrapperClassName="!gap-0"
-                value={searchLimit}
-                onChange={(event) => setSearchLimit(event.target.value)}
-                min={1}
-                max={500}
-                step={1}
-              />
-              <span className="whitespace-nowrap text-sm text-text-secondary">ofertas</span>
-              <Button type="submit" variant="secondary" disabled={actionLoading}>
-                Salvar
-              </Button>
-            </form>
-            {data ? (
-              <Button variant="secondary" onClick={() => setDelayModalOpen(true)} disabled={actionLoading}>
-                Delay ({delayLabel})
-              </Button>
-            ) : null}
             {data?.database.available ? (
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -345,17 +314,51 @@ export function OffersPage() {
         </Alert>
       ) : null}
 
-      <FilterGroup>
-        {FILTERS.map((item) => (
-          <FilterChip
-            key={item.value}
-            active={filter === item.value}
-            onClick={() => setFilter(item.value)}
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1 text-sm text-text-secondary">
+          Origem
+          <select
+            className={selectClass}
+            value={origin}
+            onChange={(event) =>
+              patchParams({ origin: event.target.value, page: null })
+            }
           >
-            {item.label}
-          </FilterChip>
-        ))}
-      </FilterGroup>
+            <option value="all">Todos</option>
+            <option value="mercado_livre">Mercado Livre</option>
+            <option value="amazon">Amazon</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-text-secondary">
+          Destino
+          <select
+            className={selectClass}
+            value={destination}
+            onChange={(event) =>
+              patchParams({ destination: event.target.value, page: null })
+            }
+          >
+            <option value="all">Todos</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="telegram">Telegram</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-text-secondary">
+          Status
+          <select
+            className={selectClass}
+            value={status}
+            onChange={(event) =>
+              patchParams({ status: event.target.value, page: null })
+            }
+          >
+            <option value="all">Todos</option>
+            <option value="pending">Pendente</option>
+            <option value="error">Erro</option>
+            <option value="sent">Enviado</option>
+          </select>
+        </label>
+      </div>
 
       {data ? (
         <>
@@ -371,33 +374,35 @@ export function OffersPage() {
                     aria-label="Selecionar todas as ofertas pendentes da página"
                   />
                 </TableHeaderCell>
-                <TableHeaderCell>Origem</TableHeaderCell>
-                <TableHeaderCell>ID</TableHeaderCell>
-                <TableHeaderCell>Destino</TableHeaderCell>
                 <TableHeaderCell>Título</TableHeaderCell>
+                <TableHeaderCell>Origem</TableHeaderCell>
                 <TableHeaderCell>Score</TableHeaderCell>
+                <TableHeaderCell>Destino</TableHeaderCell>
                 <TableHeaderCell>Preço</TableHeaderCell>
                 <TableHeaderCell>Desconto</TableHeaderCell>
                 <TableHeaderCell>Status</TableHeaderCell>
-                <TableHeaderCell>Previsão de envio</TableHeaderCell>
-                <TableHeaderCell>Coletada em</TableHeaderCell>
+                <TableHeaderCell>Envio agendado</TableHeaderCell>
+                <TableHeaderCell>Coleta</TableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {!data.database.available ? (
                 <TableRow>
-                  <TableCell colSpan={11}>{data.database.error ?? 'Banco indisponível'}</TableCell>
+                  <TableCell colSpan={10}>{data.database.error ?? 'Banco indisponível'}</TableCell>
                 </TableRow>
               ) : data.offers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11}>Nenhuma oferta encontrada.</TableCell>
+                  <TableCell colSpan={10}>Nenhuma oferta encontrada.</TableCell>
                 </TableRow>
               ) : (
                 data.offers.map((offer) => {
+                  const deliveries = data.deliveriesByOfferId[offer.id];
                   const scheduleAt = offer.sentAt
                     ? null
                     : (data.scheduleByOfferId[offer.id] ?? null);
                   const sendable = isOfferSendable(offer);
+                  const listStatus = resolveOfferListStatus(offer, deliveries);
+                  const errorMessage = collectDeliveryErrors(deliveries);
 
                   return (
                     <TableRow key={offer.id}>
@@ -410,22 +415,21 @@ export function OffersPage() {
                         />
                       </TableCell>
                       <TableCell>
-                        <PlatformBadge offer={offer} />
-                      </TableCell>
-                      <TableCell>
                         <Link className="text-primary hover:underline" to={`/offers/${offer.id}`}>
-                          {truncateText(offer.id, 10)}
+                          {truncateText(offer.title, 50)}
                         </Link>
                       </TableCell>
                       <TableCell>
-                        <DestinationBadges deliveries={data.deliveriesByOfferId[offer.id]} />
+                        <PlatformBadge offer={offer} />
                       </TableCell>
-                      <TableCell>{truncateText(offer.title, 50)}</TableCell>
                       <TableCell>{offer.score}</TableCell>
+                      <TableCell>
+                        <DestinationBadges deliveries={deliveries} />
+                      </TableCell>
                       <TableCell>{formatCurrency(offer.price)}</TableCell>
                       <TableCell>{offer.discount != null ? `${offer.discount}%` : '—'}</TableCell>
                       <TableCell>
-                        <OfferStatusBadge sentAt={offer.sentAt} />
+                        <OfferStatusBadge status={listStatus} errorMessage={errorMessage} />
                       </TableCell>
                       <TableCell>{scheduleAt ? formatDate(scheduleAt) : '—'}</TableCell>
                       <TableCell>
@@ -457,7 +461,7 @@ export function OffersPage() {
               <button
                 type="button"
                 className="cursor-pointer border-0 bg-transparent p-0 font-medium text-primary hover:underline"
-                onClick={() => setPage(data.page - 1)}
+                onClick={() => patchParams({ page: String(data.page - 1) })}
               >
                 ← Anterior
               </button>
@@ -469,7 +473,7 @@ export function OffersPage() {
               <button
                 type="button"
                 className="cursor-pointer border-0 bg-transparent p-0 font-medium text-primary hover:underline"
-                onClick={() => setPage(data.page + 1)}
+                onClick={() => patchParams({ page: String(data.page + 1) })}
               >
                 Próxima →
               </button>
@@ -478,14 +482,12 @@ export function OffersPage() {
         </>
       ) : null}
 
-      {data ? (
-        <AffiliateDelayModal
-          open={delayModalOpen}
-          settings={data.affiliateDelay}
-          onClose={() => setDelayModalOpen(false)}
-          onSave={handleAffiliateDelaySave}
-        />
-      ) : null}
+      <CollectOffersModal
+        open={collectModalOpen}
+        defaultSearchLimit={Math.min(50, data?.searchLimit ?? 20)}
+        onClose={() => setCollectModalOpen(false)}
+        onSubmit={handleCollect}
+      />
     </Page>
   );
 }

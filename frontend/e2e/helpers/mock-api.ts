@@ -50,6 +50,7 @@ export const MOCK_SETTINGS = {
     },
     canSpawnWorkers: true,
   },
+  novncPort: null,
   mlCouponsUrl: 'https://www.mercadolivre.com.br/afiliados/coupons#hub',
   amazonAffiliate: { baseUrl: 'https://www.amazon.com.br/', affiliateLinkPrefix: '', storeId: '' },
 };
@@ -181,6 +182,8 @@ export async function mockOffersApi(page: Page): Promise<void> {
         scheduleByOfferId: {},
         deliveriesByOfferId: {},
         filter: 'all',
+        origin: 'all',
+        destination: 'all',
         page: 1,
         pageSize: 20,
         total: 1,
@@ -198,9 +201,14 @@ export async function mockOffersApi(page: Page): Promise<void> {
 
   await page.route('**/api/v1/offers/collect', async (route) => {
     await route.fulfill({
-      status: 200,
+      status: 202,
       contentType: 'application/json',
-      body: JSON.stringify({ queued: true }),
+      body: JSON.stringify({
+        queued: true,
+        searchLimit: 20,
+        sendAfterCollect: false,
+        sendDelayMinutes: null,
+      }),
     });
   });
 
@@ -280,6 +288,7 @@ export async function mockAccountsApi(page: Page): Promise<void> {
           integrationPlatforms: [{ id: 'whatsapp', label: 'WhatsApp' }],
           marketplacePlatforms: [{ id: 'mercado_livre', label: 'Mercado Livre' }],
           canSpawnWorkers: true,
+          novncPort: null,
         }),
       });
       return;

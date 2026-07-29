@@ -15,10 +15,12 @@ import {
   WhatsAppLoginModal,
 } from '../components/accounts/ConnectModals.js';
 import { useToast } from '../components/feedback/ToastProvider.js';
+import { useConfirm } from '../components/feedback/ConfirmProvider.js';
 import { PageHeader } from '../components/layout/PageHeader.js';
 import { Alert } from '../components/ui/Alert.js';
 import { Page } from '../components/ui/Layout.js';
 import { Spinner } from '../components/ui/Spinner.js';
+import { openNovncTab } from '../utils/novnc.js';
 
 type ConfigTarget = {
   accountId: string;
@@ -27,6 +29,7 @@ type ConfigTarget = {
 
 export function AccountsPage() {
   const { pushToast } = useToast();
+  const { confirm } = useConfirm();
 
   const [data, setData] = useState<AccountsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -144,10 +147,18 @@ export function AccountsPage() {
                   )
                 }
                 onDelete={() => {
-                  if (!window.confirm(`Remover a conta ${card.account.label}?`)) return;
-                  void reloadAfter(async () => {
-                    await api.deleteAccount(card.account.id, card.account.platform);
-                  });
+                  void (async () => {
+                    const ok = await confirm({
+                      title: 'Remover conta',
+                      message: `Remover a conta ${card.account.label}?`,
+                      confirmLabel: 'Remover',
+                      tone: 'danger',
+                    });
+                    if (!ok) return;
+                    await reloadAfter(async () => {
+                      await api.deleteAccount(card.account.id, card.account.platform);
+                    });
+                  })();
                 }}
               />
             ))
@@ -184,17 +195,28 @@ export function AccountsPage() {
                     platform: card.account.platform,
                   })
                 }
-                onLogin={() => setMlLoginAccountId(card.account.id)}
+                onLogin={() => {
+                  openNovncTab(data.novncPort);
+                  setMlLoginAccountId(card.account.id);
+                }}
                 onToggle={() =>
                   void reloadAfter(() =>
                     api.toggleAccount(card.account.id, card.account.platform),
                   )
                 }
                 onDelete={() => {
-                  if (!window.confirm(`Remover a conta ${card.account.label}?`)) return;
-                  void reloadAfter(async () => {
-                    await api.deleteAccount(card.account.id, card.account.platform);
-                  });
+                  void (async () => {
+                    const ok = await confirm({
+                      title: 'Remover conta',
+                      message: `Remover a conta ${card.account.label}?`,
+                      confirmLabel: 'Remover',
+                      tone: 'danger',
+                    });
+                    if (!ok) return;
+                    await reloadAfter(async () => {
+                      await api.deleteAccount(card.account.id, card.account.platform);
+                    });
+                  })();
                 }}
               />
             ))
@@ -266,7 +288,12 @@ export function AccountsPage() {
         onConnected={() => {
           pushToast('WhatsApp conectado', 'success');
           setWaLoginAccountId(null);
-          void loadAccounts();
+          // Creds podem atrasar um instante no volume compartilhado com o worker.
+          void (async () => {
+            await loadAccounts();
+            await new Promise((resolve) => setTimeout(resolve, 800));
+            await loadAccounts();
+          })();
         }}
       />
 

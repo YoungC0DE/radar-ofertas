@@ -10,6 +10,7 @@ import {
 } from '../../src/accounts/types.js';
 import type { Account, AccountPlatform } from '../../src/accounts/types.js';
 import { env } from '../../src/config/env.js';
+import { getWhatsAppConnectFromRedis } from '../../src/utils/redis-state.js';
 import { isPlaceholderChannelId } from '../../src/whatsapp/index.js';
 import {
   resolveWhatsAppChannelInviteLink,
@@ -21,6 +22,7 @@ import {
   getWhatsAppSessionStatusForAuthPath,
 } from './session-model.js';
 import { canManagerSpawnWorkers } from './process-model.js';
+import { resolveNovncPort } from '../../src/config/novnc.js';
 import { loadTelegramAccountView, saveTelegramAccountConfig } from './integration-model.js';
 import type { SaveResult } from './shared/save-result.js';
 import {
@@ -74,6 +76,7 @@ export interface AccountsPageData {
   integrationPlatforms: { id: AccountPlatform; label: string }[];
   marketplacePlatforms: { id: AccountPlatform; label: string }[];
   canSpawnWorkers: boolean;
+  novncPort: number | null;
   saved: string | null;
   error: string | null;
   openConfigAccountId: string | null;
@@ -165,7 +168,17 @@ async function reconcileIntegrationEnabledStates(cards: AccountCardData[]): Prom
 async function buildAccountConnectionMeta(account: Account): Promise<AccountConnectionMeta> {
   if (account.platform === 'whatsapp') {
     const session = await getWhatsAppSessionStatusForAuthPath(account.config.authPath);
-    return { loggedIn: session.ok, detail: session.detail };
+    if (session.ok) {
+      return { loggedIn: true, detail: session.detail };
+    }
+
+    // Fallback: Redis já publicou connected e o volume ainda não refletiu creds.json.
+    const redis = await getWhatsAppConnectFromRedis(account.id);
+    if (redis?.status === 'connected') {
+      return { loggedIn: true, detail: 'Sessão WhatsApp ativa' };
+    }
+
+    return { loggedIn: false, detail: session.detail };
   }
 
   if (account.platform === 'telegram') {
@@ -228,6 +241,7 @@ export async function loadAccountsData(
     integrationPlatforms: platformOptions(INTEGRATION_PLATFORMS),
     marketplacePlatforms: platformOptions(MARKETPLACE_PLATFORMS),
     canSpawnWorkers: canManagerSpawnWorkers(),
+    novncPort: resolveNovncPort(),
     saved,
     error,
     openConfigAccountId,

@@ -12,6 +12,7 @@ import type {
 } from '../types/api.js';
 import { ApiError } from '../types/api.js';
 import { useToast } from '../components/feedback/ToastProvider.js';
+import { useConfirm } from '../components/feedback/ConfirmProvider.js';
 import { PageHeader } from '../components/layout/PageHeader.js';
 import { Alert } from '../components/ui/Alert.js';
 import { Badge } from '../components/ui/Badge.js';
@@ -294,6 +295,7 @@ function PlatformSourcesTable({
 export function SourcesPage() {
   const { channel: channelParam } = useParams();
   const { pushToast } = useToast();
+  const { confirm } = useConfirm();
 
   const channel = isSourceChannel(channelParam) ? channelParam : null;
 
@@ -361,7 +363,13 @@ export function SourcesPage() {
   }
 
   async function handleRemove(sourceId: string, platform: 'ml' | 'amazon') {
-    if (!window.confirm('Remover este link?')) return;
+    const ok = await confirm({
+      title: 'Remover link',
+      message: 'Remover este link?',
+      confirmLabel: 'Remover',
+      tone: 'danger',
+    });
+    if (!ok) return;
     try {
       const response =
         platform === 'ml'

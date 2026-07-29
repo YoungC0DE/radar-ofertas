@@ -1,8 +1,15 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { handleCollectOffers, loadDashboardData } from '../../manager/models/dashboard-model.js';
+import {
+  saveSearchLimit,
+  saveSenderDelayMinutes,
+  getSearchLimit,
+} from '../../src/config/queue-config-store.js';
 import { getMetrics } from '../../src/utils/metrics.js';
 import { ValidationError } from '../errors/api-errors.js';
+import { parseBody } from '../lib/validate.js';
+import { collectOffersBodySchema } from '../schemas/offers.schemas.js';
 import { serializeDashboard } from '../serializers/dashboard.serializer.js';
 
 export async function getDashboardHandler(
@@ -14,14 +21,26 @@ export async function getDashboardHandler(
 }
 
 export async function collectOffersHandler(
-  _request: FastifyRequest,
+  request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
+  const body = parseBody(collectOffersBodySchema, request.body ?? {});
+  const searchLimit = body.searchLimit ?? getSearchLimit();
+  await saveSearchLimit(searchLimit);
+  if (body.sendAfterCollect && body.sendDelayMinutes != null) {
+    await saveSenderDelayMinutes(body.sendDelayMinutes);
+  }
+
   const result = await handleCollectOffers();
   if ('error' in result) {
     throw new ValidationError(result.error);
   }
-  reply.status(202).send({ queued: true });
+  reply.status(202).send({
+    queued: true,
+    searchLimit,
+    sendAfterCollect: body.sendAfterCollect,
+    sendDelayMinutes: body.sendDelayMinutes ?? null,
+  });
 }
 
 export async function getMetricsHandler(

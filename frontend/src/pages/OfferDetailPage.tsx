@@ -7,6 +7,7 @@ import type { OfferDetailResponse } from '../types/api.js';
 import { ApiError } from '../types/api.js';
 import { PlatformBadge } from '../components/offers/PlatformBadge.js';
 import { OfferStatusBadge } from '../components/offers/DestinationBadges.js';
+import { useConfirm } from '../components/feedback/ConfirmProvider.js';
 import { useToast } from '../components/feedback/ToastProvider.js';
 import { Alert } from '../components/ui/Alert.js';
 import { Button } from '../components/ui/Button.js';
@@ -47,6 +48,7 @@ export function OfferDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { pushToast } = useToast();
+  const { confirm } = useConfirm();
 
   const [data, setData] = useState<OfferDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -97,7 +99,12 @@ export function OfferDetailPage() {
 
   async function handleDelete() {
     if (!id) return;
-    const ok = window.confirm('Apagar esta oferta pendente? Ela não será enviada.');
+    const ok = await confirm({
+      title: 'Apagar oferta',
+      message: 'Apagar esta oferta pendente? Ela não será enviada.',
+      confirmLabel: 'Apagar',
+      tone: 'danger',
+    });
     if (!ok) return;
 
     setActionLoading(true);
@@ -230,7 +237,12 @@ export function OfferDetailPage() {
           />
         ) : null}
         <DetailRow label="Mais vendido" value={offer.bestSeller ? '🏆 Sim' : '—'} />
-        <DetailRow label="Status" value={<OfferStatusBadge sentAt={offer.sentAt} />} />
+        <DetailRow
+          label="Status"
+          value={
+            <OfferStatusBadge status={offer.sentAt ? 'sent' : 'pending'} />
+          }
+        />
         <DetailRow label="Salva em" value={formatDate(offer.createdAt)} />
         <DetailRow label="Enviada em" value={formatDate(offer.sentAt)} />
         <DetailRow

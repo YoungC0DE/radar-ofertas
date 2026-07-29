@@ -36,7 +36,14 @@ export async function listOffersHandler(
   reply: FastifyReply,
 ): Promise<void> {
   const query = parseQuery(offersListQuerySchema, request.query);
-  const data = await loadOffersPage(query.status, query.page);
+  const data = await loadOffersPage(
+    {
+      status: query.status,
+      origin: query.origin,
+      destination: query.destination,
+    },
+    query.page,
+  );
   reply.status(200).send(serializeOffersPage(data));
 }
 

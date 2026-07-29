@@ -20,35 +20,42 @@ const RESOLVE_TTL_SEC = 120;
 const DEFAULT_TIMEOUT_MS = 25_000;
 
 let redisClient: Redis | null = null;
-let redisFailed = false;
+let connectPromise: Promise<boolean> | null = null;
 let listenerRunning = false;
 let stopListener: (() => void) | null = null;
 
 function getRedis(): Redis | null {
-  if (!env.REDIS_ENABLED || redisFailed) return null;
+  if (!env.REDIS_ENABLED) return null;
   if (!redisClient) {
     redisClient = new Redis(env.REDIS_URL, {
       maxRetriesPerRequest: 1,
       lazyConnect: true,
       enableOfflineQueue: false,
     });
-    redisClient.on('error', () => {
-      redisFailed = true;
+    redisClient.on('error', (error) => {
+      logger.warn({ error }, 'Redis client error (invite-resolve)');
     });
   }
   return redisClient;
 }
 
 async function ensureConnected(redis: Redis): Promise<boolean> {
-  try {
-    if (redis.status !== 'ready') {
-      await redis.connect();
-    }
-    return true;
-  } catch {
-    redisFailed = true;
-    return false;
+  if (redis.status === 'ready') return true;
+
+  if (!connectPromise) {
+    connectPromise = redis
+      .connect()
+      .then(() => true)
+      .catch((error: unknown) => {
+        logger.warn({ error }, 'Falha ao conectar no Redis (invite-resolve)');
+        return false;
+      })
+      .finally(() => {
+        connectPromise = null;
+      });
   }
+
+  return connectPromise;
 }
 
 function sleep(ms: number): Promise<void> {

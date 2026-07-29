@@ -9,6 +9,7 @@ import makeWASocket, {
   type WASocket,
   type WAMessage,
   fetchLatestBaileysVersion,
+  fetchLatestWaWebVersion,
   makeCacheableSignalKeyStore,
   useMultiFileAuthState,
 } from 'baileys';
@@ -48,6 +49,9 @@ interface WhatsAppSession {
   allowReconnect: boolean;
   qrListener?: (qr: string) => void;
   ownerHeartbeatTimer?: NodeJS.Timeout;
+  /** Renova TTL do QR no Redis enquanto aguarda leitura. */
+  connectStateRefreshTimer?: NodeJS.Timeout;
+  lastQr?: string;
 }
 
 const sessions = new Map<string, WhatsAppSession>();
@@ -81,7 +85,38 @@ function syncConnectStateToRedis(
   qr: string | null = null,
   error: string | null = null,
 ): void {
+  if (status === 'qr' && qr) {
+    session.lastQr = qr;
+  }
+  if (status !== 'qr') {
+    session.lastQr = undefined;
+  }
   void publishWhatsAppConnectState(session.accountId, { status, qr, error });
+}
+
+const CONNECT_STATE_REFRESH_MS = 30_000;
+
+function startConnectStateRefresh(
+  session: WhatsAppSession,
+  status: 'connecting' | 'qr',
+): void {
+  stopConnectStateRefresh(session);
+  session.connectStateRefreshTimer = setInterval(() => {
+    const qr = status === 'qr' ? (session.lastQr ?? null) : null;
+    void publishWhatsAppConnectState(session.accountId, {
+      status,
+      qr,
+      error: null,
+    });
+  }, CONNECT_STATE_REFRESH_MS);
+  session.connectStateRefreshTimer.unref?.();
+}
+
+function stopConnectStateRefresh(session: WhatsAppSession): void {
+  if (session.connectStateRefreshTimer) {
+    clearInterval(session.connectStateRefreshTimer);
+    session.connectStateRefreshTimer = undefined;
+  }
 }
 
 // --- Dono único da sessão (lock entre processos) -----------------------------
@@ -388,12 +423,35 @@ export async function validateWhatsAppChannel(
   }
 }
 
+/**
+ * Preferência pela versão atual do WhatsApp Web.
+ * `fetchLatestBaileysVersion` pode ficar defasado e o WA responde 405 (client_too_old)
+ * antes de emitir QR — o painel fica em "connecting" sem código.
+ */
+async function resolveWhatsAppVersion(): Promise<[number, number, number]> {
+  try {
+    const waWeb = await fetchLatestWaWebVersion();
+    if (waWeb.version?.length === 3) {
+      logger.info({ version: waWeb.version, source: 'wa-web' }, 'Versão WhatsApp resolvida');
+      return waWeb.version as [number, number, number];
+    }
+  } catch (error) {
+    logger.warn({ error }, 'Falha ao buscar versão do WhatsApp Web — usando fallback Baileys');
+  }
+
+  const baileys = await fetchLatestBaileysVersion();
+  logger.info({ version: baileys.version, source: 'baileys' }, 'Versão WhatsApp resolvida');
+  return baileys.version as [number, number, number];
+}
+
+const CLIENT_TOO_OLD_STATUS = 405;
+
 async function createSocket(
   session: WhatsAppSession,
   authState: Awaited<ReturnType<typeof useMultiFileAuthState>>['state'],
   saveCreds: () => Promise<void>,
 ): Promise<WASocket> {
-  const { version } = await fetchLatestBaileysVersion();
+  const version = await resolveWhatsAppVersion();
 
   const sock = makeWASocket({
     version,
@@ -413,27 +471,41 @@ async function createSocket(
 
     if (qr) {
       logger.info({ authPath: session.authPath }, 'Aguardando leitura do QR code WhatsApp');
-      printQrCode(qr);
       session.qrListener?.(qr);
       syncConnectStateToRedis(session, 'qr', qr);
+      startConnectStateRefresh(session, 'qr');
+      printQrCode(qr);
     }
 
     if (connection === 'open') {
       session.socket = sock;
       session.isConnecting = false;
       session.qrListener = undefined;
-      void writeOwnerLock(session);
-      startOwnerHeartbeat(session);
-      syncConnectStateToRedis(session, 'connected');
-      logger.info({ authPath: session.authPath }, 'WhatsApp connected');
+      stopConnectStateRefresh(session);
+      // Persiste credenciais antes de publicar "connected" — senão o painel notifica
+      // login e o GET /accounts ainda vê creds.json ausente (race no volume).
+      void (async () => {
+        try {
+          await saveCreds();
+        } catch (error) {
+          logger.warn({ error, authPath: session.authPath }, 'Falha ao persistir credenciais WhatsApp');
+        }
+        void writeOwnerLock(session);
+        startOwnerHeartbeat(session);
+        syncConnectStateToRedis(session, 'connected');
+        logger.info({ authPath: session.authPath }, 'WhatsApp connected');
+      })();
     }
 
     if (connection === 'close') {
       session.socket = undefined;
       session.isConnecting = false;
       stopOwnerHeartbeat(session);
+      stopConnectStateRefresh(session);
 
-      const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
+      const boom = lastDisconnect?.error as Boom | undefined;
+      const statusCode = boom?.output?.statusCode;
+      const disconnectMessage = boom?.message ?? String(lastDisconnect?.error ?? 'unknown');
 
       if (statusCode === DisconnectReason.loggedOut) {
         logger.error({ authPath: session.authPath }, 'WhatsApp logged out — limpando credenciais');
@@ -453,11 +525,28 @@ async function createSocket(
         return;
       }
 
+      if (statusCode === CLIENT_TOO_OLD_STATUS) {
+        logger.error(
+          { authPath: session.authPath, statusCode, version, disconnectMessage },
+          'WhatsApp rejeitou o cliente (405) — versão provavelmente desatualizada',
+        );
+        syncConnectStateToRedis(
+          session,
+          'error',
+          null,
+          'WhatsApp rejeitou a conexão (cliente desatualizado). Reinicie o worker e tente Logar de novo.',
+        );
+      }
+
       if (session.allowReconnect) {
-        logger.warn({ authPath: session.authPath }, 'WhatsApp disconnected, reconnecting in 3s...');
+        const delayMs = statusCode === CLIENT_TOO_OLD_STATUS ? 15_000 : 3_000;
+        logger.warn(
+          { authPath: session.authPath, statusCode, disconnectMessage, delayMs },
+          'WhatsApp disconnected, reconnecting...',
+        );
         setTimeout(
           () => void connectWhatsApp({ authPath: session.authPath, accountId: session.accountId }).catch(() => {}),
-          3000,
+          delayMs,
         );
       }
     }
@@ -501,24 +590,51 @@ export async function connectWhatsApp(options?: ConnectWhatsAppOptions): Promise
   session.isConnecting = true;
   session.allowReconnect = true;
   syncConnectStateToRedis(session, 'connecting');
+  startConnectStateRefresh(session, 'connecting');
   const { state, saveCreds } = await useMultiFileAuthState(session.authPath);
   const sock = await createSocket(session, state, saveCreds);
 
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('WhatsApp connection timeout')), 120_000);
+    const PAIRING_TIMEOUT_MS = 10 * 60_000;
+    const CONNECT_TIMEOUT_MS = 120_000;
+    let settled = false;
+    let timeout = setTimeout(onTimeout, CONNECT_TIMEOUT_MS);
 
-    sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
+    function settle(action: () => void): void {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      action();
+    }
+
+    function onTimeout(): void {
+      settle(() => reject(new Error('WhatsApp connection timeout')));
+    }
+
+    function refreshTimeout(ms: number): void {
+      if (settled) return;
+      clearTimeout(timeout);
+      timeout = setTimeout(onTimeout, ms);
+    }
+
+    sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+      if (qr) {
+        // QR renovado: usuário ainda pode escanear — não derruba o worker em 2 min.
+        refreshTimeout(PAIRING_TIMEOUT_MS);
+        return;
+      }
+
       if (connection === 'open') {
-        clearTimeout(timeout);
-        resolve(sock);
+        settle(() => resolve(sock));
         return;
       }
 
       if (connection === 'close') {
         const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
         if (statusCode === DisconnectReason.loggedOut) {
-          clearTimeout(timeout);
-          reject(new Error('WhatsApp logged out — credenciais inválidas, reconecte para novo QR'));
+          settle(() =>
+            reject(new Error('WhatsApp logged out — credenciais inválidas, reconecte para novo QR')),
+          );
         }
       }
     });
@@ -531,6 +647,7 @@ export async function disconnectWhatsApp(authPath = defaultAuthPath): Promise<vo
   const sock = session.socket;
   session.socket = undefined;
   session.isConnecting = false;
+  stopConnectStateRefresh(session);
 
   await releaseOwnerLock(session);
 

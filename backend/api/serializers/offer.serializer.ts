@@ -41,6 +41,8 @@ export function serializeOffersPage(data: OffersPageData) {
     scheduleByOfferId,
     deliveriesByOfferId,
     filter: data.filter,
+    origin: data.origin,
+    destination: data.destination,
     page: data.page,
     pageSize: data.pageSize,
     total: data.total,

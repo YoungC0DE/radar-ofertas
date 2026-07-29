@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { MercadoLivreConnectState, WhatsAppConnectState } from '../../types/api.js';
+import { usePolling } from '../../hooks/usePolling.js';
+import { buildNovncUrl } from '../../utils/novnc.js';
 import { Button } from '../ui/Button.js';
 import { Modal } from '../ui/Modal.js';
-import { usePolling } from '../../hooks/usePolling.js';
 
 const QR_API = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=';
+const IDLE_ML_STATE: MercadoLivreConnectState = { status: 'idle', error: null, novncPort: null };
 
 type WhatsAppLoginModalProps = {
   open: boolean;
@@ -15,6 +17,29 @@ type WhatsAppLoginModalProps = {
   onPoll: (accountId: string) => Promise<WhatsAppConnectState>;
   onConnected: () => void;
 };
+
+function shouldKeepWhatsAppPolling(status: WhatsAppConnectState['status']): boolean {
+  return status !== 'connected';
+}
+
+/** Evita regressão idle/error sobrescrever QR já obtido no poll. */
+function mergeWhatsAppState(
+  previous: WhatsAppConnectState,
+  next: WhatsAppConnectState,
+): WhatsAppConnectState {
+  if (next.status === 'idle' && (previous.status === 'connecting' || previous.status === 'qr')) {
+    return previous;
+  }
+  if (
+    next.status === 'connecting' &&
+    previous.status === 'qr' &&
+    previous.qr &&
+    !next.qr
+  ) {
+    return previous;
+  }
+  return next;
+}
 
 export function WhatsAppLoginModal({
   open,
@@ -29,34 +54,58 @@ export function WhatsAppLoginModal({
     qr: null,
     error: null,
   });
+  const onStartRef = useRef(onStart);
+  const onPollRef = useRef(onPoll);
+  const onConnectedRef = useRef(onConnected);
+  onStartRef.current = onStart;
+  onPollRef.current = onPoll;
+  onConnectedRef.current = onConnected;
 
   useEffect(() => {
-    if (!open || !accountId) return;
+    if (!open || !accountId) {
+      setState({ status: 'idle', qr: null, error: null });
+      return;
+    }
     setState({ status: 'connecting', qr: null, error: null });
-    void onStart(accountId).then(setState).catch(() => {
-      setState({ status: 'error', qr: null, error: 'Falha ao iniciar conexão' });
-    });
-  }, [open, accountId, onStart]);
+    let cancelled = false;
+    void onStartRef.current(accountId)
+      .then((next) => {
+        if (!cancelled) setState((prev) => mergeWhatsAppState(prev, next));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setState({ status: 'error', qr: null, error: 'Falha ao iniciar conexão' });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, accountId]);
 
   usePolling(
     () => {
-      if (!accountId) return Promise.resolve(state);
-      return onPoll(accountId);
+      if (!accountId) {
+        return Promise.resolve({ status: 'idle', qr: null, error: null } satisfies WhatsAppConnectState);
+      }
+      return onPollRef.current(accountId);
     },
     (next) => {
-      setState(next);
-      if (next.status === 'connected') {
-        onConnected();
-      }
+      setState((prev) => {
+        const merged = mergeWhatsAppState(prev, next);
+        if (merged.status === 'connected' && prev.status !== 'connected') {
+          onConnectedRef.current();
+        }
+        return merged;
+      });
     },
     1500,
-    open && accountId != null && state.status !== 'connected' && state.status !== 'error',
+    open && accountId != null && shouldKeepWhatsAppPolling(state.status),
   );
 
   function renderStatus() {
     switch (state.status) {
       case 'connecting':
-        return 'Iniciando conexão…';
+        return state.error || 'Iniciando conexão…';
       case 'qr':
         return 'Escaneie o QR code com o WhatsApp:';
       case 'connected':
@@ -97,7 +146,9 @@ export function WhatsAppLoginModal({
             </p>
           </div>
         ) : null}
-        {state.error ? <p className="text-sm text-error">{state.error}</p> : null}
+        {state.error && state.status !== 'connecting' ? (
+          <p className="text-sm text-error">{state.error}</p>
+        ) : null}
       </div>
     </Modal>
   );
@@ -124,25 +175,46 @@ export function MercadoLivreLoginModal({
   onCancel,
   onConnected,
 }: MercadoLivreLoginModalProps) {
-  const [state, setState] = useState<MercadoLivreConnectState>({ status: 'idle', error: null });
+  const [state, setState] = useState<MercadoLivreConnectState>(IDLE_ML_STATE);
   const [finishing, setFinishing] = useState(false);
+  const onStartRef = useRef(onStart);
+  const onPollRef = useRef(onPoll);
+  const onConnectedRef = useRef(onConnected);
+  onStartRef.current = onStart;
+  onPollRef.current = onPoll;
+  onConnectedRef.current = onConnected;
 
   useEffect(() => {
-    if (!open || !accountId) return;
-    setState({ status: 'opening', error: null });
-    void onStart(accountId).then(setState).catch(() => {
-      setState({ status: 'error', error: 'Falha ao abrir navegador' });
-    });
-  }, [open, accountId, onStart]);
+    if (!open || !accountId) {
+      setState(IDLE_ML_STATE);
+      return;
+    }
+    setState({ status: 'opening', error: null, novncPort: null });
+    let cancelled = false;
+    void onStartRef.current(accountId)
+      .then((next) => {
+        if (!cancelled) setState(next);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setState({ status: 'error', error: 'Falha ao abrir navegador', novncPort: null });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, accountId]);
 
   usePolling(
     () => {
-      if (!accountId) return Promise.resolve(state);
-      return onPoll(accountId);
+      if (!accountId) {
+        return Promise.resolve(IDLE_ML_STATE);
+      }
+      return onPollRef.current(accountId);
     },
     (next) => {
       setState(next);
-      if (next.status === 'connected') onConnected();
+      if (next.status === 'connected') onConnectedRef.current();
     },
     1500,
     open && accountId != null && !['connected', 'error'].includes(state.status),
@@ -165,12 +237,18 @@ export function MercadoLivreLoginModal({
     onClose();
   }
 
+  const novncUrl = buildNovncUrl(state.novncPort);
+
   function renderStatus() {
     switch (state.status) {
       case 'opening':
-        return 'Abrindo o navegador…';
+        return novncUrl
+          ? 'Abrindo o navegador no desktop do container…'
+          : 'Abrindo o navegador…';
       case 'awaiting-login':
-        return 'Navegador aberto. Faça login e clique em Concluir.';
+        return novncUrl
+          ? 'Navegador aberto no noVNC. Faça login e clique em Concluir.'
+          : 'Navegador aberto. Faça login e clique em Concluir.';
       case 'saving':
         return 'Salvando sessão…';
       case 'connected':
@@ -204,16 +282,43 @@ export function MercadoLivreLoginModal({
     >
       <div className="flex flex-col gap-4">
         <p className="text-sm font-medium text-text-primary">{renderStatus()}</p>
-        <ol className="list-decimal space-y-2 pl-5 text-sm text-text-secondary">
-          <li>Uma janela do navegador abre no portal de afiliados do Mercado Livre.</li>
-          <li>
-            Faça login e acesse o <strong>Gerador de Links</strong>.
-          </li>
-          <li>
-            Volte aqui e clique em <strong>Concluir</strong> para salvar a sessão.
-          </li>
-        </ol>
-        {state.error ? <p className="text-sm text-error">{state.error}</p> : null}
+        {novncUrl ? (
+          <>
+            <ol className="list-decimal space-y-2 pl-5 text-sm text-text-secondary">
+              <li>
+                Abra o{' '}
+                <a
+                  className="font-medium text-accent underline"
+                  href={novncUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  noVNC
+                </a>{' '}
+                para ver o desktop do container.
+              </li>
+              <li>O Chromium abre no portal de afiliados — faça login normalmente.</li>
+              <li>
+                Acesse o <strong>Gerador de Links</strong> e volte aqui para clicar em{' '}
+                <strong>Concluir</strong>.
+              </li>
+            </ol>
+            <p className="text-xs text-text-secondary">
+              Se a aba não abriu automaticamente, use o link noVNC acima.
+            </p>
+          </>
+        ) : (
+          <ol className="list-decimal space-y-2 pl-5 text-sm text-text-secondary">
+            <li>Uma janela do navegador abre no portal de afiliados do Mercado Livre.</li>
+            <li>
+              Faça login e acesse o <strong>Gerador de Links</strong>.
+            </li>
+            <li>
+              Volte aqui e clique em <strong>Concluir</strong> para salvar a sessão.
+            </li>
+          </ol>
+        )}
+        {state.error ? <p className="text-sm text-error whitespace-pre-wrap">{state.error}</p> : null}
       </div>
     </Modal>
   );
