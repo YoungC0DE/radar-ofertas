@@ -1,5 +1,5 @@
 import { Check, Minus } from 'lucide-react';
-import type { InputHTMLAttributes, ReactNode } from 'react';
+import { useId, type InputHTMLAttributes, type ReactNode } from 'react';
 
 import { cn } from '../../lib/cn.js';
 
@@ -19,8 +19,8 @@ export function Checkbox({
   id,
   ...props
 }: CheckboxProps) {
-  const inputId =
-    id ?? (typeof label === 'string' ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
 
   return (
     <label

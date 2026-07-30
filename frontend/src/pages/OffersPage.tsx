@@ -38,7 +38,7 @@ import {
 import { formatCurrency, formatDate, truncateText } from '../utils/format.js';
 
 const selectClass =
-  'h-10 rounded-[10px] border border-border bg-bg-secondary px-3 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25';
+  'h-10 rounded-[10px] border border-border bg-bg-secondary pl-3 pr-9 text-sm text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25';
 
 function parseStatus(value: string | null): OfferSentFilter {
   if (value === 'pending' || value === 'sent' || value === 'error') return value;

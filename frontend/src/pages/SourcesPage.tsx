@@ -33,16 +33,25 @@ import {
 import { cn } from '../lib/cn.js';
 import { listingKindLabel, parseEnvSourceIndex } from '../constants/sources.js';
 
+type SourcePlatform = 'ml' | 'amazon';
 type SourceFlags = Record<string, boolean>;
 
 function isSourceChannel(value: string | undefined): value is SourceChannel {
   return value === 'whatsapp' || value === 'telegram';
 }
 
+/** ML e Amazon usam o mesmo id `env:N` — o prefixo evita colisão no estado. */
+function flagKey(platform: SourcePlatform, id: string): string {
+  return `${platform}:${id}`;
+}
+
 function buildInitialFlags(data: SourcesResponse, channel: SourceChannel): SourceFlags {
   const flags: SourceFlags = {};
-  for (const row of [...data.mlRows, ...data.amazonRows]) {
-    flags[row.id] = row.channels.includes(channel);
+  for (const row of data.mlRows) {
+    flags[flagKey('ml', row.id)] = row.channels.includes(channel);
+  }
+  for (const row of data.amazonRows) {
+    flags[flagKey('amazon', row.id)] = row.channels.includes(channel);
   }
   return flags;
 }
@@ -52,25 +61,32 @@ function buildPatchBody(data: SourcesResponse, flags: SourceFlags): PatchSources
     .filter((row) => row.fromEnv)
     .map((row) => {
       const index = parseEnvSourceIndex(row.id);
-      return index == null ? null : { index, enabled: flags[row.id] ?? false };
+      return index == null
+        ? null
+        : { index, enabled: flags[flagKey('ml', row.id)] ?? false };
     })
     .filter((item): item is { index: number; enabled: boolean } => item != null);
 
   const mlCustom = data.mlRows
     .filter((row) => !row.fromEnv)
-    .map((row) => ({ id: row.id, enabled: flags[row.id] ?? false }));
+    .map((row) => ({ id: row.id, enabled: flags[flagKey('ml', row.id)] ?? false }));
 
   const amazonEnv = data.amazonRows
     .filter((row) => row.fromEnv)
     .map((row) => {
       const index = parseEnvSourceIndex(row.id);
-      return index == null ? null : { index, enabled: flags[row.id] ?? false };
+      return index == null
+        ? null
+        : { index, enabled: flags[flagKey('amazon', row.id)] ?? false };
     })
     .filter((item): item is { index: number; enabled: boolean } => item != null);
 
   const amazonCustom = data.amazonRows
     .filter((row) => !row.fromEnv)
-    .map((row) => ({ id: row.id, enabled: flags[row.id] ?? false }));
+    .map((row) => ({
+      id: row.id,
+      enabled: flags[flagKey('amazon', row.id)] ?? false,
+    }));
 
   return { ml: { env: mlEnv, custom: mlCustom }, amazon: { env: amazonEnv, custom: amazonCustom } };
 }
@@ -83,6 +99,7 @@ function otherChannelsHint(channels: SourceChannel[], channel: SourceChannel): s
 
 type SourceRowProps = {
   row: MlSourceRow | AmazonSourceRow;
+  platform: SourcePlatform;
   channel: SourceChannel;
   checked: boolean;
   onToggle: (id: string, enabled: boolean) => void;
@@ -91,7 +108,16 @@ type SourceRowProps = {
   kind: string;
 };
 
-function SourceRow({ row, channel, checked, onToggle, onRemove, url, kind }: SourceRowProps) {
+function SourceRow({
+  row,
+  platform,
+  channel,
+  checked,
+  onToggle,
+  onRemove,
+  url,
+  kind,
+}: SourceRowProps) {
   const others = otherChannelsHint(row.channels, channel);
   const statusTone = !row.valid ? 'warning' : checked ? 'success' : 'neutral';
   const statusLabel = !row.valid ? 'Inválida' : checked ? 'Coletando' : 'Fora';
@@ -100,6 +126,7 @@ function SourceRow({ row, channel, checked, onToggle, onRemove, url, kind }: Sou
     <TableRow>
       <TableCell>
         <Checkbox
+          id={`source-${platform}-${row.id}`}
           label="Coletar"
           checked={checked}
           onChange={(event) => onToggle(row.id, event.target.checked)}
@@ -218,9 +245,9 @@ function PlatformSourcesTable({
   customRows: Array<MlSourceRow | AmazonSourceRow>;
   channel: SourceChannel;
   flags: SourceFlags;
-  platform: 'ml' | 'amazon';
+  platform: SourcePlatform;
   onToggle: (id: string, enabled: boolean) => void;
-  onRemove: (id: string, platform: 'ml' | 'amazon') => void;
+  onRemove: (id: string, platform: SourcePlatform) => void;
   getUrl: (row: MlSourceRow | AmazonSourceRow) => string;
   getKind: (row: MlSourceRow | AmazonSourceRow) => string;
 }) {
@@ -254,8 +281,9 @@ function PlatformSourcesTable({
               <SourceRow
                 key={row.id}
                 row={row}
+                platform={platform}
                 channel={channel}
-                checked={flags[row.id] ?? false}
+                checked={flags[flagKey(platform, row.id)] ?? false}
                 onToggle={onToggle}
                 url={getUrl(row)}
                 kind={getKind(row)}
@@ -277,8 +305,9 @@ function PlatformSourcesTable({
               <SourceRow
                 key={row.id}
                 row={row}
+                platform={platform}
                 channel={channel}
-                checked={flags[row.id] ?? false}
+                checked={flags[flagKey(platform, row.id)] ?? false}
                 onToggle={onToggle}
                 onRemove={() => onRemove(row.id, platform)}
                 url={getUrl(row)}
@@ -362,7 +391,7 @@ export function SourcesPage() {
     }
   }
 
-  async function handleRemove(sourceId: string, platform: 'ml' | 'amazon') {
+  async function handleRemove(sourceId: string, platform: SourcePlatform) {
     const ok = await confirm({
       title: 'Remover link',
       message: 'Remover este link?',
@@ -430,7 +459,9 @@ export function SourcesPage() {
           channel={activeChannel}
           flags={flags}
           platform="ml"
-          onToggle={(id, enabled) => setFlags((current) => ({ ...current, [id]: enabled }))}
+          onToggle={(id, enabled) =>
+            setFlags((current) => ({ ...current, [flagKey('ml', id)]: enabled }))
+          }
           onRemove={(id, platform) => void handleRemove(id, platform)}
           getUrl={(row) => ('category' in row ? row.category : row.source)}
           getKind={(row) => ('listingKind' in row ? row.listingKind : row.kind)}
@@ -443,7 +474,9 @@ export function SourcesPage() {
           channel={activeChannel}
           flags={flags}
           platform="amazon"
-          onToggle={(id, enabled) => setFlags((current) => ({ ...current, [id]: enabled }))}
+          onToggle={(id, enabled) =>
+            setFlags((current) => ({ ...current, [flagKey('amazon', id)]: enabled }))
+          }
           onRemove={(id, platform) => void handleRemove(id, platform)}
           getUrl={(row) => ('source' in row ? row.source : row.category)}
           getKind={(row) => ('kind' in row ? row.kind : row.listingKind)}

@@ -104,7 +104,7 @@ export function Select({ label, className = '', id, children, ...props }: Select
       <select
         id={selectId}
         className={cn(
-          'h-10 w-full rounded-[10px] border border-border bg-bg-secondary px-3 text-sm text-text-primary',
+          'h-10 w-full rounded-[10px] border border-border bg-bg-secondary pl-3 pr-9 text-sm text-text-primary',
           'transition-colors duration-200 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25',
           'disabled:cursor-not-allowed disabled:opacity-50',
           className,
