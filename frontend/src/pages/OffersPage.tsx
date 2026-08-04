@@ -1,4 +1,4 @@
-import { Trash2 } from 'lucide-react';
+import { RefreshCw, Search, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
@@ -25,6 +25,7 @@ import { PageHeader } from '../components/layout/PageHeader.js';
 import { Alert } from '../components/ui/Alert.js';
 import { Button } from '../components/ui/Button.js';
 import { Checkbox } from '../components/ui/Checkbox.js';
+import { Input } from '../components/ui/Input.js';
 import { Page } from '../components/ui/Layout.js';
 import { Spinner } from '../components/ui/Spinner.js';
 import {
@@ -80,14 +81,23 @@ export function OffersPage() {
 
   const [data, setData] = useState<OffersPageResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [collectModalOpen, setCollectModalOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [listSearch, setListSearch] = useState('');
+
+  const filteredOffers = useMemo(() => {
+    const offers = data?.offers ?? [];
+    const query = listSearch.trim().toLowerCase();
+    if (!query) return offers;
+    return offers.filter((offer) => offer.title.toLowerCase().includes(query));
+  }, [data?.offers, listSearch]);
 
   const pageSendableIds = useMemo(
-    () => data?.offers.filter(isOfferSendable).map((offer) => offer.id) ?? [],
-    [data?.offers],
+    () => filteredOffers.filter(isOfferSendable).map((offer) => offer.id),
+    [filteredOffers],
   );
 
   const allPageSelected =
@@ -156,7 +166,17 @@ export function OffersPage() {
     setSelectedIds(new Set());
   }
 
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await loadOffers();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   async function handleCollect(payload: {
+    productName?: string;
     searchLimit: number;
     sendAfterCollect: boolean;
     sendDelayMinutes?: number;
@@ -282,21 +302,33 @@ export function OffersPage() {
         title="Ofertas"
         actions={
           <div className="flex flex-wrap items-center gap-4">
-            <Button onClick={() => setCollectModalOpen(true)} disabled={actionLoading}>
-              Buscar novos anúncios
+            <Button
+              variant="secondary"
+              onClick={() => void handleRefresh()}
+              disabled={refreshing || loading || actionLoading}
+              aria-label="Atualizar lista de ofertas"
+            >
+              <RefreshCw
+                className={`size-4 shrink-0 ${refreshing ? 'animate-spin' : ''}`}
+                aria-hidden
+              />
+              Atualizar
+            </Button>
+            <Button onClick={() => setCollectModalOpen(true)} disabled={actionLoading || refreshing}>
+              Buscar Ofertas
             </Button>
             {data?.database.available ? (
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   variant="danger"
                   onClick={() => void handleClearSelected()}
-                  disabled={selectionActionsDisabled}
+                  disabled={selectionActionsDisabled || refreshing}
                 >
                   {actionLabel('Limpar', selectedCount)}
                 </Button>
                 <Button
                   onClick={() => void handleForceSendSelected()}
-                  disabled={selectionActionsDisabled}
+                  disabled={selectionActionsDisabled || refreshing}
                 >
                   {actionLabel('Forçar envio', selectedCount)}
                 </Button>
@@ -315,6 +347,15 @@ export function OffersPage() {
       ) : null}
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
+        <Input
+          type="search"
+          value={listSearch}
+          onChange={(event) => setListSearch(event.target.value)}
+          placeholder="Buscar na lista…"
+          icon={<Search className="size-4" />}
+          wrapperClassName="min-w-[220px] flex-1"
+          aria-label="Buscar ofertas na lista"
+        />
         <label className="flex flex-col gap-1 text-sm text-text-secondary">
           Origem
           <select
@@ -390,12 +431,16 @@ export function OffersPage() {
                 <TableRow>
                   <TableCell colSpan={10}>{data.database.error ?? 'Banco indisponível'}</TableCell>
                 </TableRow>
-              ) : data.offers.length === 0 ? (
+              ) : filteredOffers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10}>Nenhuma oferta encontrada.</TableCell>
+                  <TableCell colSpan={10}>
+                    {listSearch.trim()
+                      ? 'Nenhuma oferta corresponde à busca.'
+                      : 'Nenhuma oferta encontrada.'}
+                  </TableCell>
                 </TableRow>
               ) : (
-                data.offers.map((offer) => {
+                filteredOffers.map((offer) => {
                   const deliveries = data.deliveriesByOfferId[offer.id];
                   const scheduleAt = offer.sentAt
                     ? null

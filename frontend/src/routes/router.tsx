@@ -26,12 +26,6 @@ const TemplatePage = lazy(() =>
 const CouponsPage = lazy(() =>
   import('../pages/CouponsPage.js').then((module) => ({ default: module.CouponsPage })),
 );
-const SourcesPage = lazy(() =>
-  import('../pages/SourcesPage.js').then((module) => ({ default: module.SourcesPage })),
-);
-const AccountsPage = lazy(() =>
-  import('../pages/AccountsPage.js').then((module) => ({ default: module.AccountsPage })),
-);
 const LogsPage = lazy(() =>
   import('../pages/LogsPage.js').then((module) => ({ default: module.LogsPage })),
 );
@@ -109,22 +103,6 @@ export const router = createBrowserRouter([
             ),
           },
           {
-            path: 'sources/:channel',
-            element: (
-              <LazyPage>
-                <SourcesPage />
-              </LazyPage>
-            ),
-          },
-          {
-            path: 'accounts',
-            element: (
-              <LazyPage>
-                <AccountsPage />
-              </LazyPage>
-            ),
-          },
-          {
             path: 'logs',
             element: (
               <LazyPage>
@@ -132,6 +110,8 @@ export const router = createBrowserRouter([
               </LazyPage>
             ),
           },
+          { path: 'accounts', element: <Navigate to="/settings#integracoes" replace /> },
+          { path: 'sources/:channel', element: <Navigate to="/settings#coleta" replace /> },
         ],
       },
     ],

@@ -4,4 +4,5 @@ export const PLATFORM_ICONS: Record<string, string> = {
   whatsapp: '💬',
   telegram: '✈',
   mercado_livre: '🛒',
+  amazon: 'a',
 };

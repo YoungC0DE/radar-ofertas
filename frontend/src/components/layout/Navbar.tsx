@@ -1,5 +1,5 @@
-import { Bell, Menu, Radar, Search } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Bell, Menu, Radar } from 'lucide-react';
+import { useMemo } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 
 import { cn } from '../../lib/cn.js';
@@ -9,7 +9,6 @@ import { ThemeToggle } from './ThemeToggle.js';
 
 function resolvePageTitle(pathname: string): string {
   if (pathname.startsWith('/offers/')) return 'Detalhe da oferta';
-  if (pathname.startsWith('/sources/')) return 'Fontes';
 
   const match = NAV_ITEMS.find((item) => {
     if ('end' in item && item.end) return pathname === item.to;
@@ -31,7 +30,6 @@ type NavbarProps = {
 export function Navbar({ onMenuClick }: NavbarProps) {
   const { user } = useAuth();
   const { pathname } = useLocation();
-  const [search, setSearch] = useState('');
 
   const pageTitle = useMemo(() => resolvePageTitle(pathname), [pathname]);
 
@@ -52,19 +50,6 @@ export function Navbar({ onMenuClick }: NavbarProps) {
 
       <div className="min-w-0 flex-1">
         <h1 className="truncate text-lg font-semibold text-text-primary">{pageTitle}</h1>
-      </div>
-
-      <div className="hidden max-w-xs flex-1 md:block lg:max-w-sm">
-        <label className="relative block">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-secondary" />
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Buscar…"
-            className="h-10 w-full rounded-[10px] border border-border bg-bg-secondary pl-10 pr-3 text-sm text-text-primary placeholder:text-text-secondary/60 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25"
-          />
-        </label>
       </div>
 
       <div className="flex items-center gap-2">

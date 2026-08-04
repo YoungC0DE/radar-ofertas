@@ -53,6 +53,7 @@ export const MOCK_SETTINGS = {
   novncPort: null,
   mlCouponsUrl: 'https://www.mercadolivre.com.br/afiliados/coupons#hub',
   amazonAffiliate: { baseUrl: 'https://www.amazon.com.br/', affiliateLinkPrefix: '', storeId: '' },
+  amazonCollectionEnabled: true,
 };
 
 export const MOCK_OFFER = {
@@ -154,6 +155,19 @@ export async function mockSettingsApi(page: Page): Promise<void> {
       return;
     }
 
+    if (method === 'PATCH' && url.includes('/settings/amazon-collection')) {
+      const body = route.request().postDataJSON() as { enabled?: boolean };
+      if (typeof body.enabled === 'boolean') {
+        settings = { ...settings, amazonCollectionEnabled: body.enabled };
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(settings),
+      });
+      return;
+    }
+
     await route.continue();
   });
 }
@@ -206,6 +220,7 @@ export async function mockOffersApi(page: Page): Promise<void> {
       body: JSON.stringify({
         queued: true,
         searchLimit: 20,
+        productName: 'notebook gamer',
         sendAfterCollect: false,
         sendDelayMinutes: null,
       }),

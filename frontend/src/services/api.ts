@@ -165,6 +165,7 @@ export const api = {
   dashboard: () => apiRequest<DashboardResponse>('/dashboard'),
 
   collectOffers: (body?: {
+    productName?: string;
     searchLimit?: number;
     sendAfterCollect?: boolean;
     sendDelayMinutes?: number;
@@ -172,6 +173,7 @@ export const api = {
     apiRequest<{
       queued: true;
       searchLimit: number;
+      productName: string | null;
       sendAfterCollect: boolean;
       sendDelayMinutes: number | null;
     }>('/offers/collect', {
@@ -282,6 +284,9 @@ export const api = {
     affiliateLinkPrefix: string;
     storeId: string;
   }) => apiRequest<SettingsResponse>('/settings/amazon-affiliate', { method: 'PATCH', body }),
+
+  patchAmazonCollection: (body: { enabled: boolean }) =>
+    apiRequest<SettingsResponse>('/settings/amazon-collection', { method: 'PATCH', body }),
 
   getWorkerStatus: (params: { channel?: string; accountId?: string } = {}) => {
     const search = new URLSearchParams();

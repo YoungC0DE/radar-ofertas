@@ -92,7 +92,7 @@ export function WhatsAppConfigModal({
           onChange={(event) => setInviteLink(event.target.value)}
         />
         <p className="text-xs text-text-secondary">
-          Use <strong>Logar</strong> na tela de Contas para autenticar o WhatsApp antes de salvar.
+          Use <strong>Logar</strong> na aba Integrações para autenticar o WhatsApp antes de salvar.
         </p>
         <Button type="submit" disabled={loading}>
           Salvar canal principal

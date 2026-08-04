@@ -33,8 +33,10 @@ export function getSenderQueueName(channel: Channel, accountId = 'default'): str
 export interface CollectorOrchestrateJobData {
   kind: 'orchestrate';
   triggeredAt: string;
-  /** Ignora janela operacional — usado pelo botão "Buscar novos anúncios" no painel. */
+  /** Ignora janela operacional — usado pelo botão "Buscar Ofertas" no painel. */
   force?: boolean;
+  /** Termo de produto para busca manual (ML + Amazon) em vez das fontes configuradas. */
+  productName?: string;
 }
 
 export interface CollectorSourceJobData {
@@ -147,12 +149,20 @@ export async function enqueueCollectSourceJob(data: CollectorSourceJobData): Pro
   });
 }
 
-export async function enqueueOfferCollection(options: { force?: boolean } = {}): Promise<void> {
+export async function enqueueOfferCollection(
+  options: { force?: boolean; productName?: string } = {},
+): Promise<void> {
   assertRedisEnabled('enfileiramento de coleta');
   const triggeredAt = new Date().toISOString();
+  const productName = options.productName?.trim() || undefined;
   await getCollectorQueue().add(
     'collect-orchestrate',
-    { kind: 'orchestrate', triggeredAt, force: options.force === true },
+    {
+      kind: 'orchestrate',
+      triggeredAt,
+      force: options.force === true,
+      ...(productName ? { productName } : {}),
+    },
     {
       removeOnComplete: true,
       removeOnFail: 50,

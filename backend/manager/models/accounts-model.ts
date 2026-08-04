@@ -262,6 +262,13 @@ export async function addAccount(form: Record<string, string>): Promise<SaveResu
   const accounts = await loadAccounts();
   const id = `${platform}-${Date.now().toString(36)}`;
 
+  if (platform === 'mercado_livre') {
+    const existingMl = accounts.some((account) => account.platform === 'mercado_livre');
+    if (existingMl) {
+      return { ok: false, error: 'Já existe uma conta Mercado Livre configurada' };
+    }
+  }
+
   const newAccount: Account =
     platform === 'whatsapp'
       ? {

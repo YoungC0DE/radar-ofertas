@@ -39,5 +39,6 @@ export function serializeSettings(data: SettingsData) {
       affiliateLinkPrefix: data.amazonAffiliateLinkPrefix,
       storeId: data.amazonAffiliateStoreId,
     },
+    amazonCollectionEnabled: data.amazonCollectionEnabled,
   };
 }

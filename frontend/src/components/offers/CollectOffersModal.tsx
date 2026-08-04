@@ -7,6 +7,7 @@ import { Input } from '../ui/Input.js';
 import { Modal } from '../ui/Modal.js';
 
 export type CollectOffersPayload = {
+  productName?: string;
   searchLimit: number;
   sendAfterCollect: boolean;
   sendDelayMinutes?: number;
@@ -29,6 +30,7 @@ export function CollectOffersModal({
   onClose,
   onSubmit,
 }: CollectOffersModalProps) {
+  const [productName, setProductName] = useState('');
   const [quantity, setQuantity] = useState(String(Math.min(50, Math.max(1, defaultSearchLimit))));
   const [sendAfterCollect, setSendAfterCollect] = useState(false);
   const [delayMinutes, setDelayMinutes] = useState(String(Math.max(1, defaultSendDelayMinutes)));
@@ -36,6 +38,7 @@ export function CollectOffersModal({
 
   useEffect(() => {
     if (!open) return;
+    setProductName('');
     setQuantity(String(Math.min(50, Math.max(1, defaultSearchLimit))));
     setSendAfterCollect(false);
     setDelayMinutes(String(Math.max(1, defaultSendDelayMinutes)));
@@ -43,6 +46,8 @@ export function CollectOffersModal({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    const trimmedName = productName.trim();
+
     const searchLimit = Number.parseInt(quantity, 10);
     if (!Number.isFinite(searchLimit) || searchLimit < 1 || searchLimit > 50) return;
 
@@ -50,6 +55,7 @@ export function CollectOffersModal({
       searchLimit,
       sendAfterCollect,
     };
+    if (trimmedName) payload.productName = trimmedName;
 
     if (sendAfterCollect) {
       const sendDelayMinutes = Number.parseInt(delayMinutes, 10);
@@ -69,7 +75,7 @@ export function CollectOffersModal({
   return (
     <Modal
       open={open}
-      title="Buscar novos anúncios"
+      title="Buscar Ofertas"
       onClose={loading ? () => undefined : onClose}
       footer={
         <>
@@ -87,6 +93,15 @@ export function CollectOffersModal({
         className="flex flex-col gap-4"
         onSubmit={(event) => void handleSubmit(event)}
       >
+        <Input
+          label="Nome do produto"
+          type="text"
+          value={productName}
+          onChange={(event) => setProductName(event.target.value)}
+          placeholder="Ex.: notebook gamer, iPhone 15…"
+          hint="Opcional — se vazio, usa as fontes configuradas."
+          autoFocus
+        />
         <Input
           label="Quantidade de anúncios"
           type="number"

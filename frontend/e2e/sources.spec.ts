@@ -2,15 +2,17 @@ import { expect, test } from '@playwright/test';
 
 import { loginViaUi, mockSpaApi } from './helpers/mock-api.js';
 
-test.describe('Fontes', () => {
+test.describe('Coleta (Configurações)', () => {
   test.beforeEach(async ({ page }) => {
     await mockSpaApi(page);
     await loginViaUi(page);
   });
 
-  test('lista fontes ML do canal WhatsApp', async ({ page }) => {
-    await page.goto('/sources/whatsapp');
-    await expect(page.getByRole('heading', { name: /Fontes de coleta — WhatsApp/i })).toBeVisible();
-    await expect(page.getByText('Eletrônicos')).toBeVisible();
+  test('exibe plataformas de coleta Mercado Livre e Amazon', async ({ page }) => {
+    await page.goto('/settings#coleta');
+    await expect(page.getByRole('tab', { name: 'Coleta' })).toBeVisible();
+    await expect(page.getByText('Afiliado ML principal')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Mercado Livre' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Amazon' })).toBeVisible();
   });
 });

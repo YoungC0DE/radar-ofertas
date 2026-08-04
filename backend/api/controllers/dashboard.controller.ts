@@ -31,13 +31,15 @@ export async function collectOffersHandler(
     await saveSenderDelayMinutes(body.sendDelayMinutes);
   }
 
-  const result = await handleCollectOffers();
+  const productName = body.productName?.trim() || undefined;
+  const result = await handleCollectOffers({ productName });
   if ('error' in result) {
     throw new ValidationError(result.error);
   }
   reply.status(202).send({
     queued: true,
     searchLimit,
+    productName: productName ?? null,
     sendAfterCollect: body.sendAfterCollect,
     sendDelayMinutes: body.sendDelayMinutes ?? null,
   });

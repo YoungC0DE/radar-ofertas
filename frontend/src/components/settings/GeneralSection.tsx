@@ -1,5 +1,3 @@
-import { Link } from 'react-router-dom';
-
 import type { SettingsResponse } from '../../types/api.js';
 import { Badge } from '../ui/Badge.js';
 import { ConfigRow, EditButton } from './ConfigRow.js';
@@ -30,12 +28,8 @@ export function GeneralSection({
   return (
     <section className="flex flex-col gap-4">
       <p className="text-sm text-text-secondary">
-        Identidade do painel, horários, pontuação e ritmo de coleta/envio. Canais de publicação ficam
-        em{' '}
-        <Link className="text-primary hover:underline" to="/accounts">
-          Contas
-        </Link>
-        .
+        Identidade do painel, horários, pontuação e ritmo de coleta/envio. Canais de publicação e
+        marketplaces ficam nas abas <strong>Integrações</strong> e <strong>Coleta</strong>.
       </p>
       <div className="overflow-hidden rounded-2xl border border-border bg-bg-card shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
         <ConfigRow

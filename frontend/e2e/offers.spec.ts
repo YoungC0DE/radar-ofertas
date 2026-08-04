@@ -12,7 +12,9 @@ test.describe('Ofertas', () => {
     await page.getByRole('link', { name: 'Ofertas' }).click();
     await expect(page).toHaveURL('/offers');
 
-    await page.getByRole('button', { name: 'Buscar novos anúncios' }).click();
+    await page.getByRole('button', { name: 'Buscar Ofertas' }).click();
+    await page.getByLabel('Nome do produto').fill('notebook gamer');
+    await page.getByRole('button', { name: 'Buscar', exact: true }).click();
     await expect(page.getByText('Coleta enfileirada com sucesso')).toBeVisible();
   });
 

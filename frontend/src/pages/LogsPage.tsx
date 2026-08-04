@@ -5,6 +5,7 @@ import type { ClassifiedLogEntry, ClassifiedMlScrapeEntry } from '../types/api.j
 import { AuditConsole } from '../components/logs/AuditConsole.js';
 import { LogMetaModal } from '../components/logs/LogMetaModal.js';
 import { MlScrapeConsole } from '../components/logs/MlScrapeConsole.js';
+import { Tabs, useHashTab } from '../components/settings/Tabs.js';
 import { PageHeader } from '../components/layout/PageHeader.js';
 import { Alert } from '../components/ui/Alert.js';
 import { Page } from '../components/ui/Layout.js';
@@ -15,6 +16,8 @@ import {
   MAX_ML_SCRAPE_ROWS,
 } from '../constants/logs.js';
 import { useLogsStream } from '../hooks/useLogsStream.js';
+
+const LOG_TABS = ['geral', 'mercado_livre'] as const;
 
 function trimRows<T>(rows: T[], max: number): T[] {
   if (rows.length <= max) return rows;
@@ -27,6 +30,7 @@ function appendRows<T>(current: T[], incoming: T[], max: number): T[] {
 }
 
 export function LogsPage() {
+  const [activeTab, setActiveTab] = useHashTab('geral', LOG_TABS);
   const [logs, setLogs] = useState<ClassifiedLogEntry[]>([]);
   const [mlScrapeLogs, setMlScrapeLogs] = useState<ClassifiedMlScrapeEntry[]>([]);
   const [total, setTotal] = useState(0);
@@ -177,20 +181,11 @@ export function LogsPage() {
     return <Alert tone="error">{error}</Alert>;
   }
 
-  return (
-    <Page>
-      <PageHeader
-        title="Log"
-        subtitle="Console de auditoria em tempo real e visitas ao Mercado Livre"
-      />
-
-      <div className="flex flex-col items-stretch gap-4 xl:flex-row">
-        <MlScrapeConsole
-          logs={mlScrapeLogs}
-          mlScrapeCount={mlScrapeCount}
-          autoScroll={autoScroll}
-          onSelectMeta={setSelectedMeta}
-        />
+  const tabItems = [
+    {
+      id: 'geral',
+      label: 'Geral',
+      content: (
         <AuditConsole
           logs={logs}
           total={total}
@@ -207,7 +202,31 @@ export function LogsPage() {
           onClear={handleClear}
           onSelectMeta={setSelectedMeta}
         />
-      </div>
+      ),
+    },
+    {
+      id: 'mercado_livre',
+      label: 'Mercado Livre',
+      content: (
+        <MlScrapeConsole
+          logs={mlScrapeLogs}
+          mlScrapeCount={mlScrapeCount}
+          autoScroll={autoScroll}
+          onAutoScrollChange={setAutoScroll}
+          onSelectMeta={setSelectedMeta}
+        />
+      ),
+    },
+  ];
+
+  return (
+    <Page>
+      <PageHeader
+        title="Log"
+        subtitle="Auditoria interna e visitas ao Mercado Livre, separados por aba"
+      />
+
+      <Tabs items={tabItems} activeId={activeTab} onChange={setActiveTab} ariaLabel="Logs" />
 
       <LogMetaModal
         open={selectedMeta != null}

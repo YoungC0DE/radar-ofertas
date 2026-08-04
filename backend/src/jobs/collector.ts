@@ -76,9 +76,11 @@ export function startCollectorWorker(): Worker<CollectorJobData> {
       }
 
       const triggeredAt = resolveTriggeredAt(job);
-      logger.info({ jobId: job.id, triggeredAt, force }, 'Orchestrating offer collection');
+      const productName =
+        job.data.kind === 'orchestrate' ? job.data.productName?.trim() || undefined : undefined;
+      logger.info({ jobId: job.id, triggeredAt, force, productName }, 'Orchestrating offer collection');
 
-      const { jobs } = await orchestrateOfferCollection(triggeredAt);
+      const { jobs } = await orchestrateOfferCollection(triggeredAt, { productName });
       return { jobs, triggeredAt };
     },
     {

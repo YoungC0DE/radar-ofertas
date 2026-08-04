@@ -1,11 +1,12 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
-import { loadSettingsData, saveAmazonAffiliateSettings, saveBrandIdentity, saveCouponsUrlSettings, saveOperatingHoursSettings, saveSendIntervalMinutes, saveSenderDelay } from '../../manager/models/settings-model.js';
+import { loadSettingsData, saveAmazonAffiliateSettings, saveAmazonCollectionSettings, saveBrandIdentity, saveCouponsUrlSettings, saveOperatingHoursSettings, saveSendIntervalMinutes, saveSenderDelay } from '../../manager/models/settings-model.js';
 import { saveScoreConfig } from '../../src/config/score-config.js';
 import { mapServiceError } from '../lib/map-service-error.js';
 import { parseBody } from '../lib/validate.js';
 import {
   amazonAffiliateBodySchema,
+  amazonCollectionBodySchema,
   brandBodySchema,
   couponsUrlBodySchema,
   operatingHoursBodySchema,
@@ -97,6 +98,18 @@ export async function patchCouponsUrlHandler(
 ): Promise<void> {
   const body = parseBody(couponsUrlBodySchema, request.body);
   const result = await saveCouponsUrlSettings(body.couponsUrl);
+  if (!result.ok) {
+    mapServiceError(new Error(result.error));
+  }
+  reply.status(200).send(await reloadSettings());
+}
+
+export async function patchAmazonCollectionHandler(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  const body = parseBody(amazonCollectionBodySchema, request.body);
+  const result = await saveAmazonCollectionSettings(body.enabled);
   if (!result.ok) {
     mapServiceError(new Error(result.error));
   }

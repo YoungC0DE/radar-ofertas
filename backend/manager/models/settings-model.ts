@@ -22,6 +22,11 @@ import {
   saveAmazonAffiliateConfig,
 } from '../../src/config/amazon-config-store.js';
 import {
+  hydrateCollectionPlatformsCache,
+  isAmazonCollectionEnabled,
+  saveAmazonCollectionEnabled,
+} from '../../src/config/collection-platforms-config.js';
+import {
   getCouponsUrlFromDb,
   hydrateCouponsConfigCache,
   saveCouponsUrl,
@@ -92,6 +97,7 @@ export interface SettingsData {
   amazonBaseUrl: string;
   amazonAffiliateLinkPrefix: string;
   amazonAffiliateStoreId: string;
+  amazonCollectionEnabled: boolean;
   saved: SettingsSaveType;
   error: string | null;
 }
@@ -105,7 +111,7 @@ export async function loadSettingsData(
   saved: SettingsSaveType = null,
   error: string | null = null,
 ): Promise<SettingsData> {
-  await Promise.all([hydrateQueueConfigCache(), hydrateBrandCache(), hydrateCouponsConfigCache(), hydrateAmazonConfigCache(), hydrateIntegrationState()]);
+  await Promise.all([hydrateQueueConfigCache(), hydrateBrandCache(), hydrateCouponsConfigCache(), hydrateAmazonConfigCache(), hydrateCollectionPlatformsCache(), hydrateIntegrationState()]);
   await ensureDefaultWhatsAppDestinationFromEnv();
   const scoreConfig = await getRuntimeScoreConfigAsync();
   const senderDelayMinutes = await getSenderDelayMinutesFromDb();
@@ -158,6 +164,7 @@ export async function loadSettingsData(
     amazonBaseUrl: amazonConfig.baseUrl,
     amazonAffiliateLinkPrefix: amazonConfig.affiliateLinkPrefix,
     amazonAffiliateStoreId: amazonConfig.storeId,
+    amazonCollectionEnabled: isAmazonCollectionEnabled(),
     saved,
     error,
   };
@@ -204,6 +211,19 @@ export async function saveCouponsUrlSettings(
   url: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   return runSave(() => saveCouponsUrl(url), 'Falha ao salvar URL de cupons');
+}
+
+export async function saveAmazonCollectionSettings(
+  enabled: boolean,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (enabled) {
+    const amazonConfig = await getAmazonConfigFromDb();
+    if (!amazonConfig.storeId.trim()) {
+      return { ok: false, error: 'Configure o ID da loja Amazon antes de habilitar a coleta' };
+    }
+  }
+
+  return runSave(() => saveAmazonCollectionEnabled(enabled), 'Falha ao salvar coleta Amazon');
 }
 
 export async function saveAmazonAffiliateSettings(input: {

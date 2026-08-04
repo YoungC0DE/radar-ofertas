@@ -5,6 +5,7 @@ import {
   getChannelsForAmazonSource,
   hydrateAmazonSourcesCache,
 } from '../config/amazon-sources-config.js';
+import { isAmazonCollectionEnabled, isMercadoLivreCollectionEnabled } from '../config/collection-platforms-config.js';
 import {
   getActiveMlCategoriesForChannel,
   getChannelsForCategory,
@@ -20,12 +21,13 @@ const ML_TAG_SKIP_LOG =
   'Coleta ML ignorada — configure a tag de afiliado em Contas → Mercado Livre → Configurar';
 
 export async function hydrateAllSourcesCaches(): Promise<void> {
-  await Promise.all([hydrateMlSourcesCache(), hydrateAmazonSourcesCache()]);
+  const { hydrateCollectionPlatformsCache } = await import('../config/collection-platforms-config.js');
+  await Promise.all([hydrateMlSourcesCache(), hydrateAmazonSourcesCache(), hydrateCollectionPlatformsCache()]);
 }
 
 export function getActiveSourcesForChannel(channel: Channel): string[] {
-  const ml = getActiveMlCategoriesForChannel(channel);
-  const amazon = getActiveAmazonSourcesForChannel(channel);
+  const ml = isMercadoLivreCollectionEnabled() ? getActiveMlCategoriesForChannel(channel) : [];
+  const amazon = isAmazonCollectionEnabled() ? getActiveAmazonSourcesForChannel(channel) : [];
   return [...ml, ...amazon];
 }
 

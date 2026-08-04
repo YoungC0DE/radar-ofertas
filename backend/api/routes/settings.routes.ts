@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import {
   getSettingsHandler,
   patchAmazonAffiliateHandler,
+  patchAmazonCollectionHandler,
   patchBrandHandler,
   patchCouponsUrlHandler,
   patchOperatingHoursHandler,
@@ -21,4 +22,5 @@ export const settingsRoutes: FastifyPluginAsync = async (app: FastifyInstance) =
   app.patch('/settings/sender-delay', { preHandler: authenticate }, patchSenderDelayHandler);
   app.patch('/settings/coupons-url', { preHandler: authenticate }, patchCouponsUrlHandler);
   app.patch('/settings/amazon-affiliate', { preHandler: authenticate }, patchAmazonAffiliateHandler);
+  app.patch('/settings/amazon-collection', { preHandler: authenticate }, patchAmazonCollectionHandler);
 };

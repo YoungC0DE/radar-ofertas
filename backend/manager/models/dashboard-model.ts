@@ -143,14 +143,21 @@ export async function loadDashboardData(
   };
 }
 
-export async function handleCollectOffers(): Promise<{ ok: true } | { error: string }> {
+export async function handleCollectOffers(
+  options: { productName?: string } = {},
+): Promise<{ ok: true } | { error: string }> {
   try {
-    const blocker = await validateOfferCollectionReady();
+    const blocker = await validateOfferCollectionReady({
+      productName: options.productName,
+    });
     if (blocker) {
       return { error: blocker };
     }
 
-    await enqueueOfferCollection({ force: true });
+    await enqueueOfferCollection({
+      force: true,
+      productName: options.productName,
+    });
     return { ok: true };
   } catch (error) {
     const message =

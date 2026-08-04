@@ -50,9 +50,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [logout]);
 
   const login = useCallback(
-    async (username: string, password: string) => {
+    async (username: string, password: string, options: { rememberMe?: boolean } = {}) => {
       const tokens = await api.login(username, password);
-      saveTokens(tokens);
+      saveTokens(tokens, { rememberMe: options.rememberMe !== false });
       const currentUser = await fetchCurrentUser();
       if (!currentUser) {
         clearTokens();

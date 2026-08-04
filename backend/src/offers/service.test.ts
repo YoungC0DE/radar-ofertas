@@ -182,6 +182,20 @@ describe('processOffer', () => {
     assert.equal(calls(deps.openOfferDelivery), 1);
   });
 
+  it('entrega em todos os canais ligados quando a fonte é ad-hoc', async () => {
+    const deps = makeDeps({
+      getChannelsForSource: mock.fn(() => [] as never[]),
+    });
+
+    const result = await processOffer(
+      makeRawOffer({ sourceCategory: 'https://lista.mercadolivre.com.br/notebook' }),
+      deps,
+    );
+
+    assert.equal(result, fakeOffer.id);
+    assert.equal(calls(deps.openOfferDelivery), 2);
+  });
+
   it('retorna null quando nenhum canal alvo está habilitado', async () => {
     const deps = makeDeps({
       getEnabledChannels: mock.fn(() => []),

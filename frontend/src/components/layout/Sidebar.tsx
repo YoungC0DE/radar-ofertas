@@ -2,13 +2,11 @@ import {
   FileText,
   Gift,
   LayoutDashboard,
-  Layers,
   LogOut,
   Radar,
   ScrollText,
   Settings,
   ShoppingBag,
-  Users,
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
@@ -21,8 +19,6 @@ const NAV_ITEMS = [
   { to: '/settings', label: 'Configurações', icon: Settings },
   { to: '/template', label: 'Template', icon: FileText },
   { to: '/coupons', label: 'Cupons', icon: Gift },
-  { to: '/sources/whatsapp', label: 'Fontes', icon: Layers },
-  { to: '/accounts', label: 'Contas', icon: Users },
   { to: '/logs', label: 'Logs', icon: ScrollText },
 ] as const;
 

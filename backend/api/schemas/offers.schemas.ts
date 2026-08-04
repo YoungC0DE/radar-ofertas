@@ -13,6 +13,7 @@ export const searchLimitBodySchema = z.object({
 
 export const collectOffersBodySchema = z
   .object({
+    productName: z.string().trim().min(1).max(200).optional(),
     searchLimit: z.number().int().min(1).max(50).optional(),
     sendAfterCollect: z.boolean().default(false),
     sendDelayMinutes: z.number().int().min(1).max(120).optional(),

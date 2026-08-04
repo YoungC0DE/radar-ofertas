@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Lock, Radar, User } from 'lucide-react';
+import { Eye, EyeOff, Lock, Radar, User } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -7,7 +7,9 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth.js';
 import { Alert } from '../components/ui/Alert.js';
 import { Button } from '../components/ui/Button.js';
+import { Checkbox } from '../components/ui/Checkbox.js';
 import { Input } from '../components/ui/Input.js';
+import { isRememberMeEnabled } from '../services/auth-storage.js';
 import { ApiError } from '../types/api.js';
 
 function resolveLoginRedirect(state: unknown): string {
@@ -23,6 +25,8 @@ export function LoginPage() {
   const location = useLocation();
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(() => isRememberMeEnabled());
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -34,7 +38,7 @@ export function LoginPage() {
     setLoading(true);
 
     try {
-      await login(username.trim(), password);
+      await login(username.trim(), password, { rememberMe });
       navigate(from, { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
@@ -95,12 +99,34 @@ export function LoginPage() {
             <Input
               label="Senha"
               id="login-password"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               autoComplete="current-password"
               required
               icon={<Lock className="size-4" />}
+              trailing={
+                <button
+                  type="button"
+                  className="flex size-7 cursor-pointer items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-bg-primary hover:text-text-primary"
+                  onClick={() => setShowPassword((current) => !current)}
+                  aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                  tabIndex={-1}
+                >
+                  {showPassword ? (
+                    <EyeOff className="size-4" aria-hidden />
+                  ) : (
+                    <Eye className="size-4" aria-hidden />
+                  )}
+                </button>
+              }
+            />
+
+            <Checkbox
+              id="login-remember"
+              label="Continuar logado"
+              checked={rememberMe}
+              onChange={(event) => setRememberMe(event.target.checked)}
             />
 
             <Button type="submit" className="mt-2 w-full" loading={loading} disabled={loading}>

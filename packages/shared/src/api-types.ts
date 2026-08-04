@@ -242,6 +242,7 @@ export type SettingsResponse = {
     affiliateLinkPrefix: string;
     storeId: string;
   };
+  amazonCollectionEnabled: boolean;
 };
 
 export type ClassifiedLogEntry = {

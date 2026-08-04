@@ -17,6 +17,10 @@ const DATA_ROOT = './data';
 
 let accountsCache: Account[] | null = null;
 
+export function getAccountsCachedSync(): Account[] {
+  return accountsCache ?? buildDefaultAccountsFromEnv();
+}
+
 /**
  * Caminho de auth isolado por conta. A conta default reutiliza os paths do .env
  * para não quebrar instalações existentes; contas adicionais ficam em

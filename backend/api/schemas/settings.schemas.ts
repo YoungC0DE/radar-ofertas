@@ -49,3 +49,7 @@ export const amazonAffiliateBodySchema = z.object({
   affiliateLinkPrefix: z.string(),
   storeId: z.string(),
 });
+
+export const amazonCollectionBodySchema = z.object({
+  enabled: z.boolean(),
+});

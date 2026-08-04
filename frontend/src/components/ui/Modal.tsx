@@ -19,17 +19,11 @@ export function Modal({ open, title, onClose, children, footer, wide = false }: 
   useEffect(() => {
     if (!open) return;
 
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose();
-    }
-
     document.body.style.overflow = 'hidden';
-    window.addEventListener('keydown', onKeyDown);
     return () => {
       document.body.style.overflow = '';
-      window.removeEventListener('keydown', onKeyDown);
     };
-  }, [open, onClose]);
+  }, [open]);
 
   return (
     <AnimatePresence>
@@ -41,9 +35,6 @@ export function Modal({ open, title, onClose, children, footer, wide = false }: 
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          onClick={(event) => {
-            if (event.target === event.currentTarget) onClose();
-          }}
         >
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" aria-hidden />
           <motion.div

@@ -10,6 +10,7 @@ import {
   iterateSourcePages,
 } from '../sources/routing.js';
 import { isAmazonSourceUrl } from '../amazon/source-url.js';
+import { getAmazonConfigCached } from '../config/amazon-config-store.js';
 import { getSearchLimit } from '../config/queue-config-store.js';
 import { calculateOfferScore, getRuntimeScoreConfig } from '../config/score-config.js';
 import {
@@ -22,6 +23,7 @@ import {
 } from '../queue/index.js';
 import { runWithConcurrency } from '../utils/concurrency.js';
 import { logger } from '../utils/logger.js';
+import { buildProductSearchSources } from './product-search.js';
 import { allocateProportionalWithMin, shuffle } from './sampling.js';
 import {
   formatOfferMessageFromTemplate,
@@ -155,6 +157,8 @@ function resolveOfferChannels(rawOffer: RawOffer, deps: ServiceDeps = defaultDep
   const enabled = deps.getEnabledChannels();
   if (!rawOffer.sourceCategory) return enabled;
   const sourceChannels = deps.getChannelsForSource(rawOffer.sourceCategory);
+  // Fonte ad-hoc (ex.: busca por nome no painel) — entrega em todos os canais ligados.
+  if (sourceChannels.length === 0) return enabled;
   return enabled.filter((channel) => sourceChannels.includes(channel));
 }
 
@@ -312,15 +316,22 @@ async function collectForChannel(
 }
 
 /** Fan-out: enfileira um job por fonte ativa — permite paralelismo entre fontes na fila. */
-export async function orchestrateOfferCollection(triggeredAt: string): Promise<{ jobs: number }> {
+export async function orchestrateOfferCollection(
+  triggeredAt: string,
+  options: { productName?: string } = {},
+): Promise<{ jobs: number }> {
   await hydrateAllSourcesCaches();
   const target = getSearchLimit();
   const channels = getEnabledChannels();
   const mlTagConfigured = await isMercadoLivreAffiliateTagConfigured();
+  const productName = options.productName?.trim() || undefined;
+  const productSources = productName
+    ? buildProductSearchSources(productName, getAmazonConfigCached().baseUrl)
+    : null;
   let jobs = 0;
 
   for (const channel of channels) {
-    const categories = getActiveSourcesForChannel(channel);
+    const categories = productSources ?? getActiveSourcesForChannel(channel);
     if (categories.length === 0) continue;
 
     const quota = Math.max(1, Math.floor(target / categories.length));
@@ -328,7 +339,7 @@ export async function orchestrateOfferCollection(triggeredAt: string): Promise<{
     for (const category of categories) {
       if (!isAmazonSourceUrl(category) && !mlTagConfigured) {
         logger.warn(
-          { channel, category, triggeredAt },
+          { channel, category, triggeredAt, productName },
           'Job de coleta ML não enfileirado — tag de afiliado não configurada',
         );
         continue;
@@ -345,7 +356,10 @@ export async function orchestrateOfferCollection(triggeredAt: string): Promise<{
     }
   }
 
-  logger.info({ triggeredAt, jobs, target, mlTagConfigured }, 'Offer collection orchestrated per source');
+  logger.info(
+    { triggeredAt, jobs, target, mlTagConfigured, productName },
+    'Offer collection orchestrated per source',
+  );
   return { jobs };
 }
 
@@ -383,7 +397,9 @@ export async function collectFromSource(
 }
 
 /** Valida se há algo coletável antes de enfileirar busca manual no painel. */
-export async function validateOfferCollectionReady(): Promise<string | null> {
+export async function validateOfferCollectionReady(
+  options: { productName?: string } = {},
+): Promise<string | null> {
   if (!isRedisEnabled()) {
     return 'Redis desabilitado — não é possível enfileirar a busca.';
   }
@@ -392,6 +408,24 @@ export async function validateOfferCollectionReady(): Promise<string | null> {
   const channels = getEnabledChannels();
   if (channels.length === 0) {
     return 'Nenhum canal de envio habilitado — ligue WhatsApp ou Telegram nas configurações.';
+  }
+
+  const productName = options.productName?.trim();
+  if (productName) {
+    const sources = buildProductSearchSources(productName, getAmazonConfigCached().baseUrl);
+    if (sources.length === 0) {
+      return 'Informe um nome de produto válido para buscar.';
+    }
+
+    const mlTagConfigured = await isMercadoLivreAffiliateTagConfigured();
+    const hasCollectible = sources.some(
+      (source) => isAmazonSourceUrl(source) || mlTagConfigured,
+    );
+    if (!hasCollectible) {
+      return 'Tag de afiliado ML não configurada — Contas → Mercado Livre → Configurar (ou use um termo que também busque na Amazon).';
+    }
+
+    return null;
   }
 
   const mlTagConfigured = await isMercadoLivreAffiliateTagConfigured();

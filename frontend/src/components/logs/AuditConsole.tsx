@@ -78,7 +78,7 @@ export function AuditConsole({
   }
 
   return (
-    <section className="min-w-0 flex-1 overflow-hidden rounded-xl border border-[#30363d] bg-[#161b22] shadow-[0_8px_24px_rgba(1,4,9,0.35)]">
+    <section className="w-full overflow-hidden rounded-xl border border-[#30363d] bg-[#161b22] shadow-[0_8px_24px_rgba(1,4,9,0.35)]">
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#30363d] bg-gradient-to-b from-[#1c2128] to-[#161b22] px-4 py-3.5">
         <div className="flex min-w-0 flex-wrap items-center gap-3">
           <h2 className="m-0 whitespace-nowrap text-xs font-bold tracking-widest text-[#f0f6fc]">
@@ -157,7 +157,7 @@ export function AuditConsole({
       </div>
 
       <div
-        className="max-h-[calc(100vh-280px)] min-h-[420px] overflow-auto bg-[#0d1117]"
+        className="max-h-[calc(100vh-320px)] min-h-[420px] overflow-auto bg-[#0d1117]"
         ref={outputWrapRef}
       >
         <div className="px-4 pb-2 pt-4 font-mono text-[0.8rem] leading-relaxed">

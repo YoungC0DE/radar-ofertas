@@ -7,6 +7,7 @@ type InputProps = InputHTMLAttributes<HTMLInputElement> & {
   readonly hint?: string;
   readonly error?: string;
   readonly icon?: ReactNode;
+  readonly trailing?: ReactNode;
   readonly wrapperClassName?: string;
 };
 
@@ -15,6 +16,7 @@ export function Input({
   hint,
   error,
   icon,
+  trailing,
   className = '',
   wrapperClassName = '',
   id,
@@ -43,11 +45,15 @@ export function Input({
             'hover:border-border/90 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25',
             'disabled:cursor-not-allowed disabled:opacity-50',
             icon ? 'pl-10' : '',
+            trailing ? 'pr-10' : '',
             error ? 'border-error focus:border-error focus:ring-error/25' : '',
             className,
           )}
           {...props}
         />
+        {trailing ? (
+          <span className="absolute right-1.5 top-1/2 -translate-y-1/2">{trailing}</span>
+        ) : null}
       </div>
       {error ? <p className="text-xs text-error">{error}</p> : null}
       {hint && !error ? <p className="text-xs text-text-secondary">{hint}</p> : null}
